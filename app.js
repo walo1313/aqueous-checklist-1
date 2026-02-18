@@ -6,6 +6,21 @@ let currentView = 'home';
 let history = [];
 let settings = { vibration: true, sound: true };
 
+// Timer state
+let timerMode = 'countdown'; // countdown, stopwatch
+let timerSeconds = 0;
+let timerTarget = 0;
+let timerRunning = false;
+let timerInterval = null;
+let timerAlarm = false;
+
+// Mascot animation tracking
+let checkCount = 0;
+const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
+
+// PWA Install
+let deferredPrompt = null;
+
 // ==================== HAPTICS & SOUND ====================
 
 let audioCtx = null;
@@ -52,6 +67,53 @@ function vibrate(ms) {
 function handleClick() {
     vibrate(18);
     playClick();
+}
+
+function animateMascot() {
+    checkCount++;
+    // Animate every 2-3 checks (random feel)
+    if (checkCount % (2 + Math.floor(Math.random() * 2)) !== 0) return;
+    const mascot = document.querySelector('.header-mascot');
+    if (!mascot) return;
+    const anim = mascotAnimations[Math.floor(Math.random() * mascotAnimations.length)];
+    mascot.classList.remove(...mascotAnimations);
+    void mascot.offsetWidth; // force reflow
+    mascot.classList.add(anim);
+    setTimeout(() => mascot.classList.remove(anim), 700);
+}
+
+// ==================== PWA INSTALL ====================
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show install banner after short delay
+    const dismissed = localStorage.getItem('aqueous_install_dismissed');
+    if (!dismissed) {
+        setTimeout(() => {
+            const banner = document.getElementById('installBanner');
+            if (banner) banner.classList.remove('hidden');
+        }, 3000);
+    }
+});
+
+function installPWA() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(result => {
+        if (result.outcome === 'accepted') {
+            showToast('App installed!');
+        }
+        deferredPrompt = null;
+        const banner = document.getElementById('installBanner');
+        if (banner) banner.classList.add('hidden');
+    });
+}
+
+function dismissInstall() {
+    const banner = document.getElementById('installBanner');
+    if (banner) banner.classList.add('hidden');
+    localStorage.setItem('aqueous_install_dismissed', '1');
 }
 
 // ==================== INITIALIZATION ====================
@@ -176,8 +238,9 @@ function switchView(view) {
     const navItems = document.querySelectorAll('.nav-item');
     if (view === 'home') navItems[0].classList.add('active');
     else if (view === 'summary') navItems[1].classList.add('active');
-    else if (view === 'share') navItems[2].classList.add('active');
-    else if (view === 'settings') navItems[3].classList.add('active');
+    else if (view === 'timer') navItems[2].classList.add('active');
+    else if (view === 'share') navItems[3].classList.add('active');
+    else if (view === 'settings') navItems[4].classList.add('active');
     else if (view === 'history') navItems[1].classList.add('active');
 
     renderCurrentView();
@@ -193,6 +256,9 @@ function renderCurrentView() {
     } else if (currentView === 'summary') {
         fab.style.display = 'none';
         renderSummary(container);
+    } else if (currentView === 'timer') {
+        fab.style.display = 'none';
+        renderTimer(container);
     } else if (currentView === 'share') {
         fab.style.display = 'none';
         renderShare(container);
@@ -320,6 +386,7 @@ function toggleStation(stationId) {
 
 function toggleLow(stationId, ingredientId) {
     handleClick();
+    animateMascot();
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
 
@@ -509,6 +576,7 @@ function renderSummaryGroup(title, level, tasks) {
 
 function toggleCompleted(stationId, ingredientId) {
     handleClick();
+    animateMascot();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
 
@@ -885,13 +953,205 @@ function shareAppLink() {
     const data = compressData(stations);
     const link = window.location.origin + window.location.pathname + '?d=' + data;
 
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(link).then(() => {
-            showToast('Link copied to clipboard!');
+    // Try native share first for cleaner experience
+    if (navigator.share) {
+        navigator.share({
+            title: 'Aqueous Checklist',
+            text: '📋 Check out my prep list on Aqueous!',
+            url: link
+        }).catch(() => {
+            // Fallback to clipboard
+            copyToClipboard(link);
         });
     } else {
-        prompt('Copy this link:', link);
+        copyToClipboard(link);
     }
+}
+
+function copyToClipboard(text) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Link copied!');
+        });
+    } else {
+        prompt('Copy this link:', text);
+    }
+}
+
+// ==================== TIMER VIEW ====================
+
+function renderTimer(container) {
+    const displayTime = timerMode === 'countdown'
+        ? formatTime(Math.max(0, timerTarget - timerSeconds))
+        : formatTime(timerSeconds);
+
+    const isAlarm = timerMode === 'countdown' && timerRunning && timerSeconds >= timerTarget;
+    const displayClass = isAlarm ? 'alarm' : (timerRunning ? 'running' : '');
+
+    container.innerHTML = `
+        <div class="timer-card">
+            <div class="timer-mode-tabs">
+                <button class="timer-mode-tab ${timerMode === 'countdown' ? 'active' : ''}"
+                    onclick="handleClick(); setTimerMode('countdown')">⏳ Countdown</button>
+                <button class="timer-mode-tab ${timerMode === 'stopwatch' ? 'active' : ''}"
+                    onclick="handleClick(); setTimerMode('stopwatch')">⏱ Stopwatch</button>
+            </div>
+
+            ${timerMode === 'countdown' && !timerRunning && timerSeconds === 0 ? `
+                <div class="timer-label">Set Time</div>
+                <div class="timer-input-row">
+                    <input type="number" class="timer-input" id="timerMin" value="5" min="0" max="99" placeholder="MM">
+                    <span class="timer-sep">:</span>
+                    <input type="number" class="timer-input" id="timerSec" value="00" min="0" max="59" placeholder="SS">
+                </div>
+                <div class="timer-presets">
+                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(2)">2 min</button>
+                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(5)">5 min</button>
+                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(10)">10 min</button>
+                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(15)">15 min</button>
+                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(30)">30 min</button>
+                </div>
+            ` : `
+                <div class="timer-label">${timerMode === 'countdown' ? 'Countdown' : 'Stopwatch'}</div>
+                <div class="timer-display ${displayClass}" id="timerDisplay">${displayTime}</div>
+            `}
+
+            <div class="timer-controls">
+                ${!timerRunning ? `
+                    <button class="btn btn-primary squishy" onclick="handleClick(); startTimer()">
+                        ${timerSeconds > 0 ? '▶ Resume' : '▶ Start'}
+                    </button>
+                    ${timerSeconds > 0 ? `
+                        <button class="btn btn-secondary squishy" onclick="handleClick(); resetTimer()">↺ Reset</button>
+                    ` : ''}
+                ` : `
+                    <button class="btn btn-danger squishy" onclick="handleClick(); pauseTimer()">⏸ Pause</button>
+                    <button class="btn btn-secondary squishy" onclick="handleClick(); resetTimer()">↺ Reset</button>
+                `}
+            </div>
+        </div>
+
+        <div class="timer-card">
+            <div class="timer-label">Quick Timers for Prep Blocks</div>
+            <button class="btn btn-outline squishy" style="margin-bottom:8px" onclick="handleClick(); startBlockTimer('Before Service', 30)">
+                🔴 Before Service — 30 min countdown
+            </button>
+            <button class="btn btn-outline squishy" style="margin-bottom:8px" onclick="handleClick(); startBlockTimer('Prep Block', 60)">
+                🟡 Prep Block — 60 min countdown
+            </button>
+            <button class="btn btn-outline squishy" onclick="handleClick(); startBlockTimer('Backup Prep', 45)">
+                🔵 Backup Prep — 45 min countdown
+            </button>
+        </div>`;
+}
+
+function formatTime(totalSec) {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function setTimerMode(mode) {
+    if (timerRunning) pauseTimer();
+    timerMode = mode;
+    timerSeconds = 0;
+    timerTarget = 0;
+    timerAlarm = false;
+    renderTimer(document.getElementById('mainContent'));
+}
+
+function setTimerPreset(minutes) {
+    const minInput = document.getElementById('timerMin');
+    const secInput = document.getElementById('timerSec');
+    if (minInput) minInput.value = minutes;
+    if (secInput) secInput.value = '00';
+}
+
+function startTimer() {
+    if (timerMode === 'countdown' && timerSeconds === 0) {
+        const minInput = document.getElementById('timerMin');
+        const secInput = document.getElementById('timerSec');
+        const mins = parseInt(minInput ? minInput.value : 5) || 0;
+        const secs = parseInt(secInput ? secInput.value : 0) || 0;
+        timerTarget = mins * 60 + secs;
+        if (timerTarget <= 0) { showToast('Set a time first'); return; }
+        timerSeconds = 0;
+    }
+    timerRunning = true;
+    timerAlarm = false;
+    timerInterval = setInterval(() => {
+        timerSeconds++;
+        updateTimerDisplay();
+        // Countdown alarm
+        if (timerMode === 'countdown' && timerSeconds >= timerTarget && !timerAlarm) {
+            timerAlarm = true;
+            vibrate(200);
+            playAlarm();
+        }
+    }, 1000);
+    renderTimer(document.getElementById('mainContent'));
+}
+
+function pauseTimer() {
+    timerRunning = false;
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    renderTimer(document.getElementById('mainContent'));
+}
+
+function resetTimer() {
+    timerRunning = false;
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    timerSeconds = 0;
+    timerTarget = 0;
+    timerAlarm = false;
+    renderTimer(document.getElementById('mainContent'));
+}
+
+function startBlockTimer(label, minutes) {
+    if (timerRunning) pauseTimer();
+    timerMode = 'countdown';
+    timerSeconds = 0;
+    timerTarget = minutes * 60;
+    startTimer();
+    showToast(`${label}: ${minutes} min started`);
+}
+
+function updateTimerDisplay() {
+    const el = document.getElementById('timerDisplay');
+    if (!el) return;
+    const displayTime = timerMode === 'countdown'
+        ? formatTime(Math.max(0, timerTarget - timerSeconds))
+        : formatTime(timerSeconds);
+    el.textContent = displayTime;
+    if (timerMode === 'countdown' && timerSeconds >= timerTarget) {
+        el.className = 'timer-display alarm';
+    } else {
+        el.className = 'timer-display running';
+    }
+}
+
+function playAlarm() {
+    if (!settings.sound) return;
+    try {
+        const ctx = getAudioCtx();
+        // Play 3 beeps
+        for (let i = 0; i < 3; i++) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.type = 'square';
+            osc.frequency.value = 880;
+            gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.3);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.2);
+            osc.start(ctx.currentTime + i * 0.3);
+            osc.stop(ctx.currentTime + i * 0.3 + 0.2);
+        }
+    } catch (e) {}
 }
 
 // ==================== HISTORY VIEW ====================
@@ -1234,12 +1494,21 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSharedData();
     initApp();
 
-    // Splash screen: show for 2 seconds then fade out
+    // Splash screen: only show full on first visit, skip on return visits
     const splash = document.getElementById('splashScreen');
+    const hasVisited = localStorage.getItem('aqueous_visited');
+
     if (splash) {
-        setTimeout(() => {
-            splash.classList.add('fade-out');
-            setTimeout(() => splash.remove(), 400);
-        }, 2000);
+        if (!hasVisited) {
+            // First time: show full splash for 2.5 seconds
+            localStorage.setItem('aqueous_visited', '1');
+            setTimeout(() => {
+                splash.classList.add('fade-out');
+                setTimeout(() => splash.remove(), 400);
+            }, 2500);
+        } else {
+            // Return visit: remove immediately
+            splash.remove();
+        }
     }
 });
