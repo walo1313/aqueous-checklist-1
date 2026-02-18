@@ -21,6 +21,9 @@ let alarmRepeater = null;
 let checkCount = 0;
 const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 
+// Individual task timer state
+let taskTimer = { active: false, stationId: null, ingredientId: null, ingName: '', seconds: 0, interval: null };
+
 // Mascot definitions — type: 'video' for mp4, 'image' for png/gif
 const MASCOTS = {
     mascot:    { file: 'mascot.png',            name: 'Chef Buddy',   personality: 'The Original',  emoji: '👨‍🍳', type: 'image' },
@@ -626,6 +629,21 @@ function renderSummary(container) {
         html += renderSummaryGroup('No Priority Set', 'none', noPriority);
     }
 
+    // Floating task timer bar
+    if (taskTimer.active) {
+        html += `
+            <div class="task-timer-floating" id="taskTimerBar">
+                <div class="task-timer-info">
+                    <span class="task-timer-name">⏱ ${taskTimer.ingName}</span>
+                    <span class="task-timer-clock" id="taskTimerClock">${formatTime(taskTimer.seconds)}</span>
+                </div>
+                <div class="task-timer-controls">
+                    <button class="task-timer-action stop" onclick="handleClick(); stopTaskTimer()">⏹ Stop</button>
+                    <button class="task-timer-action save" onclick="handleClick(); saveTaskTimer()">💾 Log</button>
+                </div>
+            </div>`;
+    }
+
     container.innerHTML = html;
 
     // Check if all completed
@@ -641,6 +659,11 @@ function renderSummaryGroup(title, level, tasks) {
             <div class="summary-group-title">${title}</div>`;
 
     tasks.forEach(task => {
+        const isTimingThis = taskTimer.active && taskTimer.stationId === task.stationId && taskTimer.ingredientId === task.ingredient.id;
+        const key = task.ingredient.name.toLowerCase();
+        const pt = prepTimes[key];
+        const avgInfo = pt ? `~${Math.floor(pt.avgSecPerUnit / 60)}m${Math.round(pt.avgSecPerUnit % 60)}s/unit` : '';
+
         html += `
             <div class="summary-item ${task.status.completed ? 'done' : ''}">
                 <label class="summary-check-label">
@@ -649,10 +672,17 @@ function renderSummaryGroup(title, level, tasks) {
                         onchange="toggleCompleted(${task.stationId}, ${task.ingredient.id})">
                     <div class="summary-item-info">
                         <span class="summary-item-name">${task.ingredient.name}</span>
-                        <span class="summary-item-station">${task.stationName}</span>
+                        <span class="summary-item-station">${task.stationName}${avgInfo ? ' · ' + avgInfo : ''}</span>
                     </div>
                 </label>
-                ${task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : ''}
+                <div class="summary-item-actions">
+                    ${task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : ''}
+                    ${!task.status.completed ? `
+                        <button class="task-timer-btn ${isTimingThis ? 'active' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer(${task.stationId}, ${task.ingredient.id}, '${task.ingredient.name.replace(/'/g, "\\'")}')">
+                            ${isTimingThis ? '⏱' : '⏱'}
+                        </button>
+                    ` : ''}
+                </div>
             </div>`;
     });
 
@@ -672,6 +702,128 @@ function toggleCompleted(stationId, ingredientId) {
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
+}
+
+// ==================== INDIVIDUAL TASK TIMER ====================
+
+function toggleTaskTimer(stationId, ingredientId, ingName) {
+    // If already timing this task, stop it
+    if (taskTimer.active && taskTimer.stationId === stationId && taskTimer.ingredientId === ingredientId) {
+        pauseTaskTimer();
+        return;
+    }
+
+    // If timing a different task, stop old one first
+    if (taskTimer.active) {
+        clearInterval(taskTimer.interval);
+    }
+
+    // Start new task timer
+    taskTimer = {
+        active: true,
+        stationId: stationId,
+        ingredientId: ingredientId,
+        ingName: ingName,
+        seconds: 0,
+        interval: setInterval(() => {
+            taskTimer.seconds++;
+            updateTaskTimerDisplay();
+        }, 1000)
+    };
+
+    showToast(`Timing: ${ingName}`);
+    const scrollY = window.scrollY;
+    renderSummary(document.getElementById('mainContent'));
+    window.scrollTo(0, scrollY);
+}
+
+function pauseTaskTimer() {
+    if (taskTimer.interval) clearInterval(taskTimer.interval);
+    taskTimer.interval = null;
+    // Don't reset — keep seconds so user can log
+    const scrollY = window.scrollY;
+    renderSummary(document.getElementById('mainContent'));
+    window.scrollTo(0, scrollY);
+}
+
+function stopTaskTimer() {
+    if (taskTimer.interval) clearInterval(taskTimer.interval);
+    taskTimer = { active: false, stationId: null, ingredientId: null, ingName: '', seconds: 0, interval: null };
+    const scrollY = window.scrollY;
+    renderSummary(document.getElementById('mainContent'));
+    window.scrollTo(0, scrollY);
+}
+
+function saveTaskTimer() {
+    if (taskTimer.seconds <= 0) {
+        showToast('No time recorded');
+        return;
+    }
+
+    // Show modal to confirm quantity and save
+    const existing = document.getElementById('modalTaskLog');
+    if (existing) existing.remove();
+
+    const key = taskTimer.ingName.toLowerCase();
+    const station = stations.find(s => s.id === taskTimer.stationId);
+    const ing = station ? station.ingredients.find(i => i.id === taskTimer.ingredientId) : null;
+    const st = station && ing ? station.status[ing.id] : null;
+    const defaultQty = st && st.parLevel ? (parseFloat(st.parLevel) || 1) : 1;
+
+    const modal = document.createElement('div');
+    modal.id = 'modalTaskLog';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Log Prep Time</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">
+                <strong>${taskTimer.ingName}</strong>
+            </p>
+            <p style="font-size:24px;font-weight:800;color:var(--accent);margin-bottom:16px;">${formatTime(taskTimer.seconds)}</p>
+            <div class="form-group">
+                <label style="font-size:12px;font-weight:600;">Quantity prepped (units)</label>
+                <input type="number" id="taskLogQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTaskLog').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); confirmTaskLog()">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function confirmTaskLog() {
+    const qtyEl = document.getElementById('taskLogQty');
+    const qty = parseFloat(qtyEl ? qtyEl.value : 1) || 1;
+    const key = taskTimer.ingName.toLowerCase();
+    const secPerUnit = taskTimer.seconds / qty;
+
+    if (!prepTimes[key]) {
+        prepTimes[key] = { avgSecPerUnit: secPerUnit, count: 1 };
+    } else {
+        const pt = prepTimes[key];
+        pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerUnit) / (pt.count + 1);
+        pt.count++;
+    }
+
+    savePrepTimes();
+
+    const modal = document.getElementById('modalTaskLog');
+    if (modal) modal.remove();
+
+    const mins = Math.floor(secPerUnit / 60);
+    const secs = Math.round(secPerUnit % 60);
+    showToast(`Logged: ${mins}m ${secs}s per unit for ${taskTimer.ingName}`);
+
+    stopTaskTimer();
+}
+
+function updateTaskTimerDisplay() {
+    const clock = document.getElementById('taskTimerClock');
+    if (clock) {
+        clock.textContent = formatTime(taskTimer.seconds);
+    }
 }
 
 // ==================== CELEBRATION ====================
@@ -780,49 +932,70 @@ function renderShare(container) {
 }
 
 function buildStationReport(station) {
+    if (station.ingredients.length === 0) return null;
+
     const lowItems = station.ingredients.filter(ing =>
         station.status[ing.id] && station.status[ing.id].low
     );
-
-    if (lowItems.length === 0) return null;
+    const okItems = station.ingredients.filter(ing =>
+        !station.status[ing.id] || !station.status[ing.id].low
+    );
 
     let msg = `📋 *CHECKLIST - ${station.name.toUpperCase()}*\n`;
     msg += `📅 ${new Date().toLocaleDateString('en-US')}\n\n`;
 
-    const high = lowItems.filter(i => station.status[i.id].priority === 'high');
-    const medium = lowItems.filter(i => station.status[i.id].priority === 'medium');
-    const low = lowItems.filter(i => station.status[i.id].priority === 'low');
-    const none = lowItems.filter(i => !station.status[i.id].priority);
+    // Needs prep section
+    if (lowItems.length > 0) {
+        const high = lowItems.filter(i => station.status[i.id].priority === 'high');
+        const medium = lowItems.filter(i => station.status[i.id].priority === 'medium');
+        const low = lowItems.filter(i => station.status[i.id].priority === 'low');
+        const none = lowItems.filter(i => !station.status[i.id].priority);
 
-    if (high.length) {
-        msg += `🔴 *HIGH PRIORITY:*\n`;
-        high.forEach(i => {
-            const par = station.status[i.id].parLevel;
-            msg += `  • ${i.name}${par ? ' — ' + par : ''}\n`;
-        });
+        msg += `⚠️ *NEEDS PREP (${lowItems.length}):*\n`;
+        if (high.length) {
+            msg += `\n🔴 *High Priority:*\n`;
+            high.forEach(i => {
+                const st = station.status[i.id];
+                const par = st.parLevel;
+                const done = st.completed ? ' ✅' : '';
+                msg += `  • ${i.name}${par ? ' — ' + par : ''}${done}\n`;
+            });
+        }
+        if (medium.length) {
+            msg += `\n🟡 *Medium:*\n`;
+            medium.forEach(i => {
+                const st = station.status[i.id];
+                const par = st.parLevel;
+                const done = st.completed ? ' ✅' : '';
+                msg += `  • ${i.name}${par ? ' — ' + par : ''}${done}\n`;
+            });
+        }
+        if (low.length) {
+            msg += `\n🔵 *Low:*\n`;
+            low.forEach(i => {
+                const st = station.status[i.id];
+                const par = st.parLevel;
+                const done = st.completed ? ' ✅' : '';
+                msg += `  • ${i.name}${par ? ' — ' + par : ''}${done}\n`;
+            });
+        }
+        if (none.length) {
+            msg += `\n⚪ *No Priority:*\n`;
+            none.forEach(i => {
+                const st = station.status[i.id];
+                const par = st.parLevel;
+                const done = st.completed ? ' ✅' : '';
+                msg += `  • ${i.name}${par ? ' — ' + par : ''}${done}\n`;
+            });
+        }
         msg += '\n';
     }
-    if (medium.length) {
-        msg += `🟡 *MEDIUM:*\n`;
-        medium.forEach(i => {
-            const par = station.status[i.id].parLevel;
-            msg += `  • ${i.name}${par ? ' — ' + par : ''}\n`;
-        });
-        msg += '\n';
-    }
-    if (low.length) {
-        msg += `🔵 *LOW:*\n`;
-        low.forEach(i => {
-            const par = station.status[i.id].parLevel;
-            msg += `  • ${i.name}${par ? ' — ' + par : ''}\n`;
-        });
-        msg += '\n';
-    }
-    if (none.length) {
-        msg += `⚪ *NO PRIORITY:*\n`;
-        none.forEach(i => {
-            const par = station.status[i.id].parLevel;
-            msg += `  • ${i.name}${par ? ' — ' + par : ''}\n`;
+
+    // All good section
+    if (okItems.length > 0) {
+        msg += `✅ *ALL GOOD (${okItems.length}):*\n`;
+        okItems.forEach(i => {
+            msg += `  • ${i.name}\n`;
         });
     }
 
@@ -835,7 +1008,7 @@ function shareStation(stationId) {
 
     const msg = buildStationReport(station);
     if (!msg) {
-        showToast('No items marked in this station');
+        showToast('No ingredients in this station');
         return;
     }
 
@@ -925,31 +1098,45 @@ function shareAllWhatsApp() {
 }
 
 function buildFullReport() {
-    let msg = `📋 *AQUEOUS — FULL STATION REPORT*\n`;
-    msg += `📅 ${new Date().toLocaleDateString('en-US')}\n\n`;
+    if (stations.length === 0) return null;
 
-    let hasData = false;
+    let msg = `📋 *AQUEOUS — FULL STATION REPORT*\n`;
+    msg += `📅 ${new Date().toLocaleDateString('en-US')}\n`;
+    if (settings.cookName) msg += `👨‍🍳 ${settings.cookName}\n`;
+    msg += '\n';
+
     stations.forEach(station => {
+        if (station.ingredients.length === 0) return;
+
         const lowItems = station.ingredients.filter(i =>
             station.status[i.id] && station.status[i.id].low
         );
-        if (lowItems.length > 0) {
-            hasData = true;
-            msg += `━━━━━━━━━━━━━━━━\n`;
-            msg += `🏪 *${station.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━\n\n`;
+        const okItems = station.ingredients.filter(i =>
+            !station.status[i.id] || !station.status[i.id].low
+        );
 
+        msg += `━━━━━━━━━━━━━━━━\n`;
+        msg += `🏪 *${station.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━\n\n`;
+
+        if (lowItems.length > 0) {
             const high = lowItems.filter(i => station.status[i.id].priority === 'high');
             const medium = lowItems.filter(i => station.status[i.id].priority === 'medium');
             const low = lowItems.filter(i => station.status[i.id].priority === 'low');
+            const none = lowItems.filter(i => !station.status[i.id].priority);
 
-            if (high.length) msg += `🔴 High: ${high.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
-            if (medium.length) msg += `🟡 Medium: ${medium.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
-            if (low.length) msg += `🔵 Low: ${low.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
-            msg += '\n';
+            if (high.length) msg += `🔴 High: ${high.map(i => { const st = station.status[i.id]; return i.name + (st.parLevel ? ' (' + st.parLevel + ')' : '') + (st.completed ? ' ✅' : ''); }).join(', ')}\n`;
+            if (medium.length) msg += `🟡 Medium: ${medium.map(i => { const st = station.status[i.id]; return i.name + (st.parLevel ? ' (' + st.parLevel + ')' : '') + (st.completed ? ' ✅' : ''); }).join(', ')}\n`;
+            if (low.length) msg += `🔵 Low: ${low.map(i => { const st = station.status[i.id]; return i.name + (st.parLevel ? ' (' + st.parLevel + ')' : '') + (st.completed ? ' ✅' : ''); }).join(', ')}\n`;
+            if (none.length) msg += `⚪ Unmarked: ${none.map(i => { const st = station.status[i.id]; return i.name + (st.parLevel ? ' (' + st.parLevel + ')' : '') + (st.completed ? ' ✅' : ''); }).join(', ')}\n`;
         }
+
+        if (okItems.length > 0) {
+            msg += `✅ All good: ${okItems.map(i => i.name).join(', ')}\n`;
+        }
+        msg += '\n';
     });
 
-    return hasData ? msg : null;
+    return msg;
 }
 
 function shareAllSMS() {
@@ -973,11 +1160,12 @@ function nativeShareAll() {
 }
 
 function compressData(data) {
-    // Minify station data: remove unnecessary fields, shorten keys
+    // Minify station data: include ALL ingredients, shorten keys
     const mini = data.map(s => {
-        const items = s.ingredients.filter(i => s.status[i.id] && s.status[i.id].low).map(i => {
-            const st = s.status[i.id];
+        const items = s.ingredients.map(i => {
+            const st = s.status[i.id] || {};
             const obj = { n: i.name };
+            if (st.low) obj.l = 1;
             if (st.priority) obj.p = st.priority[0]; // h, m, l
             if (st.parLevel) obj.v = st.parLevel;
             if (st.completed) obj.c = 1;
@@ -1004,7 +1192,7 @@ function decompressData(encoded) {
                 station.ingredients.push({ id: ingId, name: item.n });
                 const pMap = { h: 'high', m: 'medium', l: 'low' };
                 station.status[ingId] = {
-                    low: true,
+                    low: !!item.l,
                     priority: item.p ? pMap[item.p] : null,
                     parLevel: item.v || '',
                     completed: !!item.c
