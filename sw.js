@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v8';
+const CACHE_NAME = 'aqueous-v9';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -6,7 +6,8 @@ const urlsToCache = [
   './icon-192.png',
   './icon-512.png',
   './mascot.png',
-  './mascot-explosive.mp4'
+  './mascot-explosive.mp4',
+  './mascot-rasta.mp4'
 ];
 
 // Install: cache all essential files
