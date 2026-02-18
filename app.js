@@ -2050,18 +2050,12 @@ function checkSharedData() {
     if (compactData) {
         const imported = decompressData(compactData);
         if (imported && confirm('Import shared station data?')) {
-            // Merge: add imported stations that don't exist by name
+            // Replace matching stations entirely, add new ones
             imported.forEach(impStation => {
-                const existing = stations.find(s => s.name.toLowerCase() === impStation.name.toLowerCase());
-                if (existing) {
-                    // Merge ingredients into existing station
-                    impStation.ingredients.forEach(impIng => {
-                        const existsIng = existing.ingredients.find(e => e.name.toLowerCase() === impIng.name.toLowerCase());
-                        if (!existsIng) {
-                            existing.ingredients.push(impIng);
-                            existing.status[impIng.id] = impStation.status[impIng.id];
-                        }
-                    });
+                const existingIdx = stations.findIndex(s => s.name.toLowerCase() === impStation.name.toLowerCase());
+                if (existingIdx >= 0) {
+                    // Replace entire station with imported version (keeps full checklist)
+                    stations[existingIdx] = impStation;
                 } else {
                     stations.push(impStation);
                 }
