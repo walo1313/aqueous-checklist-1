@@ -4,8 +4,8 @@
   "description": "Kitchen station management app for professional chefs",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0f2027",
-  "theme_color": "#0f2027",
+  "background_color": "#dde1e7",
+  "theme_color": "#dde1e7",
   "orientation": "portrait",
   "icons": [
     {

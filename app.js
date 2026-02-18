@@ -4,6 +4,44 @@ let stations = [];
 let editingStationId = null;
 let currentView = 'home';
 let history = [];
+let settings = { vibration: true, sound: true };
+
+// ==================== HAPTICS & SOUND ====================
+
+let audioCtx = null;
+
+function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+}
+
+function playClick() {
+    if (!settings.sound) return;
+    try {
+        const ctx = getAudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.06);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.06);
+    } catch (e) {}
+}
+
+function vibrate(ms) {
+    if (!settings.vibration) return;
+    if (navigator.vibrate) navigator.vibrate(ms || 8);
+}
+
+function handleClick() {
+    vibrate(8);
+    playClick();
+}
 
 // ==================== INITIALIZATION ====================
 
@@ -55,6 +93,15 @@ function loadData() {
     if (savedHistory) {
         history = JSON.parse(savedHistory);
     }
+
+    const savedSettings = localStorage.getItem('aqueous_settings');
+    if (savedSettings) {
+        settings = JSON.parse(savedSettings);
+    }
+}
+
+function saveSettings() {
+    localStorage.setItem('aqueous_settings', JSON.stringify(settings));
 }
 
 function saveData(silent) {
@@ -119,6 +166,7 @@ function switchView(view) {
     if (view === 'home') navItems[0].classList.add('active');
     else if (view === 'summary') navItems[1].classList.add('active');
     else if (view === 'share') navItems[2].classList.add('active');
+    else if (view === 'settings') navItems[3].classList.add('active');
     else if (view === 'history') navItems[1].classList.add('active');
 
     renderCurrentView();
@@ -137,6 +185,9 @@ function renderCurrentView() {
     } else if (currentView === 'share') {
         fab.style.display = 'none';
         renderShare(container);
+    } else if (currentView === 'settings') {
+        fab.style.display = 'none';
+        renderSettings(container);
     } else if (currentView === 'history') {
         fab.style.display = 'none';
         renderHistory(container);
@@ -162,7 +213,7 @@ function renderHome(container) {
         const isExpanded = station.expanded !== false;
 
         html += `
-        <div class="station-card">
+        <div class="neu-card">
             <div class="station-header" onclick="toggleStation(${station.id})">
                 <div class="station-header-left">
                     <span class="station-name">${station.name}</span>
@@ -210,7 +261,7 @@ function renderIngredients(station) {
         <div class="ingredient ${st.low ? 'low' : ''}">
             <div class="ingredient-header">
                 <label class="ingredient-label">
-                    <input type="checkbox" class="checkbox"
+                    <input type="checkbox" class="neu-check"
                         ${st.low ? 'checked' : ''}
                         onchange="toggleLow(${station.id}, ${ing.id})">
                     <span class="ingredient-name">${ing.name}</span>
@@ -262,6 +313,7 @@ function toggleStation(stationId) {
 // ==================== INGREDIENT ACTIONS ====================
 
 function toggleLow(stationId, ingredientId) {
+    handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
 
@@ -292,6 +344,7 @@ function toggleLow(stationId, ingredientId) {
 }
 
 function setPriority(stationId, ingredientId, priority) {
+    handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
 
@@ -426,7 +479,7 @@ function renderSummaryGroup(title, level, tasks) {
         html += `
             <div class="summary-item ${task.status.completed ? 'done' : ''}">
                 <label class="summary-check-label">
-                    <input type="checkbox" class="checkbox"
+                    <input type="checkbox" class="neu-check"
                         ${task.status.completed ? 'checked' : ''}
                         onchange="toggleCompleted(${task.stationId}, ${task.ingredient.id})">
                     <div class="summary-item-info">
@@ -443,6 +496,7 @@ function renderSummaryGroup(title, level, tasks) {
 }
 
 function toggleCompleted(stationId, ingredientId) {
+    handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
 
@@ -841,6 +895,66 @@ function resetStation(stationId) {
     saveData(true);
     renderCurrentView();
     showToast('Checklist cleared');
+}
+
+// ==================== SETTINGS VIEW ====================
+
+function renderSettings(container) {
+    let html = `
+        <div class="settings-group">
+            <div class="settings-group-title">Feedback</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Haptic Vibration</span>
+                    <span class="setting-desc">Vibrate on button press (Android)</span>
+                </div>
+                <button class="neu-toggle ${settings.vibration ? 'active' : ''}"
+                    onclick="toggleSetting('vibration', this)"></button>
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Click Sound</span>
+                    <span class="setting-desc">Play sound on interactions</span>
+                </div>
+                <button class="neu-toggle ${settings.sound ? 'active' : ''}"
+                    onclick="toggleSetting('sound', this)"></button>
+            </div>
+        </div>
+        <div class="settings-group">
+            <div class="settings-group-title">Data</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Clear All Data</span>
+                    <span class="setting-desc">Reset stations, history & settings</span>
+                </div>
+                <button class="btn-delete" onclick="clearAllData()">Reset</button>
+            </div>
+        </div>
+        <div class="settings-group">
+            <div class="settings-group-title">About</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Aqueous</span>
+                    <span class="setting-desc">Kitchen Station Manager v1.0</span>
+                </div>
+            </div>
+        </div>`;
+
+    container.innerHTML = html;
+}
+
+function toggleSetting(key, el) {
+    handleClick();
+    settings[key] = !settings[key];
+    el.classList.toggle('active');
+    saveSettings();
+}
+
+function clearAllData() {
+    handleClick();
+    if (!confirm('This will delete ALL your data. Are you sure?')) return;
+    localStorage.clear();
+    location.reload();
 }
 
 // ==================== UTILITIES ====================
