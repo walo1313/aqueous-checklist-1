@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v7';
+const CACHE_NAME = 'aqueous-v8';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -18,11 +18,17 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Fetch: serve from cache, fallback to network
+// Fetch: network first, fallback to cache (ensures updates show immediately)
 self.addEventListener('fetch', event => {
   event.respondWith(
-    caches.match(event.request)
-      .then(response => response || fetch(event.request))
+    fetch(event.request)
+      .then(response => {
+        // Update cache with fresh version
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 
