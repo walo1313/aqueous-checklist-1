@@ -589,10 +589,11 @@ function renderSummary(container) {
     const highTasks = allTasks.filter(t => t.status.priority === 'high');
     const mediumTasks = allTasks.filter(t => t.status.priority === 'medium');
     const lowTasks = allTasks.filter(t => t.status.priority === 'low');
-    const noPriority = allTasks.filter(t => !t.status.priority);
 
-    const completedCount = allTasks.filter(t => t.status.completed).length;
-    const totalCount = allTasks.length;
+    // Only count tasks that have a priority assigned
+    const prioritizedTasks = allTasks.filter(t => t.status.priority);
+    const completedCount = prioritizedTasks.filter(t => t.status.completed).length;
+    const totalCount = prioritizedTasks.length;
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
     const today = new Date();
@@ -624,9 +625,6 @@ function renderSummary(container) {
     }
     if (lowTasks.length > 0) {
         html += renderSummaryGroup('Backup for Next Days', 'low', lowTasks);
-    }
-    if (noPriority.length > 0) {
-        html += renderSummaryGroup('No Priority Set', 'none', noPriority);
     }
 
     // Floating task timer bar
