@@ -19,27 +19,38 @@ function playClick() {
     if (!settings.sound) return;
     try {
         const ctx = getAudioCtx();
-        const osc = ctx.createOscillator();
+        const bufferSize = ctx.sampleRate * 0.03;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        // Realistic click: sharp noise burst with fast decay
+        for (let i = 0; i < bufferSize; i++) {
+            const t = i / ctx.sampleRate;
+            const envelope = Math.exp(-t * 200);
+            data[i] = (Math.random() * 2 - 1) * envelope * 0.3;
+        }
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        // Band-pass filter for crisp click
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 3000;
+        filter.Q.value = 1.2;
         const gain = ctx.createGain();
-        osc.connect(gain);
+        gain.gain.value = 0.6;
+        source.connect(filter);
+        filter.connect(gain);
         gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1800, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.06);
-        gain.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.06);
+        source.start(ctx.currentTime);
     } catch (e) {}
 }
 
 function vibrate(ms) {
     if (!settings.vibration) return;
-    if (navigator.vibrate) navigator.vibrate(ms || 8);
+    if (navigator.vibrate) navigator.vibrate(ms || 18);
 }
 
 function handleClick() {
-    vibrate(8);
+    vibrate(18);
     playClick();
 }
 
@@ -249,10 +260,6 @@ function renderIngredients(station) {
     station.ingredients.forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', completed: false };
 
-        const priorityBadge = st.low && st.priority
-            ? `<span class="badge badge-${st.priority}">${st.priority}</span>`
-            : '';
-
         const parDisplay = st.low && st.parLevel
             ? `<span class="par-display">${st.parLevel}</span>`
             : '';
@@ -268,7 +275,6 @@ function renderIngredients(station) {
                 </label>
                 <div class="ingredient-badges">
                     ${parDisplay}
-                    ${priorityBadge}
                 </div>
             </div>
             <div class="ingredient-controls ${st.low ? '' : 'hidden'}">
@@ -433,8 +439,14 @@ function renderSummary(container) {
     const totalCount = allTasks.length;
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
+    const today = new Date();
+    const summaryDateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
     let html = `
         <div class="summary-header-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <span style="font-size:13px;font-weight:700;color:var(--text);">📅 ${summaryDateStr}</span>
+            </div>
             <div class="progress-info">
                 <span class="progress-text">${completedCount}/${totalCount} tasks done</span>
                 <span class="progress-percent">${progress}%</span>
@@ -572,16 +584,24 @@ function launchCelebration() {
 function renderShare(container) {
     let html = `
         <div class="share-section">
-            <h3 class="share-title">Share Options</h3>
+            <h3 class="share-title">Share Full Report</h3>
             <div class="share-cards">
-                <button class="share-card" onclick="shareAllWhatsApp()">
+                <button class="share-card" onclick="handleClick(); shareAllWhatsApp()">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    <span>WhatsApp Report</span>
+                    <span>WhatsApp</span>
                 </button>
-                <button class="share-card" onclick="shareAppLink()">
+                <button class="share-card" onclick="handleClick(); shareAllSMS()">
+                    <span style="font-size:28px;">📱</span>
+                    <span>Text / SMS</span>
+                </button>
+                <button class="share-card" onclick="handleClick(); shareAppLink()">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-                    <span>Copy App Link</span>
+                    <span>Copy Link</span>
                 </button>
+                ${navigator.share ? `<button class="share-card" onclick="handleClick(); nativeShareAll()">
+                    <span style="font-size:28px;">📤</span>
+                    <span>More</span>
+                </button>` : `<button class="share-card" style="visibility:hidden;"></button>`}
             </div>
 
             <h3 class="share-title" style="margin-top:24px">Share by Station</h3>`;
@@ -599,18 +619,12 @@ function renderShare(container) {
     container.innerHTML = html;
 }
 
-function shareStation(stationId) {
-    const station = stations.find(s => s.id === stationId);
-    if (!station) return;
-
+function buildStationReport(station) {
     const lowItems = station.ingredients.filter(ing =>
         station.status[ing.id] && station.status[ing.id].low
     );
 
-    if (lowItems.length === 0) {
-        showToast('No items marked in this station');
-        return;
-    }
+    if (lowItems.length === 0) return null;
 
     let msg = `📋 *CHECKLIST - ${station.name.toUpperCase()}*\n`;
     msg += `📅 ${new Date().toLocaleDateString('en-US')}\n\n`;
@@ -652,7 +666,93 @@ function shareStation(stationId) {
         });
     }
 
+    return msg;
+}
+
+function shareStation(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const msg = buildStationReport(station);
+    if (!msg) {
+        showToast('No items marked in this station');
+        return;
+    }
+
+    showShareModal(msg, stationId);
+}
+
+function showShareModal(msg, stationId) {
+    // Remove existing share modal if any
+    const existing = document.getElementById('modalShareOptions');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalShareOptions';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Share Station</div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:20px;">Choose how to share</p>
+            <button class="btn btn-primary squishy" style="margin-bottom:10px;" onclick="handleClick(); shareViaWhatsApp('${btoa(encodeURIComponent(msg))}')">
+                💬 WhatsApp Report
+            </button>
+            <button class="btn btn-secondary squishy" style="margin-bottom:10px;" onclick="handleClick(); shareViaSMS('${btoa(encodeURIComponent(msg))}')">
+                📱 Text / SMS
+            </button>
+            <button class="btn btn-secondary squishy" style="margin-bottom:10px;" onclick="handleClick(); shareStationLink(${stationId})">
+                🔗 Copy Station Link
+            </button>
+            ${navigator.share ? `<button class="btn btn-secondary squishy" style="margin-bottom:10px;" onclick="handleClick(); nativeShareStation('${btoa(encodeURIComponent(msg))}')">
+                📤 More Options
+            </button>` : ''}
+            <button class="btn btn-link" onclick="document.getElementById('modalShareOptions').remove()">Cancel</button>
+        </div>`;
+    document.body.appendChild(modal);
+
+    modal.onclick = function(e) {
+        if (e.target === modal) modal.remove();
+    };
+}
+
+function shareViaWhatsApp(encodedMsg) {
+    const msg = decodeURIComponent(atob(encodedMsg));
+    closeShareModal();
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function shareViaSMS(encodedMsg) {
+    const msg = decodeURIComponent(atob(encodedMsg));
+    closeShareModal();
+    window.open(`sms:?body=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function shareStationLink(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    closeShareModal();
+
+    const data = compressData([station]);
+    const link = window.location.origin + window.location.pathname + '?d=' + data;
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(link).then(() => showToast('Station link copied!'));
+    } else {
+        prompt('Copy this link:', link);
+    }
+}
+
+function nativeShareStation(encodedMsg) {
+    const msg = decodeURIComponent(atob(encodedMsg));
+    closeShareModal();
+    if (navigator.share) {
+        navigator.share({ title: 'Aqueous Checklist', text: msg }).catch(() => {});
+    }
+}
+
+function closeShareModal() {
+    const modal = document.getElementById('modalShareOptions');
+    if (modal) modal.remove();
 }
 
 function shareAllWhatsApp() {
@@ -688,9 +788,102 @@ function shareAllWhatsApp() {
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
+function buildFullReport() {
+    let msg = `📋 *AQUEOUS — FULL STATION REPORT*\n`;
+    msg += `📅 ${new Date().toLocaleDateString('en-US')}\n\n`;
+
+    let hasData = false;
+    stations.forEach(station => {
+        const lowItems = station.ingredients.filter(i =>
+            station.status[i.id] && station.status[i.id].low
+        );
+        if (lowItems.length > 0) {
+            hasData = true;
+            msg += `━━━━━━━━━━━━━━━━\n`;
+            msg += `🏪 *${station.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━\n\n`;
+
+            const high = lowItems.filter(i => station.status[i.id].priority === 'high');
+            const medium = lowItems.filter(i => station.status[i.id].priority === 'medium');
+            const low = lowItems.filter(i => station.status[i.id].priority === 'low');
+
+            if (high.length) msg += `🔴 High: ${high.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
+            if (medium.length) msg += `🟡 Medium: ${medium.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
+            if (low.length) msg += `🔵 Low: ${low.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
+            msg += '\n';
+        }
+    });
+
+    return hasData ? msg : null;
+}
+
+function shareAllSMS() {
+    const msg = buildFullReport();
+    if (!msg) {
+        showToast('No items marked in any station');
+        return;
+    }
+    window.open(`sms:?body=${encodeURIComponent(msg)}`, '_blank');
+}
+
+function nativeShareAll() {
+    const msg = buildFullReport();
+    if (!msg) {
+        showToast('No items marked in any station');
+        return;
+    }
+    if (navigator.share) {
+        navigator.share({ title: 'Aqueous Station Report', text: msg }).catch(() => {});
+    }
+}
+
+function compressData(data) {
+    // Minify station data: remove unnecessary fields, shorten keys
+    const mini = data.map(s => {
+        const items = s.ingredients.filter(i => s.status[i.id] && s.status[i.id].low).map(i => {
+            const st = s.status[i.id];
+            const obj = { n: i.name };
+            if (st.priority) obj.p = st.priority[0]; // h, m, l
+            if (st.parLevel) obj.v = st.parLevel;
+            if (st.completed) obj.c = 1;
+            return obj;
+        });
+        return { s: s.name, i: items };
+    });
+    return btoa(encodeURIComponent(JSON.stringify(mini)));
+}
+
+function decompressData(encoded) {
+    try {
+        const mini = JSON.parse(decodeURIComponent(atob(encoded)));
+        return mini.map(s => {
+            const station = {
+                id: Date.now() + Math.random() * 1000 | 0,
+                name: s.s,
+                ingredients: [],
+                status: {},
+                expanded: true
+            };
+            (s.i || []).forEach((item, idx) => {
+                const ingId = Date.now() + idx + Math.random() * 1000 | 0;
+                station.ingredients.push({ id: ingId, name: item.n });
+                const pMap = { h: 'high', m: 'medium', l: 'low' };
+                station.status[ingId] = {
+                    low: true,
+                    priority: item.p ? pMap[item.p] : null,
+                    parLevel: item.v || '',
+                    completed: !!item.c
+                };
+            });
+            return station;
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
 function shareAppLink() {
-    const data = btoa(encodeURIComponent(JSON.stringify(stations)));
-    const link = window.location.origin + window.location.pathname + '?data=' + data;
+    const data = compressData(stations);
+    const link = window.location.origin + window.location.pathname + '?d=' + data;
 
     if (navigator.clipboard) {
         navigator.clipboard.writeText(link).then(() => {
@@ -973,19 +1166,57 @@ function showToast(message) {
 // Import shared data from URL
 function checkSharedData() {
     const params = new URLSearchParams(window.location.search);
-    const data = params.get('data');
-    if (data) {
+
+    // Support new compact format (?d=) and legacy format (?data=)
+    const compactData = params.get('d');
+    const legacyData = params.get('data');
+
+    if (compactData) {
+        const imported = decompressData(compactData);
+        if (imported && confirm('Import shared station data?')) {
+            // Merge: add imported stations that don't exist by name
+            imported.forEach(impStation => {
+                const existing = stations.find(s => s.name.toLowerCase() === impStation.name.toLowerCase());
+                if (existing) {
+                    // Merge ingredients into existing station
+                    impStation.ingredients.forEach(impIng => {
+                        const existsIng = existing.ingredients.find(e => e.name.toLowerCase() === impIng.name.toLowerCase());
+                        if (!existsIng) {
+                            existing.ingredients.push(impIng);
+                            existing.status[impIng.id] = impStation.status[impIng.id];
+                        }
+                    });
+                } else {
+                    stations.push(impStation);
+                }
+            });
+            saveData(true);
+            // Clear URL params so data persists on refresh
+            window.history.replaceState({}, '', window.location.pathname);
+            showToast('Data imported!');
+        } else {
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    } else if (legacyData) {
         try {
-            const imported = JSON.parse(decodeURIComponent(atob(data)));
+            const imported = JSON.parse(decodeURIComponent(atob(legacyData)));
             if (confirm('Import shared station data?')) {
-                stations = imported;
+                // Merge imported into existing
+                imported.forEach(impStation => {
+                    const existing = stations.find(s => s.name.toLowerCase() === impStation.name.toLowerCase());
+                    if (!existing) {
+                        stations.push(impStation);
+                    }
+                });
                 saveData(true);
                 window.history.replaceState({}, '', window.location.pathname);
-                renderCurrentView();
                 showToast('Data imported!');
+            } else {
+                window.history.replaceState({}, '', window.location.pathname);
             }
         } catch (e) {
             console.error('Invalid shared data');
+            window.history.replaceState({}, '', window.location.pathname);
         }
     }
 }
@@ -1002,4 +1233,13 @@ window.onclick = function(event) {
 document.addEventListener('DOMContentLoaded', () => {
     checkSharedData();
     initApp();
+
+    // Splash screen: show for 2 seconds then fade out
+    const splash = document.getElementById('splashScreen');
+    if (splash) {
+        setTimeout(() => {
+            splash.classList.add('fade-out');
+            setTimeout(() => splash.remove(), 400);
+        }, 2000);
+    }
 });

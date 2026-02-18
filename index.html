@@ -13,6 +13,50 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
+        /* ===== SPLASH SCREEN ===== */
+        .splash-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: #dde1e7;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.4s ease;
+        }
+        .splash-screen.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .splash-mascot {
+            width: 60vw;
+            max-width: 280px;
+            border-radius: 32px;
+            box-shadow: 8px 8px 16px #b8bec7, -8px -8px 16px #ffffff;
+            animation: splashBounce 0.8s ease;
+        }
+        .splash-title {
+            margin-top: 24px;
+            font-family: 'Inter', sans-serif;
+            font-size: 28px;
+            font-weight: 800;
+            color: #2d3436;
+            letter-spacing: -0.5px;
+        }
+        .splash-sub {
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            color: #636e72;
+            margin-top: 6px;
+            font-weight: 500;
+        }
+        @keyframes splashBounce {
+            0% { transform: scale(0.6); opacity: 0; }
+            60% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
         :root {
             --bg: #dde1e7;
             --bg-dark: #c8ccd2;
@@ -78,9 +122,9 @@
         }
 
         .header-mascot {
-            width: 44px;
-            height: 44px;
-            border-radius: 14px;
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
             box-shadow: var(--neu-shadow-sm);
             object-fit: cover;
         }
@@ -233,7 +277,7 @@
             background: var(--surface);
             border: none;
             border-radius: 7px;
-            box-shadow: var(--neu-inset);
+            box-shadow: var(--neu-shadow-sm);
             cursor: pointer;
             position: relative;
             flex-shrink: 0;
@@ -242,7 +286,7 @@
 
         .neu-check:checked {
             background: var(--accent);
-            box-shadow: 0 2px 8px var(--accent-glow);
+            box-shadow: var(--neu-inset);
         }
 
         .neu-check:checked::after {
@@ -314,19 +358,25 @@
         }
 
         .priority-btn.high {
-            background: var(--high);
-            color: white;
-            box-shadow: 0 3px 10px var(--high-glow);
+            background: var(--surface);
+            color: var(--high);
+            box-shadow: var(--neu-inset);
+            border-bottom: 3px solid var(--high);
+            transform: translateY(1px);
         }
         .priority-btn.medium {
-            background: var(--medium);
-            color: var(--text);
-            box-shadow: 0 3px 10px rgba(253, 203, 110, 0.4);
+            background: var(--surface);
+            color: var(--medium-dark);
+            box-shadow: var(--neu-inset);
+            border-bottom: 3px solid var(--medium);
+            transform: translateY(1px);
         }
         .priority-btn.low {
-            background: var(--low);
-            color: white;
-            box-shadow: 0 3px 10px rgba(116, 185, 255, 0.4);
+            background: var(--surface);
+            color: var(--low-dark);
+            box-shadow: var(--neu-inset);
+            border-bottom: 3px solid var(--low);
+            transform: translateY(1px);
         }
 
         .par-row {
@@ -960,6 +1010,13 @@
     </style>
 </head>
 <body>
+    <!-- Splash Screen -->
+    <div class="splash-screen" id="splashScreen">
+        <img src="mascot.png" alt="Aqueous" class="splash-mascot">
+        <div class="splash-title">Aqueous</div>
+        <div class="splash-sub">Kitchen Station Manager</div>
+    </div>
+
     <div class="header">
         <div class="header-top">
             <div>
