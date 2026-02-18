@@ -4,7 +4,8 @@ let stations = [];
 let editingStationId = null;
 let currentView = 'home';
 let history = [];
-let settings = { vibration: true, sound: true };
+let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot' };
+let prepTimes = {}; // { "ingredientName": { avgSecPerUnit: N, count: N } }
 
 // Timer state
 let timerMode = 'countdown'; // countdown, stopwatch
@@ -13,10 +14,23 @@ let timerTarget = 0;
 let timerRunning = false;
 let timerInterval = null;
 let timerAlarm = false;
+let timerLabel = '';
+let alarmRepeater = null;
 
 // Mascot animation tracking
 let checkCount = 0;
 const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
+
+// Mascot definitions
+const MASCOTS = {
+    mascot:    { file: 'mascot.png',    name: 'Chef Buddy',   personality: 'The Original', emoji: '👨‍🍳' },
+    explosive: { file: 'mascot-explosive.png', name: 'Fuego',    personality: 'The Explosive', emoji: '🔥' },
+    chill:     { file: 'mascot-chill.png',     name: 'Rasta',    personality: 'The Chill One', emoji: '🌿' },
+    sad:       { file: 'mascot-sad.png',       name: 'Onion',    personality: 'The Sad One',   emoji: '😢' },
+    excited:   { file: 'mascot-excited.png',   name: 'Sparky',   personality: 'The Hyper One', emoji: '🎉' },
+    sexy:      { file: 'mascot-sexy.png',      name: 'Smooth',   personality: 'The Flirty One', emoji: '😏' },
+    asian:     { file: 'mascot-asian.png',     name: 'Umami',    personality: 'The Wise One',  emoji: '🍜' }
+};
 
 // PWA Install
 let deferredPrompt = null;
@@ -121,14 +135,65 @@ function dismissInstall() {
 function initApp() {
     loadData();
     processCarryOver();
-    showDate();
+    updateHeader();
     renderCurrentView();
+
+    // First time: ask cook name
+    if (!settings.cookName) {
+        setTimeout(() => showNameSetup(), 500);
+    }
+}
+
+function showNameSetup() {
+    const existing = document.getElementById('modalNameSetup');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalNameSetup';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Welcome, Chef!</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">What should we call you?</p>
+            <div class="form-group">
+                <input type="text" id="setupCookName" class="form-control" placeholder="Your name" style="text-align:center;font-size:16px;">
+            </div>
+            <button class="btn btn-primary squishy" onclick="handleClick(); saveCookName()">Let's Cook!</button>
+        </div>`;
+    document.body.appendChild(modal);
+    setTimeout(() => { const input = document.getElementById('setupCookName'); if (input) input.focus(); }, 300);
+}
+
+function saveCookName() {
+    const input = document.getElementById('setupCookName');
+    const name = input ? input.value.trim() : '';
+    if (!name) { showToast('Enter your name, chef!'); return; }
+    settings.cookName = name;
+    saveSettings();
+    const modal = document.getElementById('modalNameSetup');
+    if (modal) modal.remove();
+    updateHeader();
+    showToast(`Welcome, ${name}!`);
+}
+
+function updateHeader() {
+    showDate();
+    // Update cook name display
+    const nameEl = document.getElementById('cookNameDisplay');
+    if (nameEl) nameEl.textContent = settings.cookName || '';
+    // Update mascot image
+    const mascotEl = document.querySelector('.header-mascot');
+    if (mascotEl) {
+        const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
+        mascotEl.src = m.file;
+    }
 }
 
 function showDate() {
     const today = new Date();
     const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('dateDisplay').textContent = today.toLocaleDateString('en-US', options);
+    const el = document.getElementById('dateDisplay');
+    if (el) el.textContent = today.toLocaleDateString('en-US', options);
 }
 
 // ==================== DATA PERSISTENCE ====================
@@ -169,8 +234,18 @@ function loadData() {
 
     const savedSettings = localStorage.getItem('aqueous_settings');
     if (savedSettings) {
-        settings = JSON.parse(savedSettings);
+        const s = JSON.parse(savedSettings);
+        settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', ...s };
     }
+
+    const savedPrepTimes = localStorage.getItem('aqueous_prep_times');
+    if (savedPrepTimes) {
+        prepTimes = JSON.parse(savedPrepTimes);
+    }
+}
+
+function savePrepTimes() {
+    localStorage.setItem('aqueous_prep_times', JSON.stringify(prepTimes));
 }
 
 function saveSettings() {
@@ -988,6 +1063,9 @@ function renderTimer(container) {
     const isAlarm = timerMode === 'countdown' && timerRunning && timerSeconds >= timerTarget;
     const displayClass = isAlarm ? 'alarm' : (timerRunning ? 'running' : '');
 
+    // Calculate smart block suggestions
+    const blockSuggestions = calculateBlockGoals();
+
     container.innerHTML = `
         <div class="timer-card">
             <div class="timer-mode-tabs">
@@ -1012,7 +1090,7 @@ function renderTimer(container) {
                     <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(30)">30 min</button>
                 </div>
             ` : `
-                <div class="timer-label">${timerMode === 'countdown' ? 'Countdown' : 'Stopwatch'}</div>
+                <div class="timer-label">${timerLabel || (timerMode === 'countdown' ? 'Countdown' : 'Stopwatch')}</div>
                 <div class="timer-display ${displayClass}" id="timerDisplay">${displayTime}</div>
             `}
 
@@ -1032,16 +1110,54 @@ function renderTimer(container) {
         </div>
 
         <div class="timer-card">
-            <div class="timer-label">Quick Timers for Prep Blocks</div>
-            <button class="btn btn-outline squishy" style="margin-bottom:8px" onclick="handleClick(); startBlockTimer('Before Service', 30)">
-                🔴 Before Service — 30 min countdown
-            </button>
-            <button class="btn btn-outline squishy" style="margin-bottom:8px" onclick="handleClick(); startBlockTimer('Prep Block', 60)">
-                🟡 Prep Block — 60 min countdown
-            </button>
-            <button class="btn btn-outline squishy" onclick="handleClick(); startBlockTimer('Backup Prep', 45)">
-                🔵 Backup Prep — 45 min countdown
-            </button>
+            <div class="timer-label">Prep Block Timers</div>
+            <p style="font-size:10px;color:var(--text-muted);margin-bottom:12px;font-weight:500;">Goals adjust based on your prep history</p>
+
+            ${blockSuggestions.high.items > 0 ? `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <button class="btn btn-outline squishy" style="flex:1;margin:0" onclick="handleClick(); startBlockTimer('Before Service', ${blockSuggestions.high.mins})">
+                    🔴 Before Service — ${blockSuggestions.high.mins} min
+                </button>
+                <button class="timer-preset-btn" onclick="handleClick(); editBlockMinutes('high', ${blockSuggestions.high.mins})" title="Edit">✏️</button>
+            </div>
+            <p style="font-size:9px;color:var(--text-muted);margin-bottom:12px;">${blockSuggestions.high.detail}</p>
+            ` : ''}
+
+            ${blockSuggestions.medium.items > 0 ? `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <button class="btn btn-outline squishy" style="flex:1;margin:0" onclick="handleClick(); startBlockTimer('Prep Block', ${blockSuggestions.medium.mins})">
+                    🟡 Prep Block — ${blockSuggestions.medium.mins} min
+                </button>
+                <button class="timer-preset-btn" onclick="handleClick(); editBlockMinutes('medium', ${blockSuggestions.medium.mins})" title="Edit">✏️</button>
+            </div>
+            <p style="font-size:9px;color:var(--text-muted);margin-bottom:12px;">${blockSuggestions.medium.detail}</p>
+            ` : ''}
+
+            ${blockSuggestions.low.items > 0 ? `
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <button class="btn btn-outline squishy" style="flex:1;margin:0" onclick="handleClick(); startBlockTimer('Backup Prep', ${blockSuggestions.low.mins})">
+                    🔵 Backup Prep — ${blockSuggestions.low.mins} min
+                </button>
+                <button class="timer-preset-btn" onclick="handleClick(); editBlockMinutes('low', ${blockSuggestions.low.mins})" title="Edit">✏️</button>
+            </div>
+            <p style="font-size:9px;color:var(--text-muted);margin-bottom:12px;">${blockSuggestions.low.detail}</p>
+            ` : ''}
+
+            ${blockSuggestions.high.items === 0 && blockSuggestions.medium.items === 0 && blockSuggestions.low.items === 0 ? `
+                <p style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">Mark some ingredients as low in Home to see smart prep block timers here</p>
+            ` : ''}
+        </div>
+
+        <div class="timer-card">
+            <div class="timer-label">Log Prep Time</div>
+            <p style="font-size:10px;color:var(--text-muted);margin-bottom:12px;">Use the stopwatch to time a task, then log it to improve future block goals</p>
+            ${timerMode === 'stopwatch' && timerSeconds > 0 && !timerRunning ? `
+                <button class="btn btn-success squishy" onclick="handleClick(); showLogPrepModal()">
+                    📝 Log ${formatTime(timerSeconds)} for an ingredient
+                </button>
+            ` : `
+                <p style="font-size:11px;color:var(--text-muted);text-align:center;">Use stopwatch mode, then pause to log time</p>
+            `}
         </div>`;
 }
 
@@ -1059,6 +1175,7 @@ function setTimerMode(mode) {
     timerSeconds = 0;
     timerTarget = 0;
     timerAlarm = false;
+    timerLabel = '';
     renderTimer(document.getElementById('mainContent'));
 }
 
@@ -1084,11 +1201,10 @@ function startTimer() {
     timerInterval = setInterval(() => {
         timerSeconds++;
         updateTimerDisplay();
-        // Countdown alarm
+        // Countdown alarm with physical confirmation
         if (timerMode === 'countdown' && timerSeconds >= timerTarget && !timerAlarm) {
             timerAlarm = true;
-            vibrate(200);
-            playAlarm();
+            startAlarmRepeat();
         }
     }, 1000);
     renderTimer(document.getElementById('mainContent'));
@@ -1105,19 +1221,139 @@ function resetTimer() {
     timerRunning = false;
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
+    if (alarmRepeater) { clearInterval(alarmRepeater); alarmRepeater = null; }
+    const overlay = document.getElementById('alarmOverlay');
+    if (overlay) overlay.remove();
     timerSeconds = 0;
     timerTarget = 0;
     timerAlarm = false;
+    timerLabel = '';
     renderTimer(document.getElementById('mainContent'));
 }
 
 function startBlockTimer(label, minutes) {
     if (timerRunning) pauseTimer();
     timerMode = 'countdown';
+    timerLabel = label;
     timerSeconds = 0;
     timerTarget = minutes * 60;
     startTimer();
     showToast(`${label}: ${minutes} min started`);
+}
+
+function editBlockMinutes(priority, currentMins) {
+    const newMins = prompt(`Edit ${priority} block timer (minutes):`, currentMins);
+    if (newMins !== null && !isNaN(parseInt(newMins)) && parseInt(newMins) > 0) {
+        const labels = { high: 'Before Service', medium: 'Prep Block', low: 'Backup Prep' };
+        startBlockTimer(labels[priority], parseInt(newMins));
+    }
+}
+
+function calculateBlockGoals() {
+    const result = {
+        high: { mins: 30, items: 0, detail: 'Default: 30 min' },
+        medium: { mins: 60, items: 0, detail: 'Default: 60 min' },
+        low: { mins: 45, items: 0, detail: 'Default: 45 min' }
+    };
+
+    stations.forEach(station => {
+        station.ingredients.forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st || !st.low || st.completed) return;
+            const p = st.priority || 'none';
+            if (p === 'none') return;
+
+            result[p].items++;
+
+            // Check if we have prep time data for this ingredient
+            const key = ing.name.toLowerCase();
+            const pt = prepTimes[key];
+            if (pt && pt.avgSecPerUnit > 0) {
+                // Parse par level for quantity
+                const qty = parseFloat(st.parLevel) || 1;
+                const estSec = Math.round(pt.avgSecPerUnit * qty);
+                if (!result[p].estSeconds) result[p].estSeconds = 0;
+                result[p].estSeconds += estSec;
+                if (!result[p].ingredients) result[p].ingredients = [];
+                result[p].ingredients.push(`${ing.name}: ~${Math.ceil(estSec / 60)}m`);
+            }
+        });
+    });
+
+    // Calculate smart minutes from history data
+    ['high', 'medium', 'low'].forEach(p => {
+        if (result[p].estSeconds) {
+            result[p].mins = Math.max(1, Math.ceil(result[p].estSeconds / 60));
+            result[p].detail = `Smart goal: ${result[p].ingredients.join(', ')}`;
+        } else if (result[p].items > 0) {
+            // No history data, use defaults scaled by item count
+            const baseMin = p === 'high' ? 5 : p === 'medium' ? 8 : 6;
+            result[p].mins = Math.max(5, result[p].items * baseMin);
+            result[p].detail = `${result[p].items} items × ~${baseMin} min each (log prep times for smarter goals)`;
+        }
+    });
+
+    return result;
+}
+
+function showLogPrepModal() {
+    const existing = document.getElementById('modalLogPrep');
+    if (existing) existing.remove();
+
+    // Build ingredient options
+    let options = '';
+    stations.forEach(station => {
+        station.ingredients.forEach(ing => {
+            options += `<option value="${ing.name.toLowerCase()}">${ing.name} (${station.name})</option>`;
+        });
+    });
+
+    const modal = document.createElement('div');
+    modal.id = 'modalLogPrep';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">Log Prep Time</div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">
+                You spent <strong>${formatTime(timerSeconds)}</strong>. Which ingredient?
+            </p>
+            <div class="form-group">
+                <label>Ingredient</label>
+                <select id="logPrepIngredient" class="form-control">${options}</select>
+            </div>
+            <div class="form-group">
+                <label>Quantity prepped (e.g. 2 for 2 quarts)</label>
+                <input type="number" id="logPrepQty" class="form-control" value="1" min="0.1" step="0.5">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalLogPrep').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveLogPrep()">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function saveLogPrep() {
+    const ingEl = document.getElementById('logPrepIngredient');
+    const qtyEl = document.getElementById('logPrepQty');
+    const key = ingEl.value;
+    const qty = parseFloat(qtyEl.value) || 1;
+    const secPerUnit = timerSeconds / qty;
+
+    if (!prepTimes[key]) {
+        prepTimes[key] = { avgSecPerUnit: secPerUnit, count: 1 };
+    } else {
+        // Running average
+        const pt = prepTimes[key];
+        pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerUnit) / (pt.count + 1);
+        pt.count++;
+    }
+
+    savePrepTimes();
+    document.getElementById('modalLogPrep').remove();
+    showToast(`Logged: ${Math.round(secPerUnit)}s per unit for ${key}`);
+    resetTimer();
 }
 
 function updateTimerDisplay() {
@@ -1135,23 +1371,65 @@ function updateTimerDisplay() {
 }
 
 function playAlarm() {
-    if (!settings.sound) return;
-    try {
-        const ctx = getAudioCtx();
-        // Play 3 beeps
-        for (let i = 0; i < 3; i++) {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.type = 'square';
-            osc.frequency.value = 880;
-            gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.3);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.2);
-            osc.start(ctx.currentTime + i * 0.3);
-            osc.stop(ctx.currentTime + i * 0.3 + 0.2);
-        }
-    } catch (e) {}
+    // Play 3 beeps
+    if (settings.sound) {
+        try {
+            const ctx = getAudioCtx();
+            for (let i = 0; i < 3; i++) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.type = 'square';
+                osc.frequency.value = 880;
+                gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.3);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.2);
+                osc.start(ctx.currentTime + i * 0.3);
+                osc.stop(ctx.currentTime + i * 0.3 + 0.2);
+            }
+        } catch (e) {}
+    }
+}
+
+function startAlarmRepeat() {
+    // Keep alarming every 5 seconds until confirmed
+    vibrate(500);
+    playAlarm();
+    alarmRepeater = setInterval(() => {
+        vibrate(500);
+        playAlarm();
+    }, 5000);
+    showAlarmConfirmation();
+}
+
+function showAlarmConfirmation() {
+    const existing = document.getElementById('alarmOverlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'alarmOverlay';
+    overlay.className = 'celebration-overlay';
+    overlay.innerHTML = `
+        <div class="celebration-content" style="padding:36px 28px;">
+            <div class="celebration-emoji">⏰</div>
+            <h2>Time's Up!</h2>
+            <p style="margin-bottom:12px;">${timerLabel || 'Your timer'} is done</p>
+            <button class="btn btn-danger squishy" style="font-size:18px;padding:18px 36px;" onclick="handleClick(); confirmAlarm()">
+                🔔 STOP ALARM
+            </button>
+        </div>`;
+    document.body.appendChild(overlay);
+}
+
+function confirmAlarm() {
+    if (alarmRepeater) {
+        clearInterval(alarmRepeater);
+        alarmRepeater = null;
+    }
+    const overlay = document.getElementById('alarmOverlay');
+    if (overlay) overlay.remove();
+    pauseTimer();
+    showToast('Alarm stopped');
 }
 
 // ==================== HISTORY VIEW ====================
@@ -1353,7 +1631,38 @@ function resetStation(stationId) {
 // ==================== SETTINGS VIEW ====================
 
 function renderSettings(container) {
+    // Build mascot picker
+    let mascotPicker = '';
+    Object.entries(MASCOTS).forEach(([key, m]) => {
+        const isActive = settings.mascot === key;
+        mascotPicker += `
+            <div style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;${isActive ? '' : 'opacity:0.5;'}"
+                 onclick="handleClick(); selectMascot('${key}')">
+                <img src="${m.file}" alt="${m.name}" style="width:52px;height:52px;border-radius:14px;box-shadow:${isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};object-fit:cover;">
+                <span style="font-size:9px;font-weight:700;color:${isActive ? 'var(--accent)' : 'var(--text-muted)'};">${m.emoji} ${m.name}</span>
+                <span style="font-size:8px;color:var(--text-muted);">${m.personality}</span>
+            </div>`;
+    });
+
     let html = `
+        <div class="settings-group">
+            <div class="settings-group-title">Profile</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Chef Name</span>
+                    <span class="setting-desc">${settings.cookName || 'Not set'}</span>
+                </div>
+                <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); editCookName()">Edit</button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Choose Your Mascot</div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:8px 0;">
+                ${mascotPicker}
+            </div>
+        </div>
+
         <div class="settings-group">
             <div class="settings-group-title">Feedback</div>
             <div class="setting-row">
@@ -1373,6 +1682,19 @@ function renderSettings(container) {
                     onclick="toggleSetting('sound', this)"></button>
             </div>
         </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Prep Time Database</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">${Object.keys(prepTimes).length} ingredients logged</span>
+                    <span class="setting-desc">Used for smart block timer goals</span>
+                </div>
+                ${Object.keys(prepTimes).length > 0 ? `<button class="btn-delete" onclick="handleClick(); clearPrepTimes()">Clear</button>` : ''}
+            </div>
+            ${Object.keys(prepTimes).length > 0 ? renderPrepTimesTable() : ''}
+        </div>
+
         <div class="settings-group">
             <div class="settings-group-title">Data</div>
             <div class="setting-row">
@@ -1388,12 +1710,54 @@ function renderSettings(container) {
             <div class="setting-row">
                 <div class="setting-info">
                     <span class="setting-label">Aqueous</span>
-                    <span class="setting-desc">Kitchen Station Manager v1.0</span>
+                    <span class="setting-desc">Kitchen Station Manager v2.0</span>
                 </div>
             </div>
         </div>`;
 
     container.innerHTML = html;
+}
+
+function renderPrepTimesTable() {
+    let html = '<div style="margin-top:8px;">';
+    Object.entries(prepTimes).forEach(([key, pt]) => {
+        const mins = Math.floor(pt.avgSecPerUnit / 60);
+        const secs = Math.round(pt.avgSecPerUnit % 60);
+        html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);font-size:11px;">
+            <span style="font-weight:600;text-transform:capitalize;">${key}</span>
+            <span style="color:var(--text-muted);">${mins}m ${secs}s/unit (${pt.count} logs)</span>
+        </div>`;
+    });
+    html += '</div>';
+    return html;
+}
+
+function selectMascot(key) {
+    settings.mascot = key;
+    saveSettings();
+    updateHeader();
+    renderSettings(document.getElementById('mainContent'));
+    const m = MASCOTS[key];
+    showToast(`${m.emoji} ${m.name} selected!`);
+}
+
+function editCookName() {
+    const newName = prompt('Change your chef name:', settings.cookName);
+    if (newName !== null && newName.trim()) {
+        settings.cookName = newName.trim();
+        saveSettings();
+        updateHeader();
+        renderSettings(document.getElementById('mainContent'));
+        showToast(`Name updated!`);
+    }
+}
+
+function clearPrepTimes() {
+    if (!confirm('Clear all logged prep times?')) return;
+    prepTimes = {};
+    savePrepTimes();
+    renderSettings(document.getElementById('mainContent'));
+    showToast('Prep times cleared');
 }
 
 function toggleSetting(key, el) {
