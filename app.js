@@ -30,7 +30,7 @@ const MASCOTS = {
     explosive: { file: 'mascot-explosive.mp4',  name: 'Fuego',        personality: 'The Explosive', emoji: '🔥', type: 'video' },
     chill:     { file: 'mascot-rasta.mp4',       name: 'Rasta',        personality: 'The Chill One', emoji: '🌿', type: 'video' },
     sad:       { file: 'mascot-sad.png',        name: 'Onion',        personality: 'The Sad One',   emoji: '😢', type: 'image' },
-    excited:   { file: 'mascot-excited.png',    name: 'Sparky',       personality: 'The Hyper One', emoji: '🎉', type: 'image' },
+    excited:   { file: 'mascot-excited.mp4',     name: 'Sparky',       personality: 'The Hyper One', emoji: '🎉', type: 'video' },
     sexy:      { file: 'mascot-sexy.png',       name: 'Smooth',       personality: 'The Flirty One', emoji: '😏', type: 'image' },
     asian:     { file: 'mascot-asian.png',      name: 'Umami',        personality: 'The Wise One',  emoji: '🍜', type: 'image' }
 };
