@@ -21,15 +21,15 @@ let alarmRepeater = null;
 let checkCount = 0;
 const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 
-// Mascot definitions
+// Mascot definitions — type: 'video' for mp4, 'image' for png/gif
 const MASCOTS = {
-    mascot:    { file: 'mascot.png',    name: 'Chef Buddy',   personality: 'The Original', emoji: '👨‍🍳' },
-    explosive: { file: 'mascot-explosive.png', name: 'Fuego',    personality: 'The Explosive', emoji: '🔥' },
-    chill:     { file: 'mascot-chill.png',     name: 'Rasta',    personality: 'The Chill One', emoji: '🌿' },
-    sad:       { file: 'mascot-sad.png',       name: 'Onion',    personality: 'The Sad One',   emoji: '😢' },
-    excited:   { file: 'mascot-excited.png',   name: 'Sparky',   personality: 'The Hyper One', emoji: '🎉' },
-    sexy:      { file: 'mascot-sexy.png',      name: 'Smooth',   personality: 'The Flirty One', emoji: '😏' },
-    asian:     { file: 'mascot-asian.png',     name: 'Umami',    personality: 'The Wise One',  emoji: '🍜' }
+    mascot:    { file: 'mascot.png',            name: 'Chef Buddy',   personality: 'The Original',  emoji: '👨‍🍳', type: 'image' },
+    explosive: { file: 'mascot-explosive.mp4',  name: 'Fuego',        personality: 'The Explosive', emoji: '🔥', type: 'video' },
+    chill:     { file: 'mascot-chill.png',      name: 'Rasta',        personality: 'The Chill One', emoji: '🌿', type: 'image' },
+    sad:       { file: 'mascot-sad.png',        name: 'Onion',        personality: 'The Sad One',   emoji: '😢', type: 'image' },
+    excited:   { file: 'mascot-excited.png',    name: 'Sparky',       personality: 'The Hyper One', emoji: '🎉', type: 'image' },
+    sexy:      { file: 'mascot-sexy.png',       name: 'Smooth',       personality: 'The Flirty One', emoji: '😏', type: 'image' },
+    asian:     { file: 'mascot-asian.png',      name: 'Umami',        personality: 'The Wise One',  emoji: '🍜', type: 'image' }
 };
 
 // PWA Install
@@ -87,13 +87,13 @@ function animateMascot() {
     checkCount++;
     // Animate every 2-3 checks (random feel)
     if (checkCount % (2 + Math.floor(Math.random() * 2)) !== 0) return;
-    const mascot = document.querySelector('.header-mascot');
-    if (!mascot) return;
+    const container = document.getElementById('mascotContainer');
+    if (!container) return;
     const anim = mascotAnimations[Math.floor(Math.random() * mascotAnimations.length)];
-    mascot.classList.remove(...mascotAnimations);
-    void mascot.offsetWidth; // force reflow
-    mascot.classList.add(anim);
-    setTimeout(() => mascot.classList.remove(anim), 700);
+    container.classList.remove(...mascotAnimations);
+    void container.offsetWidth; // force reflow
+    container.classList.add(anim);
+    setTimeout(() => container.classList.remove(anim), 700);
 }
 
 // ==================== PWA INSTALL ====================
@@ -181,11 +181,15 @@ function updateHeader() {
     // Update cook name display
     const nameEl = document.getElementById('cookNameDisplay');
     if (nameEl) nameEl.textContent = settings.cookName || '';
-    // Update mascot image
-    const mascotEl = document.querySelector('.header-mascot');
-    if (mascotEl) {
+    // Update mascot (image or video)
+    const container = document.getElementById('mascotContainer');
+    if (container) {
         const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
-        mascotEl.src = m.file;
+        if (m.type === 'video') {
+            container.innerHTML = `<video src="${m.file}" class="header-mascot" autoplay loop muted playsinline></video>`;
+        } else {
+            container.innerHTML = `<img src="${m.file}" alt="${m.name}" class="header-mascot">`;
+        }
     }
 }
 
@@ -1635,10 +1639,13 @@ function renderSettings(container) {
     let mascotPicker = '';
     Object.entries(MASCOTS).forEach(([key, m]) => {
         const isActive = settings.mascot === key;
+        const mediaEl = m.type === 'video'
+            ? `<video src="${m.file}" style="width:52px;height:52px;border-radius:14px;box-shadow:${isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};object-fit:cover;" autoplay loop muted playsinline></video>`
+            : `<img src="${m.file}" alt="${m.name}" style="width:52px;height:52px;border-radius:14px;box-shadow:${isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};object-fit:cover;">`;
         mascotPicker += `
             <div style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;${isActive ? '' : 'opacity:0.5;'}"
                  onclick="handleClick(); selectMascot('${key}')">
-                <img src="${m.file}" alt="${m.name}" style="width:52px;height:52px;border-radius:14px;box-shadow:${isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};object-fit:cover;">
+                ${mediaEl}
                 <span style="font-size:9px;font-weight:700;color:${isActive ? 'var(--accent)' : 'var(--text-muted)'};">${m.emoji} ${m.name}</span>
                 <span style="font-size:8px;color:var(--text-muted);">${m.personality}</span>
             </div>`;

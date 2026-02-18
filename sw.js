@@ -1,11 +1,12 @@
-const CACHE_NAME = 'aqueous-v6';
+const CACHE_NAME = 'aqueous-v7';
 const urlsToCache = [
   './index.html',
   './app.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
-  './mascot.png'
+  './mascot.png',
+  './mascot-explosive.mp4'
 ];
 
 // Install: cache all essential files
