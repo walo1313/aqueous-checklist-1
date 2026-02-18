@@ -32,6 +32,13 @@ const MASCOTS = {
     asian:     { file: 'mascot-asian.png',      name: 'Umami',        personality: 'The Wise One',  emoji: '🍜', type: 'image' }
 };
 
+// Debounce utility
+let _debounceTimers = {};
+function debounce(key, fn, delay) {
+    if (_debounceTimers[key]) clearTimeout(_debounceTimers[key]);
+    _debounceTimers[key] = setTimeout(fn, delay || 400);
+}
+
 // PWA Install
 let deferredPrompt = null;
 
@@ -181,14 +188,14 @@ function updateHeader() {
     // Update cook name display
     const nameEl = document.getElementById('cookNameDisplay');
     if (nameEl) nameEl.textContent = settings.cookName || '';
-    // Update mascot (image or video)
+    // Update mascot (image or video) with fallback
     const container = document.getElementById('mascotContainer');
     if (container) {
         const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
         if (m.type === 'video') {
-            container.innerHTML = `<video src="${m.file}" class="header-mascot" autoplay loop muted playsinline></video>`;
+            container.innerHTML = `<video src="${m.file}" class="header-mascot" autoplay loop muted playsinline onerror="this.outerHTML='<div class=\\'header-mascot mascot-fallback\\'>${m.emoji}</div>'"></video>`;
         } else {
-            container.innerHTML = `<img src="${m.file}" alt="${m.name}" class="header-mascot">`;
+            container.innerHTML = `<img src="${m.file}" alt="${m.name}" class="header-mascot" onerror="this.outerHTML='<div class=\\'header-mascot mascot-fallback\\'>${m.emoji}</div>'">`;
         }
     }
 }
@@ -320,7 +327,7 @@ function switchView(view) {
     else if (view === 'timer') navItems[2].classList.add('active');
     else if (view === 'share') navItems[3].classList.add('active');
     else if (view === 'settings') navItems[4].classList.add('active');
-    else if (view === 'history') navItems[1].classList.add('active');
+    else if (view === 'history') { /* sub-view of summary, highlight summary */ navItems[1].classList.add('active'); }
 
     renderCurrentView();
 }
@@ -435,7 +442,7 @@ function renderIngredients(station) {
                     <label class="par-label">Par:</label>
                     <input type="text" class="par-input" placeholder="e.g. 1 quart"
                         value="${st.parLevel || ''}"
-                        onchange="setParLevel(${station.id}, ${ing.id}, this.value)"
+                        oninput="debounce('par_${station.id}_${ing.id}', () => setParLevel(${station.id}, ${ing.id}, this.value), 600)"
                         onclick="event.stopPropagation()">
                     <select class="par-select" onchange="applyUnit(${station.id}, ${ing.id}, this.value); this.selectedIndex=0;">
                         <option value="">Unit</option>
@@ -706,8 +713,14 @@ function launchCelebration() {
     }
 
     let frames = 0;
+    let animId = null;
     function animate() {
-        if (frames > 180 || !document.getElementById('confettiCanvas')) return;
+        if (frames > 180 || !document.getElementById('confettiCanvas')) {
+            // Cleanup: cancel animation and release references
+            if (animId) cancelAnimationFrame(animId);
+            particles.length = 0;
+            return;
+        }
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         particles.forEach(p => {
             p.x += p.vx;
@@ -721,7 +734,7 @@ function launchCelebration() {
             ctx.restore();
         });
         frames++;
-        requestAnimationFrame(animate);
+        animId = requestAnimationFrame(animate);
     }
     animate();
 }
@@ -903,35 +916,11 @@ function closeShareModal() {
 }
 
 function shareAllWhatsApp() {
-    let msg = `📋 *AQUEOUS — FULL STATION REPORT*\n`;
-    msg += `📅 ${new Date().toLocaleDateString('en-US')}\n\n`;
-
-    let hasData = false;
-    stations.forEach(station => {
-        const lowItems = station.ingredients.filter(i =>
-            station.status[i.id] && station.status[i.id].low
-        );
-        if (lowItems.length > 0) {
-            hasData = true;
-            msg += `━━━━━━━━━━━━━━━━\n`;
-            msg += `🏪 *${station.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━\n\n`;
-
-            const high = lowItems.filter(i => station.status[i.id].priority === 'high');
-            const medium = lowItems.filter(i => station.status[i.id].priority === 'medium');
-            const low = lowItems.filter(i => station.status[i.id].priority === 'low');
-
-            if (high.length) msg += `🔴 High: ${high.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
-            if (medium.length) msg += `🟡 Medium: ${medium.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
-            if (low.length) msg += `🔵 Low: ${low.map(i => i.name + (station.status[i.id].parLevel ? ' (' + station.status[i.id].parLevel + ')' : '')).join(', ')}\n`;
-            msg += '\n';
-        }
-    });
-
-    if (!hasData) {
+    const msg = buildFullReport();
+    if (!msg) {
         showToast('No items marked in any station');
         return;
     }
-
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
 }
 
@@ -1246,11 +1235,40 @@ function startBlockTimer(label, minutes) {
 }
 
 function editBlockMinutes(priority, currentMins) {
-    const newMins = prompt(`Edit ${priority} block timer (minutes):`, currentMins);
-    if (newMins !== null && !isNaN(parseInt(newMins)) && parseInt(newMins) > 0) {
-        const labels = { high: 'Before Service', medium: 'Prep Block', low: 'Backup Prep' };
-        startBlockTimer(labels[priority], parseInt(newMins));
-    }
+    const existing = document.getElementById('modalEditBlock');
+    if (existing) existing.remove();
+
+    const labels = { high: 'Before Service', medium: 'Prep Block', low: 'Backup Prep' };
+    const emojis = { high: '🔴', medium: '🟡', low: '🔵' };
+
+    const modal = document.createElement('div');
+    modal.id = 'modalEditBlock';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">${emojis[priority]} Edit ${labels[priority]}</div>
+            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">Set your block timer goal (minutes)</p>
+            <div class="form-group">
+                <input type="number" id="editBlockInput" class="form-control" value="${currentMins}" min="1" max="999" style="text-align:center;font-size:24px;font-weight:700;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalEditBlock').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); confirmEditBlock('${priority}')">Start Timer</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(() => { const input = document.getElementById('editBlockInput'); if (input) { input.focus(); input.select(); } }, 200);
+}
+
+function confirmEditBlock(priority) {
+    const input = document.getElementById('editBlockInput');
+    const mins = parseInt(input ? input.value : 0);
+    if (!mins || mins <= 0) { showToast('Enter a valid number'); return; }
+    const modal = document.getElementById('modalEditBlock');
+    if (modal) modal.remove();
+    const labels = { high: 'Before Service', medium: 'Prep Block', low: 'Backup Prep' };
+    startBlockTimer(labels[priority], mins);
 }
 
 function calculateBlockGoals() {
@@ -1304,13 +1322,27 @@ function showLogPrepModal() {
     const existing = document.getElementById('modalLogPrep');
     if (existing) existing.remove();
 
-    // Build ingredient options
+    // Build ingredient options — only show low-marked (active prep) ingredients first, then all
     let options = '';
+    let hasLowItems = false;
     stations.forEach(station => {
         station.ingredients.forEach(ing => {
-            options += `<option value="${ing.name.toLowerCase()}">${ing.name} (${station.name})</option>`;
+            const st = station.status[ing.id];
+            if (st && st.low && !st.completed) {
+                hasLowItems = true;
+                const par = st.parLevel ? ` (${st.parLevel})` : '';
+                options += `<option value="${ing.name.toLowerCase()}">${ing.name}${par} — ${station.name}</option>`;
+            }
         });
     });
+    if (!hasLowItems) {
+        // Fallback: show all ingredients if none are marked low
+        stations.forEach(station => {
+            station.ingredients.forEach(ing => {
+                options += `<option value="${ing.name.toLowerCase()}">${ing.name} (${station.name})</option>`;
+            });
+        });
+    }
 
     const modal = document.createElement('div');
     modal.id = 'modalLogPrep';
@@ -1639,9 +1671,11 @@ function renderSettings(container) {
     let mascotPicker = '';
     Object.entries(MASCOTS).forEach(([key, m]) => {
         const isActive = settings.mascot === key;
+        const boxShadow = isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)';
+        const fallbackStyle = `width:52px;height:52px;border-radius:14px;box-shadow:${boxShadow};display:flex;align-items:center;justify-content:center;font-size:24px;background:var(--bg);`;
         const mediaEl = m.type === 'video'
-            ? `<video src="${m.file}" style="width:52px;height:52px;border-radius:14px;box-shadow:${isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};object-fit:cover;" autoplay loop muted playsinline></video>`
-            : `<img src="${m.file}" alt="${m.name}" style="width:52px;height:52px;border-radius:14px;box-shadow:${isActive ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};object-fit:cover;">`;
+            ? `<video src="${m.file}" style="width:52px;height:52px;border-radius:14px;box-shadow:${boxShadow};object-fit:cover;" autoplay loop muted playsinline onerror="this.outerHTML='<div style=\\'${fallbackStyle}\\'>${m.emoji}</div>'"></video>`
+            : `<img src="${m.file}" alt="${m.name}" style="width:52px;height:52px;border-radius:14px;box-shadow:${boxShadow};object-fit:cover;" onerror="this.outerHTML='<div style=\\'${fallbackStyle}\\'>${m.emoji}</div>'">`;
         mascotPicker += `
             <div style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;${isActive ? '' : 'opacity:0.5;'}"
                  onclick="handleClick(); selectMascot('${key}')">
@@ -1749,14 +1783,39 @@ function selectMascot(key) {
 }
 
 function editCookName() {
-    const newName = prompt('Change your chef name:', settings.cookName);
-    if (newName !== null && newName.trim()) {
-        settings.cookName = newName.trim();
-        saveSettings();
-        updateHeader();
-        renderSettings(document.getElementById('mainContent'));
-        showToast(`Name updated!`);
-    }
+    const existing = document.getElementById('modalEditName');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalEditName';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Edit Chef Name</div>
+            <div class="form-group">
+                <input type="text" id="editNameInput" class="form-control" value="${settings.cookName || ''}" placeholder="Your name" style="text-align:center;font-size:16px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalEditName').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); confirmEditName()">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(() => { const input = document.getElementById('editNameInput'); if (input) { input.focus(); input.select(); } }, 200);
+}
+
+function confirmEditName() {
+    const input = document.getElementById('editNameInput');
+    const name = input ? input.value.trim() : '';
+    if (!name) { showToast('Enter your name, chef!'); return; }
+    settings.cookName = name;
+    saveSettings();
+    updateHeader();
+    const modal = document.getElementById('modalEditName');
+    if (modal) modal.remove();
+    renderSettings(document.getElementById('mainContent'));
+    showToast('Name updated!');
 }
 
 function clearPrepTimes() {
