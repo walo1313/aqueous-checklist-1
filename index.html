@@ -598,6 +598,111 @@
             letter-spacing: 1px;
             color: var(--text-secondary);
             margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        /* Block Timer */
+        .block-timer-start {
+            border: none;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--accent);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .block-timer-start:active { box-shadow: var(--neu-inset); transform: scale(0.95); }
+
+        .block-timer-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .block-timer-clock {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+            min-width: 52px;
+            text-align: right;
+        }
+        .block-timer-ctrl {
+            width: 26px;
+            height: 26px;
+            border: none;
+            border-radius: 8px;
+            font-size: 11px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .block-timer-ctrl:active { transform: scale(0.9); }
+        .block-timer-ctrl.pause {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 2px 6px var(--accent-glow);
+        }
+        .block-timer-ctrl.resume {
+            background: var(--low);
+            color: white;
+            box-shadow: 0 2px 6px rgba(66,165,245,0.3);
+        }
+        .block-timer-ctrl.reset {
+            background: var(--surface);
+            color: var(--text-muted);
+            box-shadow: var(--neu-shadow-sm);
+        }
+
+        /* Global Timer Card */
+        .global-timer-card {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0,0,0,0.06);
+        }
+        .global-timer-start {
+            width: 100%;
+            border: none;
+            background: linear-gradient(135deg, var(--accent), #00b894);
+            color: white;
+            border-radius: var(--radius-sm);
+            padding: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 3px 10px var(--accent-glow);
+            transition: all 0.15s;
+        }
+        .global-timer-start:active { transform: scale(0.97); box-shadow: 0 1px 4px var(--accent-glow); }
+        .global-timer-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .global-timer-display {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .global-timer-clock {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+        .global-timer-controls {
+            display: flex;
+            gap: 6px;
         }
 
         .summary-item {
