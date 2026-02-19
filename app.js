@@ -2120,10 +2120,22 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSharedData();
     initApp();
 
-    // Back button support: return from settings to previous view
-    window.addEventListener('popstate', () => {
+    // Back button support
+    // Push initial state so we can intercept back
+    window.history.pushState({ view: 'home' }, '');
+
+    window.addEventListener('popstate', (e) => {
         if (currentView === 'settings') {
+            // From settings: go back to previous view
+            window.history.pushState({ view: previousView || 'home' }, '');
             switchView(previousView || 'home');
+        } else {
+            // Already on a main view: confirm exit
+            if (confirm('Exit Aqueous?')) {
+                window.history.back();
+            } else {
+                window.history.pushState({ view: currentView }, '');
+            }
         }
     });
 
