@@ -1753,6 +1753,28 @@
 
         .neu-card, .glass-card { animation: fadeIn 0.25s ease; }
 
+        /* Swipe transitions */
+        @keyframes swipeOutLeft {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(-25%); opacity: 0; }
+        }
+        @keyframes swipeOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(25%); opacity: 0; }
+        }
+        @keyframes swipeInRight {
+            from { transform: translateX(25%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes swipeInLeft {
+            from { transform: translateX(-25%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .swipe-out-left { animation: swipeOutLeft 0.12s ease forwards; }
+        .swipe-out-right { animation: swipeOutRight 0.12s ease forwards; }
+        .swipe-in-right { animation: swipeInRight 0.2s ease forwards; }
+        .swipe-in-left { animation: swipeInLeft 0.2s ease forwards; }
+
         /* Smooth scroll fix */
         html { scroll-behavior: smooth; }
 

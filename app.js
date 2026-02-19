@@ -402,6 +402,20 @@ function cleanOldHistory() {
 let previousView = 'home';
 let skipPopstate = false;
 
+function swipeTransition(direction, targetView) {
+    const container = document.getElementById('mainContent');
+    const outClass = direction === 'left' ? 'swipe-out-left' : 'swipe-out-right';
+    const inClass = direction === 'left' ? 'swipe-in-right' : 'swipe-in-left';
+
+    container.classList.add(outClass);
+    setTimeout(() => {
+        container.classList.remove(outClass);
+        switchView(targetView);
+        container.classList.add(inClass);
+        setTimeout(() => container.classList.remove(inClass), 200);
+    }, 120);
+}
+
 function switchView(view) {
     // Toggle: if tapping mascot while already in settings, go back
     if (view === 'settings' && currentView === 'settings') {
@@ -2692,26 +2706,44 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Swipe left/right gestures — swipe right goes to home, on home exits
+    // Swipe left/right gestures — sequential navigation between main views
+    const swipeViewOrder = ['home', 'summary', 'logs', 'share'];
     let touchStartX = 0;
     let touchStartY = 0;
+    let touchStartTime = 0;
+    let swipeLocked = false;
+
     document.addEventListener('touchstart', (e) => {
         touchStartX = e.touches[0].clientX;
         touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+        swipeLocked = false;
     }, { passive: true });
+
     document.addEventListener('touchend', (e) => {
+        if (swipeLocked) return;
         const dx = e.changedTouches[0].clientX - touchStartX;
         const dy = e.changedTouches[0].clientY - touchStartY;
-        // Only trigger on horizontal swipe (dx > 80px, more horizontal than vertical)
-        if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 1.5) {
-            if (dx > 0) {
-                // Swipe right — go back
-                if (currentView === 'settings') {
-                    switchView(previousView || 'home');
-                } else if (currentView !== 'home') {
-                    switchView('home');
-                }
-            }
+        const dt = Date.now() - touchStartTime;
+
+        // Require: horizontal > 60px, more horizontal than vertical, under 400ms
+        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3 || dt > 400) return;
+
+        // Resolve current position: sub-views map to their parent
+        let resolved = currentView;
+        if (resolved === 'history') resolved = 'summary';
+        if (resolved === 'logDetail') resolved = 'logs';
+        if (resolved === 'settings') { switchView(previousView || 'home'); return; }
+
+        const idx = swipeViewOrder.indexOf(resolved);
+        if (idx === -1) return;
+
+        if (dx > 0 && idx > 0) {
+            // Swipe right → previous view
+            swipeTransition('right', swipeViewOrder[idx - 1]);
+        } else if (dx < 0 && idx < swipeViewOrder.length - 1) {
+            // Swipe left → next view
+            swipeTransition('left', swipeViewOrder[idx + 1]);
         }
     }, { passive: true });
 
