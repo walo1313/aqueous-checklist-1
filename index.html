@@ -121,6 +121,21 @@
             font-weight: 500;
         }
 
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .cook-name-display {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--accent);
+            text-align: right;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         #mascotContainer {
             width: 56px;
             height: 56px;
@@ -1318,9 +1333,11 @@
             <div style="flex:1;">
                 <h1>Aqueous</h1>
                 <div class="date" id="dateDisplay"></div>
-                <div id="cookNameDisplay" style="font-size:11px;font-weight:700;color:var(--accent);margin-top:2px;"></div>
             </div>
-            <div id="mascotContainer"><img src="mascot.png" alt="Aqueous" class="header-mascot"></div>
+            <div class="header-right">
+                <div id="cookNameDisplay" class="cook-name-display"></div>
+                <div id="mascotContainer"><img src="mascot.png" alt="Aqueous" class="header-mascot"></div>
+            </div>
         </div>
     </div>
 
