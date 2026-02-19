@@ -590,8 +590,13 @@ function cancelLongPress() {
 
 function showIngredientContextMenu(event, stationId, ingId, ingName) {
     event.preventDefault();
+    event.stopPropagation();
+    window.getSelection && window.getSelection().removeAllRanges();
+
     const existing = document.getElementById('ingredientContextMenu');
     if (existing) existing.remove();
+
+    const safeIngName = ingName.replace(/"/g, '&quot;');
 
     const menu = document.createElement('div');
     menu.id = 'ingredientContextMenu';
@@ -599,6 +604,10 @@ function showIngredientContextMenu(event, stationId, ingId, ingName) {
     menu.innerHTML = `
         <div class="context-menu">
             <div class="context-menu-title">${ingName}</div>
+            <button class="context-menu-item" onclick="editIngredientFromHome(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit
+            </button>
             <button class="context-menu-item delete" onclick="deleteIngredientFromHome(${stationId}, ${ingId})">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                 Delete
@@ -606,6 +615,55 @@ function showIngredientContextMenu(event, stationId, ingId, ingName) {
         </div>`;
     document.body.appendChild(menu);
     menu.onclick = function(e) { if (e.target === menu) menu.remove(); };
+}
+
+function editIngredientFromHome(stationId, ingId, currentName) {
+    const menu = document.getElementById('ingredientContextMenu');
+    if (menu) menu.remove();
+
+    const existing = document.getElementById('modalEditIngredient');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalEditIngredient';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Edit Ingredient</div>
+            <div class="form-group">
+                <input type="text" id="editIngNameInput" class="form-control" value="${currentName}" placeholder="Ingredient name" style="text-align:center;font-size:16px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalEditIngredient').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); confirmEditIngredientName(${stationId}, ${ingId})">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(() => {
+        const input = document.getElementById('editIngNameInput');
+        if (input) { input.focus(); input.select(); }
+    }, 150);
+}
+
+function confirmEditIngredientName(stationId, ingId) {
+    const input = document.getElementById('editIngNameInput');
+    const newName = input ? input.value.trim() : '';
+    if (!newName) { showToast('Enter a name'); return; }
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const ing = station.ingredients.find(i => i.id === ingId);
+    if (!ing) return;
+
+    ing.name = newName;
+    saveData(true);
+
+    const modal = document.getElementById('modalEditIngredient');
+    if (modal) modal.remove();
+
+    rerenderStationBody(stationId);
+    showToast(`Renamed to ${newName}`);
 }
 
 function deleteIngredientFromHome(stationId, ingId) {
