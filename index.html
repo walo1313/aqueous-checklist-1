@@ -1338,8 +1338,9 @@
 
         .neu-card, .glass-card { animation: fadeIn 0.25s ease; }
 
-        /* Smooth scroll fix */
-        html { scroll-behavior: smooth; }
+        /* Smooth scroll fix + disable pull-to-refresh */
+        html { scroll-behavior: smooth; overscroll-behavior-y: contain; }
+        body { overscroll-behavior-y: contain; }
 
     </style>
 </head>

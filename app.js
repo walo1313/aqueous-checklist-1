@@ -2,7 +2,7 @@
 
 let stations = [];
 let editingStationId = null;
-let currentView = 'home';
+let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
 let history = [];
 let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit: N, count: N } }
@@ -151,6 +151,17 @@ function initApp() {
     loadData();
     processCarryOver();
     updateHeader();
+
+    // Restore saved view and nav highlight
+    const navItems = document.querySelectorAll('.nav-item');
+    navItems.forEach(item => item.classList.remove('active'));
+    if (currentView === 'home') navItems[0].classList.add('active');
+    else if (currentView === 'summary') navItems[1].classList.add('active');
+    else if (currentView === 'timer') navItems[2].classList.add('active');
+    else if (currentView === 'share') navItems[3].classList.add('active');
+    else if (currentView === 'history') navItems[1].classList.add('active');
+    else if (currentView === 'settings') { currentView = 'home'; navItems[0].classList.add('active'); }
+
     renderCurrentView();
 
     // First time: ask cook name
@@ -345,6 +356,7 @@ function switchView(view) {
     }
 
     currentView = view;
+    sessionStorage.setItem('aqueous_currentView', view);
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItems = document.querySelectorAll('.nav-item');
     if (view === 'home') navItems[0].classList.add('active');
@@ -2370,23 +2382,43 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentView === 'settings') {
             // From settings: go back to previous view
             window.history.pushState({ view: previousView || 'home' }, '');
-            currentView = previousView || 'home';
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            const navItems = document.querySelectorAll('.nav-item');
-            if (currentView === 'home') navItems[0].classList.add('active');
-            else if (currentView === 'summary') navItems[1].classList.add('active');
-            else if (currentView === 'timer') navItems[2].classList.add('active');
-            else if (currentView === 'share') navItems[3].classList.add('active');
-            renderCurrentView();
+            switchView(previousView || 'home');
+        } else if (currentView !== 'home') {
+            // From any non-home view: go back to home
+            window.history.pushState({ view: 'home' }, '');
+            switchView('home');
         } else {
-            // Already on a main view: confirm exit
+            // Already on home: confirm exit
             if (confirm('Exit Aqueous?')) {
                 window.history.back();
             } else {
-                window.history.pushState({ view: currentView }, '');
+                window.history.pushState({ view: 'home' }, '');
             }
         }
     });
+
+    // Swipe left/right gestures — swipe right goes to home, on home exits
+    let touchStartX = 0;
+    let touchStartY = 0;
+    document.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+    document.addEventListener('touchend', (e) => {
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        // Only trigger on horizontal swipe (dx > 80px, more horizontal than vertical)
+        if (Math.abs(dx) > 80 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            if (dx > 0) {
+                // Swipe right — go back
+                if (currentView === 'settings') {
+                    switchView(previousView || 'home');
+                } else if (currentView !== 'home') {
+                    switchView('home');
+                }
+            }
+        }
+    }, { passive: true });
 
     // Splash screen: only show full on first visit, skip on return visits
     const splash = document.getElementById('splashScreen');
