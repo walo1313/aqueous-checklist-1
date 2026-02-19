@@ -578,62 +578,61 @@
             box-shadow: 0 2px 8px var(--accent-glow);
             animation: taskTimerPulse 1.5s ease infinite;
         }
+        .task-timer-btn.paused {
+            background: var(--high);
+            color: white;
+            box-shadow: 0 2px 6px rgba(239,83,80,0.3);
+        }
 
         @keyframes taskTimerPulse {
             0%, 100% { box-shadow: 0 2px 8px var(--accent-glow); }
             50% { box-shadow: 0 2px 16px var(--accent-glow); }
         }
 
-        .task-timer-floating {
-            position: sticky;
-            bottom: 76px;
-            margin: 12px 0;
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 14px 16px;
-            box-shadow: var(--neu-shadow), 0 4px 20px rgba(0,0,0,0.1);
+        .inline-timer-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            z-index: 50;
-            border-left: 4px solid var(--accent);
+            padding: 6px 12px 10px 44px;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
         }
-        .task-timer-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-        .task-timer-name {
-            font-size: 12px;
-            font-weight: 700;
-            color: var(--text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .task-timer-clock {
-            font-size: 22px;
+        .inline-timer-clock {
+            font-size: 18px;
             font-weight: 800;
             color: var(--accent);
             font-variant-numeric: tabular-nums;
         }
-        .task-timer-controls { display: flex; gap: 8px; flex-shrink: 0; }
-        .task-timer-action {
+        .inline-timer-controls {
+            display: flex;
+            gap: 6px;
+        }
+        .inline-timer-btn {
+            width: 30px;
+            height: 30px;
             border: none;
-            border-radius: 10px;
-            padding: 8px 14px;
-            font-size: 12px;
-            font-weight: 700;
+            border-radius: 8px;
+            font-size: 13px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             transition: all 0.15s ease;
         }
-        .task-timer-action:active { transform: scale(0.92); }
-        .task-timer-action.stop {
-            background: var(--surface);
-            color: var(--text-secondary);
-            box-shadow: var(--neu-shadow-sm);
-        }
-        .task-timer-action.save {
+        .inline-timer-btn:active { transform: scale(0.9); }
+        .inline-timer-btn.pause {
             background: var(--accent);
             color: white;
-            box-shadow: 0 2px 8px var(--accent-glow);
+            box-shadow: 0 2px 6px var(--accent-glow);
+        }
+        .inline-timer-btn.resume {
+            background: var(--low);
+            color: white;
+            box-shadow: 0 2px 6px rgba(66,165,245,0.3);
+        }
+        .inline-timer-btn.reset {
+            background: var(--surface);
+            color: var(--text-muted);
+            box-shadow: var(--neu-shadow-sm);
         }
 
         .par-tag {

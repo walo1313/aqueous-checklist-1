@@ -21,8 +21,10 @@ let alarmRepeater = null;
 let checkCount = 0;
 const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 
-// Individual task timer state
-let taskTimer = { active: false, stationId: null, ingredientId: null, ingName: '', seconds: 0, interval: null };
+// Multi-task timer state: { "stationId_ingredientId": { seconds, interval, running, ingName, stationId, ingredientId } }
+let taskTimers = {};
+// Activity log database
+let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 
 // Mascot definitions — type: 'video' for mp4, 'image' for png/gif
 const MASCOTS = {
@@ -647,21 +649,6 @@ function renderSummary(container) {
         html += renderSummaryGroup('No Priority Set', 'none', noPriority);
     }
 
-    // Floating task timer bar
-    if (taskTimer.active) {
-        html += `
-            <div class="task-timer-floating" id="taskTimerBar">
-                <div class="task-timer-info">
-                    <span class="task-timer-name">⏱ ${taskTimer.ingName}</span>
-                    <span class="task-timer-clock" id="taskTimerClock">${formatTime(taskTimer.seconds)}</span>
-                </div>
-                <div class="task-timer-controls">
-                    <button class="task-timer-action stop" onclick="handleClick(); stopTaskTimer()">⏹ Stop</button>
-                    <button class="task-timer-action save" onclick="handleClick(); saveTaskTimer()">💾 Log</button>
-                </div>
-            </div>`;
-    }
-
     container.innerHTML = html;
 
     // Check if all completed
@@ -677,10 +664,15 @@ function renderSummaryGroup(title, level, tasks) {
             <div class="summary-group-title">${title}</div>`;
 
     tasks.forEach(task => {
-        const isTimingThis = taskTimer.active && taskTimer.stationId === task.stationId && taskTimer.ingredientId === task.ingredient.id;
+        const timerKey = `${task.stationId}_${task.ingredient.id}`;
+        const timer = taskTimers[timerKey];
+        const isRunning = timer && timer.running;
+        const isPaused = timer && !timer.running && timer.seconds > 0;
+        const hasTimer = isRunning || isPaused;
         const key = task.ingredient.name.toLowerCase();
         const pt = prepTimes[key];
         const avgInfo = pt ? `~${Math.floor(pt.avgSecPerUnit / 60)}m${Math.round(pt.avgSecPerUnit % 60)}s/unit` : '';
+        const escapedName = task.ingredient.name.replace(/'/g, "\\'");
 
         html += `
             <div class="summary-item ${task.status.completed ? 'done' : ''}">
@@ -696,12 +688,28 @@ function renderSummaryGroup(title, level, tasks) {
                 <div class="summary-item-actions">
                     ${task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : ''}
                     ${!task.status.completed ? `
-                        <button class="task-timer-btn ${isTimingThis ? 'active' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer(${task.stationId}, ${task.ingredient.id}, '${task.ingredient.name.replace(/'/g, "\\'")}')">
-                            ${isTimingThis ? '⏱' : '⏱'}
+                        <button class="task-timer-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
+                            ⏱
                         </button>
                     ` : ''}
                 </div>
             </div>`;
+
+        // Inline timer row (shown when timer is active or paused)
+        if (hasTimer && !task.status.completed) {
+            html += `
+                <div class="inline-timer-row" id="timer_${timerKey}">
+                    <span class="inline-timer-clock" id="clock_${timerKey}">${formatTime(timer.seconds)}</span>
+                    <div class="inline-timer-controls">
+                        ${isRunning ? `
+                            <button class="inline-timer-btn pause" onclick="handleClick(); pauseTaskTimer('${timerKey}')">⏸</button>
+                        ` : `
+                            <button class="inline-timer-btn resume" onclick="handleClick(); resumeTaskTimer('${timerKey}')">▶</button>
+                        `}
+                        <button class="inline-timer-btn reset" onclick="handleClick(); resetTaskTimer('${timerKey}')">✕</button>
+                    </div>
+                </div>`;
+        }
     });
 
     html += '</div>';
@@ -710,138 +718,225 @@ function renderSummaryGroup(title, level, tasks) {
 
 function toggleCompleted(stationId, ingredientId) {
     handleClick();
-    animateMascot();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
 
-    station.status[ingredientId].completed = !station.status[ingredientId].completed;
-    saveData(true);
+    const isCompleting = !station.status[ingredientId].completed;
 
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    if (isCompleting) {
+        // Show confirmation with timer info
+        showTaskCompleteConfirm(stationId, ingredientId);
+    } else {
+        // Unchecking — just toggle directly
+        station.status[ingredientId].completed = false;
+        saveData(true);
+        const scrollY = window.scrollY;
+        renderSummary(document.getElementById('mainContent'));
+        window.scrollTo(0, scrollY);
+    }
 }
 
-// ==================== INDIVIDUAL TASK TIMER ====================
+// ==================== MULTI-TASK TIMER SYSTEM ====================
 
-function toggleTaskTimer(stationId, ingredientId, ingName) {
-    // If already timing this task, stop it
-    if (taskTimer.active && taskTimer.stationId === stationId && taskTimer.ingredientId === ingredientId) {
-        pauseTaskTimer();
+function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
+    if (taskTimers[timerKey]) {
+        // Already exists — toggle pause/resume
+        if (taskTimers[timerKey].running) {
+            pauseTaskTimer(timerKey);
+        } else {
+            resumeTaskTimer(timerKey);
+        }
         return;
     }
 
-    // If timing a different task, stop old one first
-    if (taskTimer.active) {
-        clearInterval(taskTimer.interval);
-    }
-
-    // Start new task timer
-    taskTimer = {
-        active: true,
-        stationId: stationId,
-        ingredientId: ingredientId,
-        ingName: ingName,
+    // Start new timer
+    taskTimers[timerKey] = {
+        stationId, ingredientId, ingName,
         seconds: 0,
+        running: true,
         interval: setInterval(() => {
-            taskTimer.seconds++;
-            updateTaskTimerDisplay();
+            taskTimers[timerKey].seconds++;
+            const clock = document.getElementById(`clock_${timerKey}`);
+            if (clock) clock.textContent = formatTime(taskTimers[timerKey].seconds);
         }, 1000)
     };
 
-    showToast(`Timing: ${ingName}`);
+    showToast(`⏱ Timing: ${ingName}`);
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
 }
 
-function pauseTaskTimer() {
-    if (taskTimer.interval) clearInterval(taskTimer.interval);
-    taskTimer.interval = null;
-    // Don't reset — keep seconds so user can log
+function pauseTaskTimer(timerKey) {
+    const t = taskTimers[timerKey];
+    if (!t) return;
+    if (t.interval) clearInterval(t.interval);
+    t.interval = null;
+    t.running = false;
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
 }
 
-function stopTaskTimer() {
-    if (taskTimer.interval) clearInterval(taskTimer.interval);
-    taskTimer = { active: false, stationId: null, ingredientId: null, ingName: '', seconds: 0, interval: null };
+function resumeTaskTimer(timerKey) {
+    const t = taskTimers[timerKey];
+    if (!t || t.running) return;
+    t.running = true;
+    t.interval = setInterval(() => {
+        t.seconds++;
+        const clock = document.getElementById(`clock_${timerKey}`);
+        if (clock) clock.textContent = formatTime(t.seconds);
+    }, 1000);
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
 }
 
-function saveTaskTimer() {
-    if (taskTimer.seconds <= 0) {
-        showToast('No time recorded');
-        return;
-    }
+function resetTaskTimer(timerKey) {
+    const t = taskTimers[timerKey];
+    if (!t) return;
+    if (t.interval) clearInterval(t.interval);
+    delete taskTimers[timerKey];
+    const scrollY = window.scrollY;
+    renderSummary(document.getElementById('mainContent'));
+    window.scrollTo(0, scrollY);
+}
 
-    // Show modal to confirm quantity and save
-    const existing = document.getElementById('modalTaskLog');
-    if (existing) existing.remove();
+function showTaskCompleteConfirm(stationId, ingredientId) {
+    const timerKey = `${stationId}_${ingredientId}`;
+    const t = taskTimers[timerKey];
+    const station = stations.find(s => s.id === stationId);
+    const ing = station ? station.ingredients.find(i => i.id === ingredientId) : null;
+    if (!ing) return;
 
-    const key = taskTimer.ingName.toLowerCase();
-    const station = stations.find(s => s.id === taskTimer.stationId);
-    const ing = station ? station.ingredients.find(i => i.id === taskTimer.ingredientId) : null;
-    const st = station && ing ? station.status[ing.id] : null;
+    const ingName = ing.name;
+    const st = station.status[ingredientId];
+    const hasTime = t && t.seconds > 0;
+    const timeStr = hasTime ? formatTime(t.seconds) : null;
     const defaultQty = st && st.parLevel ? (parseFloat(st.parLevel) || 1) : 1;
 
+    // Pause timer if running
+    if (t && t.running) {
+        clearInterval(t.interval);
+        t.interval = null;
+        t.running = false;
+    }
+
+    const existing = document.getElementById('modalTaskComplete');
+    if (existing) existing.remove();
+
     const modal = document.createElement('div');
-    modal.id = 'modalTaskLog';
+    modal.id = 'modalTaskComplete';
     modal.className = 'modal show';
     modal.innerHTML = `
         <div class="modal-content" style="text-align:center;">
-            <div class="modal-header">Log Prep Time</div>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">
-                <strong>${taskTimer.ingName}</strong>
-            </p>
-            <p style="font-size:24px;font-weight:800;color:var(--accent);margin-bottom:16px;">${formatTime(taskTimer.seconds)}</p>
-            <div class="form-group">
-                <label style="font-size:12px;font-weight:600;">Quantity prepped (units)</label>
-                <input type="number" id="taskLogQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;">
-            </div>
+            <div class="modal-header">✅ Task Done!</div>
+            <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px;">${ingName}</p>
+            ${hasTime ? `
+                <p style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">You took</p>
+                <p style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:12px;">${timeStr}</p>
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="font-size:11px;font-weight:600;color:var(--text-secondary);">Quantity prepped</label>
+                    <input type="number" id="completeQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;">
+                </div>
+            ` : `
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">No timer was running</p>
+            `}
             <div class="btn-group">
-                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTaskLog').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); confirmTaskLog()">Save</button>
+                <button class="btn btn-secondary squishy" onclick="handleClick(); cancelTaskComplete(${stationId}, ${ingredientId})">Continue</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); confirmTaskComplete(${stationId}, ${ingredientId})">Done ✅</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
 }
 
-function confirmTaskLog() {
-    const qtyEl = document.getElementById('taskLogQty');
-    const qty = parseFloat(qtyEl ? qtyEl.value : 1) || 1;
-    const key = taskTimer.ingName.toLowerCase();
-    const secPerUnit = taskTimer.seconds / qty;
+function confirmTaskComplete(stationId, ingredientId) {
+    const timerKey = `${stationId}_${ingredientId}`;
+    const t = taskTimers[timerKey];
+    const station = stations.find(s => s.id === stationId);
+    const ing = station ? station.ingredients.find(i => i.id === ingredientId) : null;
 
-    if (!prepTimes[key]) {
-        prepTimes[key] = { avgSecPerUnit: secPerUnit, count: 1 };
-    } else {
-        const pt = prepTimes[key];
-        pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerUnit) / (pt.count + 1);
-        pt.count++;
+    // Log time to prepTimes database if timer was running
+    if (t && t.seconds > 0 && ing) {
+        const qtyEl = document.getElementById('completeQty');
+        const qty = parseFloat(qtyEl ? qtyEl.value : 1) || 1;
+        const key = ing.name.toLowerCase();
+        const secPerUnit = t.seconds / qty;
+
+        if (!prepTimes[key]) {
+            prepTimes[key] = { avgSecPerUnit: secPerUnit, count: 1 };
+        } else {
+            const pt = prepTimes[key];
+            pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerUnit) / (pt.count + 1);
+            pt.count++;
+        }
+        savePrepTimes();
+
+        // Save to activity log
+        logActivity('task_complete', {
+            ingredient: ing.name,
+            station: station.name,
+            seconds: t.seconds,
+            quantity: qty,
+            secPerUnit: Math.round(secPerUnit)
+        });
+    } else if (ing) {
+        logActivity('task_complete', {
+            ingredient: ing.name,
+            station: station.name,
+            seconds: 0,
+            quantity: 0,
+            secPerUnit: 0
+        });
     }
 
-    savePrepTimes();
+    // Clean up timer
+    if (t) {
+        if (t.interval) clearInterval(t.interval);
+        delete taskTimers[timerKey];
+    }
 
-    const modal = document.getElementById('modalTaskLog');
+    // Mark completed
+    if (station) station.status[ingredientId].completed = true;
+    saveData(true);
+
+    const modal = document.getElementById('modalTaskComplete');
     if (modal) modal.remove();
 
-    const mins = Math.floor(secPerUnit / 60);
-    const secs = Math.round(secPerUnit % 60);
-    showToast(`Logged: ${mins}m ${secs}s per unit for ${taskTimer.ingName}`);
-
-    stopTaskTimer();
+    animateMascot();
+    const scrollY = window.scrollY;
+    renderSummary(document.getElementById('mainContent'));
+    window.scrollTo(0, scrollY);
 }
 
-function updateTaskTimerDisplay() {
-    const clock = document.getElementById('taskTimerClock');
-    if (clock) {
-        clock.textContent = formatTime(taskTimer.seconds);
+function cancelTaskComplete(stationId, ingredientId) {
+    // User wants to continue — resume timer if it existed
+    const timerKey = `${stationId}_${ingredientId}`;
+    const t = taskTimers[timerKey];
+    if (t) {
+        resumeTaskTimer(timerKey);
     }
+    const modal = document.getElementById('modalTaskComplete');
+    if (modal) modal.remove();
+}
+
+// ==================== ACTIVITY LOG ====================
+
+function logActivity(type, data) {
+    activityLog.push({
+        type,
+        data,
+        timestamp: new Date().toISOString(),
+        cook: settings.cookName || 'Unknown'
+    });
+    // Keep last 500 entries
+    if (activityLog.length > 500) activityLog = activityLog.slice(-500);
+    localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
+}
+
+function saveActivityLog() {
+    localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
 }
 
 // ==================== CELEBRATION ====================
