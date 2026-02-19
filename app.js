@@ -323,7 +323,19 @@ function cleanOldHistory() {
 
 // ==================== VIEW MANAGEMENT ====================
 
+let previousView = 'home';
+
 function switchView(view) {
+    // Toggle: if tapping mascot while already in settings, go back
+    if (view === 'settings' && currentView === 'settings') {
+        view = previousView || 'home';
+    }
+
+    // Save previous view (but not settings itself)
+    if (currentView !== 'settings') {
+        previousView = currentView;
+    }
+
     currentView = view;
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItems = document.querySelectorAll('.nav-item');
@@ -331,7 +343,7 @@ function switchView(view) {
     else if (view === 'summary') navItems[1].classList.add('active');
     else if (view === 'timer') navItems[2].classList.add('active');
     else if (view === 'share') navItems[3].classList.add('active');
-    else if (view === 'settings') {} // No nav tab — accessed via mascot
+    else if (view === 'settings') { window.history.pushState({ view: 'settings' }, ''); }
     else if (view === 'history') navItems[1].classList.add('active');
 
     renderCurrentView();
@@ -2107,6 +2119,13 @@ window.onclick = function(event) {
 document.addEventListener('DOMContentLoaded', () => {
     checkSharedData();
     initApp();
+
+    // Back button support: return from settings to previous view
+    window.addEventListener('popstate', () => {
+        if (currentView === 'settings') {
+            switchView(previousView || 'home');
+        }
+    });
 
     // Splash screen: only show full on first visit, skip on return visits
     const splash = document.getElementById('splashScreen');
