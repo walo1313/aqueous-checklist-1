@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v15';
+const CACHE_NAME = 'aqueous-v16';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -48,25 +48,42 @@ self.addEventListener('activate', event => {
   );
 });
 
+// Track if we already have an active timer notification
+let timerNotificationActive = false;
+
 // Handle timer notification updates from app
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'TIMER_UPDATE') {
-    self.registration.showNotification(event.data.title, {
+    // First notification: vibrate + sound to trigger lock screen display
+    // Subsequent updates: silent to avoid annoying the user
+    const isFirst = !timerNotificationActive;
+    timerNotificationActive = true;
+
+    const options = {
       body: event.data.body,
       tag: 'aqueous-timer',
-      renotify: true,
-      silent: true,
+      renotify: isFirst,
       icon: './icon-192.png',
       badge: './icon-192.png',
       requireInteraction: true,
-      ongoing: true,
       actions: [
         { action: 'pause_all', title: '⏸ Pause All' },
         { action: 'open', title: '📋 Open' }
       ]
-    });
+    };
+
+    if (isFirst) {
+      // High priority: vibrate briefly to force lock screen visibility
+      options.vibrate = [100];
+      options.silent = false;
+    } else {
+      options.silent = true;
+    }
+
+    self.registration.showNotification(event.data.title, options);
   }
   if (event.data && event.data.type === 'TIMER_CLEAR') {
+    timerNotificationActive = false;
     self.registration.getNotifications({ tag: 'aqueous-timer' }).then(notifications => {
       notifications.forEach(n => n.close());
     });
