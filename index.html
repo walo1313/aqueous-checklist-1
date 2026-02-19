@@ -1047,6 +1047,46 @@
             box-shadow: var(--neu-shadow-sm);
         }
 
+        .quick-add-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed rgba(0,0,0,0.08);
+        }
+        .quick-add-input {
+            flex: 1;
+            border: none;
+            background: var(--surface);
+            box-shadow: var(--neu-inset);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            outline: none;
+        }
+        .quick-add-input::placeholder { color: var(--text-muted); font-weight: 400; }
+        .quick-add-btn {
+            width: 38px;
+            height: 38px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: var(--accent);
+            color: white;
+            font-size: 20px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 2px 8px var(--accent-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+        .quick-add-btn:active { transform: scale(0.92); box-shadow: 0 1px 4px var(--accent-glow); }
+
         .btn-link {
             background: none;
             border: none;

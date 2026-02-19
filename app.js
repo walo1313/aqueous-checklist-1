@@ -495,10 +495,7 @@ function renderHome(container) {
             </div>
             <div class="station-body ${isExpanded ? '' : 'collapsed'}" id="body-${station.id}">
                 ${renderIngredients(station)}
-                <button class="btn btn-outline" onclick="resetStation(${station.id})">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-                    Clear Checklist
-                </button>
+                ${stationFooter(station.id)}
             </div>
         </div>`;
     });
@@ -614,16 +611,7 @@ function toggleLow(stationId, ingredientId) {
     saveData(true);
 
     // Re-render only the station body to preserve scroll position
-    const body = document.getElementById(`body-${stationId}`);
-    if (body) {
-        const scrollY = window.scrollY;
-        body.innerHTML = renderIngredients(station) + `
-            <button class="btn btn-outline" onclick="resetStation(${stationId})">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-                Clear Checklist
-            </button>`;
-        window.scrollTo(0, scrollY);
-    }
+    rerenderStationBody(stationId);
 }
 
 function setPriority(stationId, ingredientId, priority) {
@@ -635,17 +623,7 @@ function setPriority(stationId, ingredientId, priority) {
         station.status[ingredientId].priority === priority ? null : priority;
 
     saveData(true);
-
-    const body = document.getElementById(`body-${stationId}`);
-    if (body) {
-        const scrollY = window.scrollY;
-        body.innerHTML = renderIngredients(station) + `
-            <button class="btn btn-outline" onclick="resetStation(${stationId})">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-                Clear Checklist
-            </button>`;
-        window.scrollTo(0, scrollY);
-    }
+    rerenderStationBody(stationId);
 }
 
 function setParQty(stationId, ingredientId, value) {
@@ -709,17 +687,49 @@ function saveIngredientDefault(station, ingredientId) {
     }
 }
 
+function stationFooter(stationId) {
+    return `
+        <div class="quick-add-row">
+            <input type="text" class="quick-add-input" id="quickAdd_${stationId}" placeholder="Add ingredient..." onkeydown="if(event.key==='Enter'){quickAddIngredient(${stationId})}">
+            <button class="quick-add-btn" onclick="quickAddIngredient(${stationId})">+</button>
+        </div>
+        <button class="btn btn-outline" onclick="resetStation(${stationId})">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
+            Clear Checklist
+        </button>`;
+}
+
+function quickAddIngredient(stationId) {
+    handleClick();
+    const input = document.getElementById(`quickAdd_${stationId}`);
+    if (!input) return;
+    const name = input.value.trim();
+    if (!name) { showToast('Enter an ingredient name'); return; }
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const newIng = { id: Date.now(), name };
+    station.ingredients.push(newIng);
+    station.status[newIng.id] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
+
+    saveData(true);
+    rerenderStationBody(stationId);
+    showToast(`${name} added`);
+
+    setTimeout(() => {
+        const newInput = document.getElementById(`quickAdd_${stationId}`);
+        if (newInput) newInput.focus();
+    }, 50);
+}
+
 function rerenderStationBody(stationId) {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
     const body = document.getElementById(`body-${stationId}`);
     if (body) {
         const scrollY = window.scrollY;
-        body.innerHTML = renderIngredients(station) + `
-            <button class="btn btn-outline" onclick="resetStation(${stationId})">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-                Clear Checklist
-            </button>`;
+        body.innerHTML = renderIngredients(station) + stationFooter(stationId);
         window.scrollTo(0, scrollY);
     }
 }
@@ -2140,7 +2150,7 @@ function addIngredient() {
 
     const newIng = { id: Date.now(), name };
     station.ingredients.push(newIng);
-    station.status[newIng.id] = { low: false, priority: null, parLevel: '', completed: false };
+    station.status[newIng.id] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
     input.value = '';
     renderEditIngredients(station);
