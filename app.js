@@ -192,14 +192,15 @@ function updateHeader() {
     // Update cook name display
     const nameEl = document.getElementById('cookNameDisplay');
     if (nameEl) nameEl.textContent = settings.cookName || '';
-    // Update mascot (image or video) with fallback
+    // Update mascot (image or video) with fallback + gear icon
     const container = document.getElementById('mascotContainer');
     if (container) {
         const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
+        const gearSvg = `<div class="mascot-gear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></div>`;
         if (m.type === 'video') {
-            container.innerHTML = `<video src="${m.file}" class="header-mascot" autoplay loop muted playsinline onerror="this.outerHTML='<div class=\\'header-mascot mascot-fallback\\'>${m.emoji}</div>'"></video>`;
+            container.innerHTML = gearSvg + `<video src="${m.file}" class="header-mascot" autoplay loop muted playsinline onerror="this.outerHTML='<div class=\\'header-mascot mascot-fallback\\'>${m.emoji}</div>'"></video>`;
         } else {
-            container.innerHTML = `<img src="${m.file}" alt="${m.name}" class="header-mascot" onerror="this.outerHTML='<div class=\\'header-mascot mascot-fallback\\'>${m.emoji}</div>'">`;
+            container.innerHTML = gearSvg + `<img src="${m.file}" alt="${m.name}" class="header-mascot" onerror="this.outerHTML='<div class=\\'header-mascot mascot-fallback\\'>${m.emoji}</div>'">`;
         }
     }
 }
@@ -330,8 +331,8 @@ function switchView(view) {
     else if (view === 'summary') navItems[1].classList.add('active');
     else if (view === 'timer') navItems[2].classList.add('active');
     else if (view === 'share') navItems[3].classList.add('active');
-    else if (view === 'settings') navItems[4].classList.add('active');
-    else if (view === 'history') { /* sub-view of summary, highlight summary */ navItems[1].classList.add('active'); }
+    else if (view === 'settings') {} // No nav tab — accessed via mascot
+    else if (view === 'history') navItems[1].classList.add('active');
 
     renderCurrentView();
 }
