@@ -780,46 +780,27 @@ async function requestNotificationPermission() {
     }
 }
 
-let activeNotification = null;
-
 function updateTimerNotification() {
     if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+
     const running = Object.values(taskTimers).filter(t => t.running);
 
     if (running.length === 0) {
-        // Close notification when no timers running
-        if (activeNotification) { activeNotification.close(); activeNotification = null; }
+        navigator.serviceWorker.controller.postMessage({ type: 'TIMER_CLEAR' });
         return;
     }
 
     const lines = running.map(t => `⏱ ${t.ingName}: ${formatTime(t.seconds)}`).join('\n');
     const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
 
-    // Close old notification and create new one (forces update on lock screen)
-    if (activeNotification) activeNotification.close();
-
-    try {
-        activeNotification = new Notification(`${m.emoji} Aqueous Timer`, {
-            body: lines,
-            tag: 'aqueous-timer',
-            renotify: true,
-            silent: true,
-            icon: 'icon-192.png',
-            requireInteraction: true
-        });
-        activeNotification.onclick = () => { window.focus(); activeNotification.close(); };
-    } catch (e) {
-        // Fallback to SW if direct notification fails
-        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-            navigator.serviceWorker.controller.postMessage({
-                type: 'TIMER_UPDATE',
-                body: lines,
-                title: `${m.emoji} Aqueous Timer`,
-                tag: 'aqueous-timer'
-            });
-        }
-    }
+    navigator.serviceWorker.controller.postMessage({
+        type: 'TIMER_UPDATE',
+        body: lines,
+        title: `${m.emoji} Aqueous — ${running.length} timer${running.length > 1 ? 's' : ''} active`,
+        tag: 'aqueous-timer'
+    });
 }
 
 // ==================== MULTI-TASK TIMER SYSTEM ====================
@@ -866,6 +847,7 @@ function pauseTaskTimer(timerKey) {
     if (t.interval) clearInterval(t.interval);
     t.interval = null;
     t.running = false;
+    updateTimerNotification();
     checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
@@ -893,6 +875,7 @@ function resetTaskTimer(timerKey) {
     if (!t) return;
     if (t.interval) clearInterval(t.interval);
     delete taskTimers[timerKey];
+    updateTimerNotification();
     checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
@@ -993,6 +976,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         if (t.interval) clearInterval(t.interval);
         delete taskTimers[timerKey];
     }
+    updateTimerNotification();
 
     // Mark completed
     if (station) station.status[ingredientId].completed = true;

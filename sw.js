@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v13';
+const CACHE_NAME = 'aqueous-v14';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -60,7 +60,13 @@ self.addEventListener('message', event => {
       silent: true,
       icon: './icon-192.png',
       badge: './icon-192.png',
-      requireInteraction: false
+      requireInteraction: true,
+      actions: [{ action: 'open', title: 'Open Aqueous' }]
+    });
+  }
+  if (event.data && event.data.type === 'TIMER_CLEAR') {
+    self.registration.getNotifications({ tag: 'aqueous-timer' }).then(notifications => {
+      notifications.forEach(n => n.close());
     });
   }
 });
