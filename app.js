@@ -324,10 +324,14 @@ function cleanOldHistory() {
 // ==================== VIEW MANAGEMENT ====================
 
 let previousView = 'home';
+let skipPopstate = false;
 
 function switchView(view) {
     // Toggle: if tapping mascot while already in settings, go back
     if (view === 'settings' && currentView === 'settings') {
+        // Go back to previous view and pop the settings history entry
+        skipPopstate = true;
+        window.history.back();
         view = previousView || 'home';
     }
 
@@ -2125,10 +2129,20 @@ document.addEventListener('DOMContentLoaded', () => {
     window.history.pushState({ view: 'home' }, '');
 
     window.addEventListener('popstate', (e) => {
+        // Skip if triggered by mascot toggle
+        if (skipPopstate) { skipPopstate = false; return; }
+
         if (currentView === 'settings') {
             // From settings: go back to previous view
             window.history.pushState({ view: previousView || 'home' }, '');
-            switchView(previousView || 'home');
+            currentView = previousView || 'home';
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            const navItems = document.querySelectorAll('.nav-item');
+            if (currentView === 'home') navItems[0].classList.add('active');
+            else if (currentView === 'summary') navItems[1].classList.add('active');
+            else if (currentView === 'timer') navItems[2].classList.add('active');
+            else if (currentView === 'share') navItems[3].classList.add('active');
+            renderCurrentView();
         } else {
             // Already on a main view: confirm exit
             if (confirm('Exit Aqueous?')) {
