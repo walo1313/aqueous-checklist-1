@@ -824,6 +824,91 @@ if (navigator.serviceWorker) {
     });
 }
 
+// ==================== KITCHEN MODE (FULLSCREEN TIMER OVERLAY) ====================
+
+let kitchenModeOpen = false;
+let kitchenModeInterval = null;
+
+function openKitchenMode() {
+    kitchenModeOpen = true;
+    const overlay = document.getElementById('kitchenModeOverlay');
+    overlay.classList.add('active');
+    renderKitchenMode();
+    // Update every second
+    kitchenModeInterval = setInterval(renderKitchenMode, 1000);
+    // Keep screen awake
+    requestWakeLock();
+}
+
+function closeKitchenMode() {
+    kitchenModeOpen = false;
+    const overlay = document.getElementById('kitchenModeOverlay');
+    overlay.classList.remove('active');
+    if (kitchenModeInterval) { clearInterval(kitchenModeInterval); kitchenModeInterval = null; }
+    checkAndManageWakeLock();
+}
+
+function renderKitchenMode() {
+    const overlay = document.getElementById('kitchenModeOverlay');
+    if (!overlay) return;
+    const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
+    const timers = Object.entries(taskTimers);
+    const cookName = settings.cookName || 'Chef';
+
+    let mascotEl = '';
+    if (m.type === 'video') {
+        mascotEl = `<video src="${m.file}" autoplay loop muted playsinline class="km-mascot"></video>`;
+    } else {
+        mascotEl = `<img src="${m.file}" alt="${m.name}" class="km-mascot" onerror="this.outerHTML='<span style=\\'font-size:40px\\'>${m.emoji}</span>'">`;
+    }
+
+    let html = `
+        <div class="km-header">
+            ${mascotEl}
+            <div>
+                <div class="km-title">${cookName}</div>
+                <div class="km-subtitle">${timers.filter(([,t]) => t.running).length} active timer${timers.filter(([,t]) => t.running).length !== 1 ? 's' : ''}</div>
+            </div>
+            <button class="km-close" onclick="closeKitchenMode()">✕</button>
+        </div>
+    `;
+
+    if (timers.length === 0) {
+        html += `<div class="km-empty">🍳<br>No active timers<br><span style="font-size:13px;color:#666;">Start a timer in Summary to track your tasks here</span></div>`;
+    } else {
+        timers.forEach(([key, t]) => {
+            const station = stations.find(s => s.id === t.stationId);
+            const stationName = station ? station.name : '';
+            const clockClass = t.running ? '' : ' paused';
+            html += `
+                <div class="km-timer-card">
+                    <div class="km-timer-info">
+                        <div class="km-timer-name">${t.ingName}</div>
+                        <div class="km-timer-station">${stationName}</div>
+                        <div class="km-timer-actions">
+                            ${t.running
+                                ? `<button class="km-btn km-btn-pause" onclick="pauseTaskTimer('${key}'); renderKitchenMode()">⏸ Pause</button>`
+                                : `<button class="km-btn km-btn-resume" onclick="resumeTaskTimer('${key}'); renderKitchenMode()">▶ Resume</button>`
+                            }
+                            <button class="km-btn km-btn-done" onclick="closeKitchenMode(); showTaskCompleteConfirm('${t.stationId}', '${t.ingredientId}')">✓ Done</button>
+                        </div>
+                    </div>
+                    <div class="km-timer-clock${clockClass}">${formatTime(t.seconds)}</div>
+                </div>
+            `;
+        });
+    }
+
+    overlay.innerHTML = html;
+}
+
+function updateKitchenModeFab() {
+    const fab = document.getElementById('kmFab');
+    if (!fab) return;
+    const hasTimers = Object.keys(taskTimers).length > 0;
+    fab.classList.toggle('visible', hasTimers && !kitchenModeOpen);
+}
+
 // ==================== MULTI-TASK TIMER SYSTEM ====================
 
 function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
@@ -856,6 +941,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
     };
 
     updateTimerNotification();
+    updateKitchenModeFab();
     checkAndManageWakeLock();
     showToast(`⏱ Timing: ${ingName}`);
     const scrollY = window.scrollY;
@@ -870,6 +956,7 @@ function pauseTaskTimer(timerKey) {
     t.interval = null;
     t.running = false;
     updateTimerNotification();
+    updateKitchenModeFab();
     checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
@@ -886,6 +973,7 @@ function resumeTaskTimer(timerKey) {
         if (clock) clock.textContent = formatTime(t.seconds);
         if (t.seconds % 3 === 0) updateTimerNotification();
     }, 1000);
+    updateKitchenModeFab();
     checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
@@ -898,6 +986,7 @@ function resetTaskTimer(timerKey) {
     if (t.interval) clearInterval(t.interval);
     delete taskTimers[timerKey];
     updateTimerNotification();
+    updateKitchenModeFab();
     checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
@@ -999,6 +1088,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         delete taskTimers[timerKey];
     }
     updateTimerNotification();
+    updateKitchenModeFab();
 
     // Mark completed
     if (station) station.status[ingredientId].completed = true;
