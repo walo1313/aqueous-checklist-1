@@ -1468,8 +1468,16 @@
     <script>
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js')
-                .then(() => console.log('SW registered'))
+                .then(reg => {
+                    console.log('SW registered');
+                    // Check for updates periodically
+                    setInterval(() => reg.update(), 60000);
+                })
                 .catch(err => console.log('SW error:', err));
+            // Reload when new SW takes control
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                console.log('SW controller changed');
+            });
         }
     </script>
 </body>

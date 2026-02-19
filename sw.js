@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v14';
+const CACHE_NAME = 'aqueous-v15';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -24,12 +24,11 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Fetch: network first, fallback to cache (ensures updates show immediately)
+// Fetch: network first, fallback to cache
 self.addEventListener('fetch', event => {
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // Update cache with fresh version
         const clone = response.clone();
         caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         return response;
@@ -38,16 +37,15 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// Activate: clean old caches
+// Activate: clean old caches and claim all clients immediately
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(names =>
       Promise.all(
         names.filter(n => n !== CACHE_NAME).map(n => caches.delete(n))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 // Handle timer notification updates from app
@@ -55,13 +53,17 @@ self.addEventListener('message', event => {
   if (event.data && event.data.type === 'TIMER_UPDATE') {
     self.registration.showNotification(event.data.title, {
       body: event.data.body,
-      tag: event.data.tag,
+      tag: 'aqueous-timer',
       renotify: true,
       silent: true,
       icon: './icon-192.png',
       badge: './icon-192.png',
       requireInteraction: true,
-      actions: [{ action: 'open', title: 'Open Aqueous' }]
+      ongoing: true,
+      actions: [
+        { action: 'pause_all', title: '⏸ Pause All' },
+        { action: 'open', title: '📋 Open' }
+      ]
     });
   }
   if (event.data && event.data.type === 'TIMER_CLEAR') {
@@ -71,15 +73,30 @@ self.addEventListener('message', event => {
   }
 });
 
-// Open app when notification is tapped
+// Handle notification clicks and action buttons
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+
+  const action = event.action;
+
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(windowClients => {
-      if (windowClients.length > 0) {
-        windowClients[0].focus();
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      // Send action to the app
+      if (action === 'pause_all') {
+        windowClients.forEach(client => {
+          client.postMessage({ type: 'PAUSE_ALL_TIMERS' });
+        });
+        // Also focus the app
+        if (windowClients.length > 0) {
+          windowClients[0].focus();
+        }
       } else {
-        clients.openWindow('./');
+        // Default: open or focus the app
+        if (windowClients.length > 0) {
+          windowClients[0].focus();
+        } else {
+          clients.openWindow('./');
+        }
       }
     })
   );

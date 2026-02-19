@@ -780,26 +780,47 @@ async function requestNotificationPermission() {
     }
 }
 
+function sendSWMessage(msg) {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage(msg);
+    } else if (navigator.serviceWorker) {
+        navigator.serviceWorker.ready.then(reg => {
+            if (reg.active) reg.active.postMessage(msg);
+        });
+    }
+}
+
 function updateTimerNotification() {
     if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+    if (!navigator.serviceWorker) return;
 
     const running = Object.values(taskTimers).filter(t => t.running);
 
     if (running.length === 0) {
-        navigator.serviceWorker.controller.postMessage({ type: 'TIMER_CLEAR' });
+        sendSWMessage({ type: 'TIMER_CLEAR' });
         return;
     }
 
     const lines = running.map(t => `⏱ ${t.ingName}: ${formatTime(t.seconds)}`).join('\n');
     const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
 
-    navigator.serviceWorker.controller.postMessage({
+    sendSWMessage({
         type: 'TIMER_UPDATE',
         body: lines,
-        title: `${m.emoji} Aqueous — ${running.length} timer${running.length > 1 ? 's' : ''} active`,
-        tag: 'aqueous-timer'
+        title: `${m.emoji} Aqueous — ${running.length} timer${running.length > 1 ? 's' : ''} active`
+    });
+}
+
+// Listen for messages from Service Worker (notification action buttons)
+if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener('message', event => {
+        if (event.data && event.data.type === 'PAUSE_ALL_TIMERS') {
+            Object.keys(taskTimers).forEach(key => {
+                if (taskTimers[key].running) pauseTaskTimer(key);
+            });
+            showToast('⏸ All timers paused');
+        }
     });
 }
 
@@ -834,6 +855,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
         }, 1000)
     };
 
+    updateTimerNotification();
     checkAndManageWakeLock();
     showToast(`⏱ Timing: ${ingName}`);
     const scrollY = window.scrollY;
