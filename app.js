@@ -5,17 +5,8 @@ let editingStationId = null;
 let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
 let history = [];
 let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
-let prepTimes = {}; // { "ingredientName": { avgSecPerUnit: N, count: N } }
-
-// Timer state
-let timerMode = 'countdown'; // countdown, stopwatch
-let timerSeconds = 0;
-let timerTarget = 0;
-let timerRunning = false;
-let timerInterval = null;
-let timerAlarm = false;
-let timerLabel = '';
-let alarmRepeater = null;
+let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
+let ingredientDefaults = {}; // { "ingredientname": { qty: N, unit: "quart" } }
 
 // Mascot animation tracking
 let checkCount = 0;
@@ -45,6 +36,44 @@ let _debounceTimers = {};
 function debounce(key, fn, delay) {
     if (_debounceTimers[key]) clearTimeout(_debounceTimers[key]);
     _debounceTimers[key] = setTimeout(fn, delay || 400);
+}
+
+// ==================== UNIT CONVERSIONS ====================
+
+const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1 };
+const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz'];
+const WEIGHT_UNITS = ['lb'];
+const COUNT_UNITS = ['each', 'batch'];
+
+function getBaseUnit(unit) {
+    if (VOLUME_UNITS.includes(unit)) return 'oz';
+    if (WEIGHT_UNITS.includes(unit)) return 'lb';
+    if (COUNT_UNITS.includes(unit)) return unit;
+    return 'unit';
+}
+
+function convertToBase(qty, unit) {
+    if (VOLUME_UNITS.includes(unit)) return qty * (UNIT_TO_OZ[unit] || 1);
+    return qty;
+}
+
+function formatEstimate(seconds) {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function getIngredientEstimate(ingName, parQty, parUnit) {
+    const key = ingName.toLowerCase();
+    const pt = prepTimes[key];
+    if (!pt || !pt.bestSecPerUnit || !parQty || !parUnit) return null;
+    const baseUnit = getBaseUnit(parUnit);
+    if (pt.baseUnit && pt.baseUnit !== 'unit' && pt.baseUnit !== baseUnit) return null;
+    const baseQty = convertToBase(parQty, parUnit);
+    const estSeconds = Math.round(pt.bestSecPerUnit * baseQty);
+    const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * (UNIT_TO_OZ[parUnit] || 1));
+    return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit };
 }
 
 // PWA Install
@@ -155,9 +184,10 @@ function initApp() {
     // Restore saved view and nav highlight
     const navItems = document.querySelectorAll('.nav-item');
     navItems.forEach(item => item.classList.remove('active'));
+    if (currentView === 'timer') currentView = 'logs'; // legacy redirect
     if (currentView === 'home') navItems[0].classList.add('active');
     else if (currentView === 'summary') navItems[1].classList.add('active');
-    else if (currentView === 'timer') navItems[2].classList.add('active');
+    else if (currentView === 'logs') navItems[2].classList.add('active');
     else if (currentView === 'share') navItems[3].classList.add('active');
     else if (currentView === 'history') navItems[1].classList.add('active');
     else if (currentView === 'settings') { currentView = 'home'; navItems[0].classList.add('active'); }
@@ -273,10 +303,40 @@ function loadData() {
     if (savedPrepTimes) {
         prepTimes = JSON.parse(savedPrepTimes);
     }
+
+    const savedDefaults = localStorage.getItem('aqueous_ingredient_defaults');
+    if (savedDefaults) {
+        ingredientDefaults = JSON.parse(savedDefaults);
+    }
+
+    // --- Migration: backfill new fields ---
+    stations.forEach(station => {
+        Object.keys(station.status).forEach(id => {
+            const st = station.status[id];
+            if (st.parQty === undefined) {
+                // Parse existing parLevel "2 quart" → parQty + parUnit
+                const match = (st.parLevel || '').match(/^([\d.]+)\s*(.+)$/);
+                st.parQty = match ? parseFloat(match[1]) : null;
+                st.parUnit = match ? match[2].trim() : '';
+                st.parNotes = '';
+            }
+        });
+    });
+
+    // Backfill prepTimes with bestSecPerUnit and baseUnit
+    Object.keys(prepTimes).forEach(key => {
+        const pt = prepTimes[key];
+        if (pt.bestSecPerUnit === undefined) pt.bestSecPerUnit = pt.avgSecPerUnit;
+        if (pt.baseUnit === undefined) pt.baseUnit = 'unit';
+    });
 }
 
 function savePrepTimes() {
     localStorage.setItem('aqueous_prep_times', JSON.stringify(prepTimes));
+}
+
+function saveIngredientDefaults() {
+    localStorage.setItem('aqueous_ingredient_defaults', JSON.stringify(ingredientDefaults));
 }
 
 function saveSettings() {
@@ -355,13 +415,14 @@ function switchView(view) {
         previousView = currentView;
     }
 
+    if (view === 'timer') view = 'logs'; // legacy redirect
     currentView = view;
     sessionStorage.setItem('aqueous_currentView', view);
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItems = document.querySelectorAll('.nav-item');
     if (view === 'home') navItems[0].classList.add('active');
     else if (view === 'summary') navItems[1].classList.add('active');
-    else if (view === 'timer') navItems[2].classList.add('active');
+    else if (view === 'logs') navItems[2].classList.add('active');
     else if (view === 'share') navItems[3].classList.add('active');
     else if (view === 'settings') { window.history.pushState({ view: 'settings' }, ''); }
     else if (view === 'history') navItems[1].classList.add('active');
@@ -379,9 +440,9 @@ function renderCurrentView() {
     } else if (currentView === 'summary') {
         fab.style.display = 'none';
         renderSummary(container);
-    } else if (currentView === 'timer') {
+    } else if (currentView === 'logs') {
         fab.style.display = 'none';
-        renderTimer(container);
+        renderLogs(container);
     } else if (currentView === 'share') {
         fab.style.display = 'none';
         renderShare(container);
@@ -447,11 +508,19 @@ function renderHome(container) {
 function renderIngredients(station) {
     let html = '';
     station.ingredients.forEach(ing => {
-        const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', completed: false };
+        const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
-        const parDisplay = st.low && st.parLevel
-            ? `<span class="par-display">${st.parLevel}</span>`
-            : '';
+        let parDisplay = '';
+        if (st.low && st.parQty && st.parUnit) {
+            parDisplay = `<span class="par-display">${st.parQty} ${st.parUnit}</span>`;
+        } else if (st.low && st.parLevel) {
+            parDisplay = `<span class="par-display">${st.parLevel}</span>`;
+        }
+        if (st.low && st.parNotes) {
+            parDisplay += `<span class="par-display" style="font-style:italic;margin-left:4px;font-size:9px;">${st.parNotes}</span>`;
+        }
+
+        const unitOptions = ['quart','pint','cup','oz','lb','each','batch'];
 
         html += `
         <div class="ingredient ${st.low ? 'low' : ''}">
@@ -476,21 +545,26 @@ function renderIngredients(station) {
                         onclick="setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
                 </div>
                 <div class="par-row">
-                    <label class="par-label">Par:</label>
-                    <input type="text" class="par-input" placeholder="e.g. 1 quart"
-                        value="${st.parLevel || ''}"
-                        oninput="debounce('par_${station.id}_${ing.id}', () => setParLevel(${station.id}, ${ing.id}, this.value), 600)"
-                        onclick="event.stopPropagation()">
-                    <select class="par-select" onchange="applyUnit(${station.id}, ${ing.id}, this.value); this.selectedIndex=0;">
-                        <option value="">Unit</option>
-                        <option value="quart">quart</option>
-                        <option value="pint">pint</option>
-                        <option value="cup">cup</option>
-                        <option value="lb">lb</option>
-                        <option value="oz">oz</option>
-                        <option value="each">each</option>
-                        <option value="batch">batch</option>
+                    <div class="par-stepper">
+                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -0.5)">−</button>
+                        <input type="number" class="par-qty-input"
+                            value="${st.parQty || ''}"
+                            placeholder="0"
+                            min="0" step="0.5" inputmode="decimal"
+                            oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
+                            onclick="event.stopPropagation()">
+                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, 0.5)">+</button>
+                    </div>
+                    <select class="par-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
+                        <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
+                        ${unitOptions.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
                     </select>
+                </div>
+                <div class="par-notes-row">
+                    <input type="text" class="par-input par-notes-input" placeholder="Notes (descongelar, cocer...)"
+                        value="${st.parNotes || ''}"
+                        oninput="debounce('parn_${station.id}_${ing.id}', () => setParNotes(${station.id}, ${ing.id}, this.value), 600)"
+                        onclick="event.stopPropagation()">
                 </div>
             </div>
         </div>`;
@@ -514,12 +588,24 @@ function toggleLow(stationId, ingredientId) {
     if (!station) return;
 
     if (!station.status[ingredientId]) {
-        station.status[ingredientId] = { low: false, priority: null, parLevel: '', completed: false };
+        station.status[ingredientId] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
     }
 
     station.status[ingredientId].low = !station.status[ingredientId].low;
 
-    if (!station.status[ingredientId].low) {
+    if (station.status[ingredientId].low) {
+        // Auto-fill from saved defaults
+        const ing = station.ingredients.find(i => i.id === ingredientId);
+        if (ing) {
+            const key = ing.name.toLowerCase();
+            const defaults = ingredientDefaults[key];
+            if (defaults) {
+                if (!station.status[ingredientId].parQty) station.status[ingredientId].parQty = defaults.qty;
+                if (!station.status[ingredientId].parUnit) station.status[ingredientId].parUnit = defaults.unit;
+                updateParLevel(station, ingredientId);
+            }
+        }
+    } else {
         station.status[ingredientId].priority = null;
         station.status[ingredientId].completed = false;
     }
@@ -561,24 +647,70 @@ function setPriority(stationId, ingredientId, priority) {
     }
 }
 
-function setParLevel(stationId, ingredientId, value) {
+function setParQty(stationId, ingredientId, value) {
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
-    station.status[ingredientId].parLevel = value;
+    station.status[ingredientId].parQty = parseFloat(value) || null;
+    updateParLevel(station, ingredientId);
+    saveIngredientDefault(station, ingredientId);
     saveData(true);
 }
 
-function applyUnit(stationId, ingredientId, unit) {
-    if (!unit) return;
+function setParUnit(stationId, ingredientId, value) {
+    handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
-
-    const current = station.status[ingredientId].parLevel || '';
-    const numMatch = current.match(/^[\d.]+/);
-    const num = numMatch ? numMatch[0] + ' ' : '';
-    station.status[ingredientId].parLevel = num + unit;
-
+    station.status[ingredientId].parUnit = value;
+    updateParLevel(station, ingredientId);
+    saveIngredientDefault(station, ingredientId);
     saveData(true);
+    rerenderStationBody(stationId);
+}
+
+function setParNotes(stationId, ingredientId, value) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    station.status[ingredientId].parNotes = value;
+    saveData(true);
+}
+
+function adjustParQty(stationId, ingredientId, delta) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
+    st.parQty = Math.max(0, (st.parQty || 0) + delta);
+    if (st.parQty === 0) st.parQty = null;
+    updateParLevel(station, ingredientId);
+    saveIngredientDefault(station, ingredientId);
+    saveData(true);
+    rerenderStationBody(stationId);
+}
+
+function updateParLevel(station, ingredientId) {
+    const st = station.status[ingredientId];
+    if (st.parQty && st.parUnit) {
+        st.parLevel = `${st.parQty} ${st.parUnit}`;
+    } else if (st.parQty) {
+        st.parLevel = `${st.parQty}`;
+    } else {
+        st.parLevel = '';
+    }
+}
+
+function saveIngredientDefault(station, ingredientId) {
+    const st = station.status[ingredientId];
+    const ing = station.ingredients.find(i => i.id === ingredientId);
+    if (!ing) return;
+    const key = ing.name.toLowerCase();
+    if (st.parQty || st.parUnit) {
+        ingredientDefaults[key] = { qty: st.parQty, unit: st.parUnit };
+        saveIngredientDefaults();
+    }
+}
+
+function rerenderStationBody(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
     const body = document.getElementById(`body-${stationId}`);
     if (body) {
         const scrollY = window.scrollY;
@@ -673,9 +805,23 @@ function renderSummary(container) {
 
 function renderSummaryGroup(title, level, tasks) {
     const colorClass = level === 'none' ? '' : `summary-${level}`;
+
+    // Calculate block time estimate
+    let totalEstSeconds = 0;
+    let hasEstimates = false;
+    tasks.forEach(task => {
+        if (!task.status.completed) {
+            const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit);
+            if (est) { totalEstSeconds += est.totalSeconds; hasEstimates = true; }
+        }
+    });
+    const blockTimeDisplay = hasEstimates
+        ? `<span style="float:right;color:var(--accent);font-weight:800;font-size:10px;">⏱ ~${formatEstimate(totalEstSeconds)}</span>`
+        : '';
+
     let html = `
         <div class="summary-group ${colorClass}">
-            <div class="summary-group-title">${title}</div>`;
+            <div class="summary-group-title">${title}${blockTimeDisplay}</div>`;
 
     tasks.forEach(task => {
         const timerKey = `${task.stationId}_${task.ingredient.id}`;
@@ -683,10 +829,18 @@ function renderSummaryGroup(title, level, tasks) {
         const isRunning = timer && timer.running;
         const isPaused = timer && !timer.running && timer.seconds > 0;
         const hasTimer = isRunning || isPaused;
-        const key = task.ingredient.name.toLowerCase();
-        const pt = prepTimes[key];
-        const avgInfo = pt ? `~${Math.floor(pt.avgSecPerUnit / 60)}m${Math.round(pt.avgSecPerUnit % 60)}s/unit` : '';
         const escapedName = task.ingredient.name.replace(/'/g, "\\'");
+
+        // Per-ingredient time goal
+        const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit);
+        const goalInfo = est
+            ? `<span style="font-size:9px;color:var(--accent);">🏆 Best: ${formatEstimate(est.bestPerDisplayUnit)} per ${task.status.parUnit}</span>`
+            : '';
+
+        // Par display
+        const parTag = task.status.parQty && task.status.parUnit
+            ? `<span class="par-tag">${task.status.parQty} ${task.status.parUnit}</span>`
+            : (task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : '');
 
         html += `
             <div class="summary-item ${task.status.completed ? 'done' : ''}">
@@ -696,11 +850,12 @@ function renderSummaryGroup(title, level, tasks) {
                         onchange="toggleCompleted(${task.stationId}, ${task.ingredient.id})">
                     <div class="summary-item-info">
                         <span class="summary-item-name">${task.ingredient.name}</span>
-                        <span class="summary-item-station">${task.stationName}${avgInfo ? ' · ' + avgInfo : ''}</span>
+                        <span class="summary-item-station">${task.stationName}</span>
+                        ${goalInfo}
                     </div>
                 </label>
                 <div class="summary-item-actions">
-                    ${task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : ''}
+                    ${parTag}
                     ${!task.status.completed ? `
                         <button class="task-timer-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
                             ⏱
@@ -947,7 +1102,8 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
     const ingName = ing.name;
     const st = station.status[ingredientId];
     const timeStr = t ? formatTime(t.seconds) : '0:00';
-    const defaultQty = st && st.parLevel ? (parseFloat(st.parLevel) || 1) : 1;
+    const defaultQty = st.parQty || 1;
+    const defaultUnit = st.parUnit || '';
 
     // Pause timer if running
     if (t && t.running) {
@@ -958,6 +1114,8 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
 
     const existing = document.getElementById('modalTaskComplete');
     if (existing) existing.remove();
+
+    const unitLabel = defaultUnit ? `<span style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-left:6px;">${defaultUnit}</span>` : '';
 
     const modal = document.createElement('div');
     modal.id = 'modalTaskComplete';
@@ -970,7 +1128,10 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
             <p style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:12px;">${timeStr}</p>
             <div class="form-group" style="margin-bottom:16px;">
                 <label style="font-size:11px;font-weight:600;color:var(--text-secondary);">Quantity prepped</label>
-                <input type="number" id="completeQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;">
+                <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
+                    <input type="number" id="completeQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;width:100px;">
+                    ${unitLabel}
+                </div>
             </div>
             <div class="btn-group">
                 <button class="btn btn-secondary squishy" onclick="handleClick(); cancelTaskComplete(${stationId}, ${ingredientId})">Continue</button>
@@ -992,24 +1153,31 @@ function confirmTaskComplete(stationId, ingredientId) {
         const qtyEl = document.getElementById('completeQty');
         const qty = parseFloat(qtyEl ? qtyEl.value : 1) || 1;
         const key = ing.name.toLowerCase();
-        const secPerUnit = t.seconds / qty;
+        const st = station.status[ingredientId];
+        const unit = st.parUnit || 'unit';
+        const baseQty = convertToBase(qty, unit);
+        const secPerBaseUnit = baseQty > 0 ? t.seconds / baseQty : t.seconds;
+        const baseUnit = getBaseUnit(unit);
 
         if (!prepTimes[key]) {
-            prepTimes[key] = { avgSecPerUnit: secPerUnit, count: 1 };
+            prepTimes[key] = { avgSecPerUnit: secPerBaseUnit, bestSecPerUnit: secPerBaseUnit, count: 1, baseUnit };
         } else {
             const pt = prepTimes[key];
-            pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerUnit) / (pt.count + 1);
+            pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerBaseUnit) / (pt.count + 1);
+            pt.bestSecPerUnit = Math.min(pt.bestSecPerUnit, secPerBaseUnit);
             pt.count++;
+            if (pt.baseUnit === 'unit') pt.baseUnit = baseUnit;
         }
         savePrepTimes();
 
-        // Save to activity log
         logActivity('task_complete', {
             ingredient: ing.name,
             station: station.name,
             seconds: t.seconds,
             quantity: qty,
-            secPerUnit: Math.round(secPerUnit)
+            unit,
+            baseUnit,
+            secPerUnit: Math.round(secPerBaseUnit)
         });
     } else if (ing) {
         logActivity('task_complete', {
@@ -1017,6 +1185,7 @@ function confirmTaskComplete(stationId, ingredientId) {
             station: station.name,
             seconds: 0,
             quantity: 0,
+            unit: '',
             secPerUnit: 0
         });
     }
@@ -1479,112 +1648,116 @@ function copyToClipboard(text) {
     }
 }
 
-// ==================== TIMER VIEW ====================
+// ==================== LOGS VIEW ====================
 
-function renderTimer(container) {
-    const displayTime = timerMode === 'countdown'
-        ? formatTime(Math.max(0, timerTarget - timerSeconds))
-        : formatTime(timerSeconds);
+function renderLogs(container) {
+    if (activityLog.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📝</div>
+                <p>No prep logs yet</p>
+                <p class="empty-sub">Complete tasks with timers to build your history</p>
+            </div>`;
+        return;
+    }
 
-    const isAlarm = timerMode === 'countdown' && timerRunning && timerSeconds >= timerTarget;
-    const displayClass = isAlarm ? 'alarm' : (timerRunning ? 'running' : '');
+    // Collect filter options
+    const allIngredients = new Set();
+    const allStations = new Set();
+    activityLog.forEach(entry => {
+        if (entry.data && entry.data.ingredient) allIngredients.add(entry.data.ingredient);
+        if (entry.data && entry.data.station) allStations.add(entry.data.station);
+    });
 
-    // Calculate smart block suggestions
-    const blockSuggestions = calculateBlockGoals();
-
-    container.innerHTML = `
-        <div class="timer-card">
-            <div class="timer-mode-tabs">
-                <button class="timer-mode-tab ${timerMode === 'countdown' ? 'active' : ''}"
-                    onclick="handleClick(); setTimerMode('countdown')">⏳ Countdown</button>
-                <button class="timer-mode-tab ${timerMode === 'stopwatch' ? 'active' : ''}"
-                    onclick="handleClick(); setTimerMode('stopwatch')">⏱ Stopwatch</button>
+    let html = `
+        <div class="neu-card" style="padding:14px;">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <select id="logFilterIngredient" class="par-select" style="flex:1;" onchange="filterLogs()">
+                    <option value="">All Ingredients</option>
+                    ${[...allIngredients].sort().map(i => `<option value="${i}">${i}</option>`).join('')}
+                </select>
+                <select id="logFilterStation" class="par-select" style="flex:1;" onchange="filterLogs()">
+                    <option value="">All Stations</option>
+                    ${[...allStations].sort().map(s => `<option value="${s}">${s}</option>`).join('')}
+                </select>
             </div>
-
-            ${timerMode === 'countdown' && !timerRunning && timerSeconds === 0 ? `
-                <div class="timer-label">Set Time</div>
-                <div class="timer-input-row">
-                    <input type="number" class="timer-input" id="timerMin" value="5" min="0" max="99" placeholder="MM">
-                    <span class="timer-sep">:</span>
-                    <input type="number" class="timer-input" id="timerSec" value="00" min="0" max="59" placeholder="SS">
-                </div>
-                <div class="timer-presets">
-                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(2)">2 min</button>
-                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(5)">5 min</button>
-                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(10)">10 min</button>
-                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(15)">15 min</button>
-                    <button class="timer-preset-btn" onclick="handleClick(); setTimerPreset(30)">30 min</button>
-                </div>
-            ` : `
-                <div class="timer-label">${timerLabel || (timerMode === 'countdown' ? 'Countdown' : 'Stopwatch')}</div>
-                <div class="timer-display ${displayClass}" id="timerDisplay">${displayTime}</div>
-            `}
-
-            <div class="timer-controls">
-                ${!timerRunning ? `
-                    <button class="btn btn-primary squishy" onclick="handleClick(); startTimer()">
-                        ${timerSeconds > 0 ? '▶ Resume' : '▶ Start'}
-                    </button>
-                    ${timerSeconds > 0 ? `
-                        <button class="btn btn-secondary squishy" onclick="handleClick(); resetTimer()">↺ Reset</button>
-                    ` : ''}
-                ` : `
-                    <button class="btn btn-danger squishy" onclick="handleClick(); pauseTimer()">⏸ Pause</button>
-                    <button class="btn btn-secondary squishy" onclick="handleClick(); resetTimer()">↺ Reset</button>
-                `}
-            </div>
-        </div>
-
-        <div class="timer-card">
-            <div class="timer-label">Prep Block Timers</div>
-            <p style="font-size:10px;color:var(--text-muted);margin-bottom:12px;font-weight:500;">Goals adjust based on your prep history</p>
-
-            ${blockSuggestions.high.items > 0 ? `
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-outline squishy" style="flex:1;margin:0" onclick="handleClick(); startBlockTimer('Before Service', ${blockSuggestions.high.mins})">
-                    🔴 Before Service — ${blockSuggestions.high.mins} min
-                </button>
-                <button class="timer-preset-btn" onclick="handleClick(); editBlockMinutes('high', ${blockSuggestions.high.mins})" title="Edit">✏️</button>
-            </div>
-            <p style="font-size:9px;color:var(--text-muted);margin-bottom:12px;">${blockSuggestions.high.detail}</p>
-            ` : ''}
-
-            ${blockSuggestions.medium.items > 0 ? `
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-outline squishy" style="flex:1;margin:0" onclick="handleClick(); startBlockTimer('Prep Block', ${blockSuggestions.medium.mins})">
-                    🟡 Prep Block — ${blockSuggestions.medium.mins} min
-                </button>
-                <button class="timer-preset-btn" onclick="handleClick(); editBlockMinutes('medium', ${blockSuggestions.medium.mins})" title="Edit">✏️</button>
-            </div>
-            <p style="font-size:9px;color:var(--text-muted);margin-bottom:12px;">${blockSuggestions.medium.detail}</p>
-            ` : ''}
-
-            ${blockSuggestions.low.items > 0 ? `
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                <button class="btn btn-outline squishy" style="flex:1;margin:0" onclick="handleClick(); startBlockTimer('Backup Prep', ${blockSuggestions.low.mins})">
-                    🔵 Backup Prep — ${blockSuggestions.low.mins} min
-                </button>
-                <button class="timer-preset-btn" onclick="handleClick(); editBlockMinutes('low', ${blockSuggestions.low.mins})" title="Edit">✏️</button>
-            </div>
-            <p style="font-size:9px;color:var(--text-muted);margin-bottom:12px;">${blockSuggestions.low.detail}</p>
-            ` : ''}
-
-            ${blockSuggestions.high.items === 0 && blockSuggestions.medium.items === 0 && blockSuggestions.low.items === 0 ? `
-                <p style="font-size:12px;color:var(--text-muted);text-align:center;padding:16px;">Mark some ingredients as low in Home to see smart prep block timers here</p>
-            ` : ''}
-        </div>
-
-        <div class="timer-card">
-            <div class="timer-label">Log Prep Time</div>
-            <p style="font-size:10px;color:var(--text-muted);margin-bottom:12px;">Use the stopwatch to time a task, then log it to improve future block goals</p>
-            ${timerMode === 'stopwatch' && timerSeconds > 0 && !timerRunning ? `
-                <button class="btn btn-success squishy" onclick="handleClick(); showLogPrepModal()">
-                    📝 Log ${formatTime(timerSeconds)} for an ingredient
-                </button>
-            ` : `
-                <p style="font-size:11px;color:var(--text-muted);text-align:center;">Use stopwatch mode, then pause to log time</p>
-            `}
         </div>`;
+
+    // Find best times per ingredient
+    const bestTimes = {};
+    activityLog.forEach(entry => {
+        if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
+        const key = entry.data.ingredient;
+        const spu = entry.data.secPerUnit || 0;
+        if (spu > 0 && (!bestTimes[key] || spu < bestTimes[key])) bestTimes[key] = spu;
+    });
+
+    // Group by day
+    const grouped = {};
+    activityLog.forEach(entry => {
+        if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
+        const date = new Date(entry.timestamp);
+        const key = date.toISOString().split('T')[0];
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(entry);
+    });
+
+    Object.keys(grouped).sort().reverse().forEach(dateKey => {
+        const entries = grouped[dateKey];
+        const dateObj = new Date(dateKey + 'T12:00:00');
+        const dateStr = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+        html += `
+        <div class="log-day-card" data-day="${dateKey}">
+            <div class="log-day-header">
+                <span style="font-size:13px;font-weight:700;color:var(--text);">${dateStr}</span>
+                <span style="font-size:11px;color:var(--text-muted);">${entries.length} task${entries.length !== 1 ? 's' : ''}</span>
+            </div>`;
+
+        entries.forEach(entry => {
+            const d = entry.data;
+            const isBest = bestTimes[d.ingredient] && d.secPerUnit <= bestTimes[d.ingredient];
+            const time = new Date(entry.timestamp);
+            const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+            html += `
+            <div class="log-entry ${isBest ? 'log-best' : ''}" data-ingredient="${d.ingredient}" data-station="${d.station || ''}">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-size:13px;font-weight:700;">${d.ingredient}</span>
+                        ${isBest ? '<span style="font-size:10px;color:var(--accent);margin-left:6px;">🏆 Best</span>' : ''}
+                    </div>
+                    <span style="font-size:10px;color:var(--text-muted);">${timeStr}</span>
+                </div>
+                <div style="display:flex;gap:14px;margin-top:4px;font-size:11px;color:var(--text-secondary);">
+                    <span>⏱ ${formatTime(d.seconds)}</span>
+                    <span>📦 ${d.quantity} ${d.unit || 'units'}</span>
+                    <span>⚡ ${formatEstimate(d.secPerUnit)}/unit</span>
+                </div>
+                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${d.station || ''} · ${entry.cook || ''}</div>
+            </div>`;
+        });
+
+        html += '</div>';
+    });
+
+    container.innerHTML = html;
+}
+
+function filterLogs() {
+    const ingFilter = document.getElementById('logFilterIngredient')?.value || '';
+    const stFilter = document.getElementById('logFilterStation')?.value || '';
+
+    document.querySelectorAll('.log-entry').forEach(el => {
+        const matchIng = !ingFilter || el.dataset.ingredient === ingFilter;
+        const matchSt = !stFilter || el.dataset.station === stFilter;
+        el.style.display = (matchIng && matchSt) ? '' : 'none';
+    });
+
+    document.querySelectorAll('.log-day-card').forEach(card => {
+        const visible = card.querySelectorAll('.log-entry:not([style*="display: none"])');
+        card.style.display = visible.length > 0 ? '' : 'none';
+    });
 }
 
 function formatTime(totalSec) {
@@ -1593,115 +1766,6 @@ function formatTime(totalSec) {
     const s = totalSec % 60;
     if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-}
-
-function setTimerMode(mode) {
-    if (timerRunning) pauseTimer();
-    timerMode = mode;
-    timerSeconds = 0;
-    timerTarget = 0;
-    timerAlarm = false;
-    timerLabel = '';
-    renderTimer(document.getElementById('mainContent'));
-}
-
-function setTimerPreset(minutes) {
-    const minInput = document.getElementById('timerMin');
-    const secInput = document.getElementById('timerSec');
-    if (minInput) minInput.value = minutes;
-    if (secInput) secInput.value = '00';
-}
-
-function startTimer() {
-    if (timerMode === 'countdown' && timerSeconds === 0) {
-        const minInput = document.getElementById('timerMin');
-        const secInput = document.getElementById('timerSec');
-        const mins = parseInt(minInput ? minInput.value : 5) || 0;
-        const secs = parseInt(secInput ? secInput.value : 0) || 0;
-        timerTarget = mins * 60 + secs;
-        if (timerTarget <= 0) { showToast('Set a time first'); return; }
-        timerSeconds = 0;
-    }
-    timerRunning = true;
-    timerAlarm = false;
-    timerInterval = setInterval(() => {
-        timerSeconds++;
-        updateTimerDisplay();
-        // Countdown alarm with physical confirmation
-        if (timerMode === 'countdown' && timerSeconds >= timerTarget && !timerAlarm) {
-            timerAlarm = true;
-            startAlarmRepeat();
-        }
-    }, 1000);
-    renderTimer(document.getElementById('mainContent'));
-}
-
-function pauseTimer() {
-    timerRunning = false;
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = null;
-    renderTimer(document.getElementById('mainContent'));
-}
-
-function resetTimer() {
-    timerRunning = false;
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = null;
-    if (alarmRepeater) { clearInterval(alarmRepeater); alarmRepeater = null; }
-    const overlay = document.getElementById('alarmOverlay');
-    if (overlay) overlay.remove();
-    timerSeconds = 0;
-    timerTarget = 0;
-    timerAlarm = false;
-    timerLabel = '';
-    renderTimer(document.getElementById('mainContent'));
-}
-
-function startBlockTimer(label, minutes) {
-    if (timerRunning) pauseTimer();
-    timerMode = 'countdown';
-    timerLabel = label;
-    timerSeconds = 0;
-    timerTarget = minutes * 60;
-    startTimer();
-    showToast(`${label}: ${minutes} min started`);
-}
-
-function editBlockMinutes(priority, currentMins) {
-    const existing = document.getElementById('modalEditBlock');
-    if (existing) existing.remove();
-
-    const labels = { high: 'Before Service', medium: 'Prep Block', low: 'Backup Prep' };
-    const emojis = { high: '🔴', medium: '🟡', low: '🔵' };
-
-    const modal = document.createElement('div');
-    modal.id = 'modalEditBlock';
-    modal.className = 'modal show';
-    modal.innerHTML = `
-        <div class="modal-content" style="text-align:center;">
-            <div class="modal-header">${emojis[priority]} Edit ${labels[priority]}</div>
-            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">Set your block timer goal (minutes)</p>
-            <div class="form-group">
-                <input type="number" id="editBlockInput" class="form-control" value="${currentMins}" min="1" max="999" style="text-align:center;font-size:24px;font-weight:700;">
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalEditBlock').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); confirmEditBlock('${priority}')">Start Timer</button>
-            </div>
-        </div>`;
-    document.body.appendChild(modal);
-    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-    setTimeout(() => { const input = document.getElementById('editBlockInput'); if (input) { input.focus(); input.select(); } }, 200);
-}
-
-function confirmEditBlock(priority) {
-    const input = document.getElementById('editBlockInput');
-    const mins = parseInt(input ? input.value : 0);
-    if (!mins || mins <= 0) { showToast('Enter a valid number'); return; }
-    const modal = document.getElementById('modalEditBlock');
-    if (modal) modal.remove();
-    const labels = { high: 'Before Service', medium: 'Prep Block', low: 'Backup Prep' };
-    startBlockTimer(labels[priority], mins);
 }
 
 function calculateBlockGoals() {
@@ -1720,17 +1784,13 @@ function calculateBlockGoals() {
 
             result[p].items++;
 
-            // Check if we have prep time data for this ingredient
             const key = ing.name.toLowerCase();
-            const pt = prepTimes[key];
-            if (pt && pt.avgSecPerUnit > 0) {
-                // Parse par level for quantity
-                const qty = parseFloat(st.parLevel) || 1;
-                const estSec = Math.round(pt.avgSecPerUnit * qty);
+            const est = getIngredientEstimate(ing.name, st.parQty || 1, st.parUnit || 'unit');
+            if (est) {
                 if (!result[p].estSeconds) result[p].estSeconds = 0;
-                result[p].estSeconds += estSec;
+                result[p].estSeconds += est.totalSeconds;
                 if (!result[p].ingredients) result[p].ingredients = [];
-                result[p].ingredients.push(`${ing.name}: ~${Math.ceil(estSec / 60)}m`);
+                result[p].ingredients.push(`${ing.name}: ~${Math.ceil(est.totalSeconds / 60)}m`);
             }
         });
     });
@@ -1751,155 +1811,6 @@ function calculateBlockGoals() {
     return result;
 }
 
-function showLogPrepModal() {
-    const existing = document.getElementById('modalLogPrep');
-    if (existing) existing.remove();
-
-    // Build ingredient options — only show low-marked (active prep) ingredients first, then all
-    let options = '';
-    let hasLowItems = false;
-    stations.forEach(station => {
-        station.ingredients.forEach(ing => {
-            const st = station.status[ing.id];
-            if (st && st.low && !st.completed) {
-                hasLowItems = true;
-                const par = st.parLevel ? ` (${st.parLevel})` : '';
-                options += `<option value="${ing.name.toLowerCase()}">${ing.name}${par} — ${station.name}</option>`;
-            }
-        });
-    });
-    if (!hasLowItems) {
-        // Fallback: show all ingredients if none are marked low
-        stations.forEach(station => {
-            station.ingredients.forEach(ing => {
-                options += `<option value="${ing.name.toLowerCase()}">${ing.name} (${station.name})</option>`;
-            });
-        });
-    }
-
-    const modal = document.createElement('div');
-    modal.id = 'modalLogPrep';
-    modal.className = 'modal show';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">Log Prep Time</div>
-            <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">
-                You spent <strong>${formatTime(timerSeconds)}</strong>. Which ingredient?
-            </p>
-            <div class="form-group">
-                <label>Ingredient</label>
-                <select id="logPrepIngredient" class="form-control">${options}</select>
-            </div>
-            <div class="form-group">
-                <label>Quantity prepped (e.g. 2 for 2 quarts)</label>
-                <input type="number" id="logPrepQty" class="form-control" value="1" min="0.1" step="0.5">
-            </div>
-            <div class="btn-group">
-                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalLogPrep').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); saveLogPrep()">Save</button>
-            </div>
-        </div>`;
-    document.body.appendChild(modal);
-    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-}
-
-function saveLogPrep() {
-    const ingEl = document.getElementById('logPrepIngredient');
-    const qtyEl = document.getElementById('logPrepQty');
-    const key = ingEl.value;
-    const qty = parseFloat(qtyEl.value) || 1;
-    const secPerUnit = timerSeconds / qty;
-
-    if (!prepTimes[key]) {
-        prepTimes[key] = { avgSecPerUnit: secPerUnit, count: 1 };
-    } else {
-        // Running average
-        const pt = prepTimes[key];
-        pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerUnit) / (pt.count + 1);
-        pt.count++;
-    }
-
-    savePrepTimes();
-    document.getElementById('modalLogPrep').remove();
-    showToast(`Logged: ${Math.round(secPerUnit)}s per unit for ${key}`);
-    resetTimer();
-}
-
-function updateTimerDisplay() {
-    const el = document.getElementById('timerDisplay');
-    if (!el) return;
-    const displayTime = timerMode === 'countdown'
-        ? formatTime(Math.max(0, timerTarget - timerSeconds))
-        : formatTime(timerSeconds);
-    el.textContent = displayTime;
-    if (timerMode === 'countdown' && timerSeconds >= timerTarget) {
-        el.className = 'timer-display alarm';
-    } else {
-        el.className = 'timer-display running';
-    }
-}
-
-function playAlarm() {
-    // Play 3 beeps
-    if (settings.sound) {
-        try {
-            const ctx = getAudioCtx();
-            for (let i = 0; i < 3; i++) {
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.type = 'square';
-                osc.frequency.value = 880;
-                gain.gain.setValueAtTime(0.2, ctx.currentTime + i * 0.3);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.2);
-                osc.start(ctx.currentTime + i * 0.3);
-                osc.stop(ctx.currentTime + i * 0.3 + 0.2);
-            }
-        } catch (e) {}
-    }
-}
-
-function startAlarmRepeat() {
-    // Keep alarming every 5 seconds until confirmed
-    vibrate(500);
-    playAlarm();
-    alarmRepeater = setInterval(() => {
-        vibrate(500);
-        playAlarm();
-    }, 5000);
-    showAlarmConfirmation();
-}
-
-function showAlarmConfirmation() {
-    const existing = document.getElementById('alarmOverlay');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'alarmOverlay';
-    overlay.className = 'celebration-overlay';
-    overlay.innerHTML = `
-        <div class="celebration-content" style="padding:36px 28px;">
-            <div class="celebration-emoji">⏰</div>
-            <h2>Time's Up!</h2>
-            <p style="margin-bottom:12px;">${timerLabel || 'Your timer'} is done</p>
-            <button class="btn btn-danger squishy" style="font-size:18px;padding:18px 36px;" onclick="handleClick(); confirmAlarm()">
-                🔔 STOP ALARM
-            </button>
-        </div>`;
-    document.body.appendChild(overlay);
-}
-
-function confirmAlarm() {
-    if (alarmRepeater) {
-        clearInterval(alarmRepeater);
-        alarmRepeater = null;
-    }
-    const overlay = document.getElementById('alarmOverlay');
-    if (overlay) overlay.remove();
-    pauseTimer();
-    showToast('Alarm stopped');
-}
 
 // ==================== HISTORY VIEW ====================
 
