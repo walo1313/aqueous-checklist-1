@@ -427,6 +427,7 @@ function switchView(view) {
     else if (view === 'share') navItems[3].classList.add('active');
     else if (view === 'settings') { window.history.pushState({ view: 'settings' }, ''); }
     else if (view === 'history') navItems[1].classList.add('active');
+    else if (view === 'logDetail') navItems[2].classList.add('active');
 
     renderCurrentView();
 }
@@ -453,6 +454,9 @@ function renderCurrentView() {
     } else if (currentView === 'history') {
         fab.style.display = 'none';
         renderHistory(container);
+    } else if (currentView === 'logDetail') {
+        fab.style.display = 'none';
+        renderLogDetail(container);
     }
 }
 
@@ -1969,6 +1973,8 @@ function copyToClipboard(text) {
 
 // ==================== LOGS VIEW ====================
 
+let logDetailIngredient = null;
+
 function renderLogs(container) {
     if (activityLog.length === 0) {
         container.innerHTML = `
@@ -1980,80 +1986,144 @@ function renderLogs(container) {
         return;
     }
 
-    // Collect filter options
-    const allIngredients = new Set();
-    const allStations = new Set();
+    // Build unique ingredient map
+    const ingredientMap = {};
     activityLog.forEach(entry => {
-        if (entry.data && entry.data.ingredient) allIngredients.add(entry.data.ingredient);
-        if (entry.data && entry.data.station) allStations.add(entry.data.station);
+        if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
+        const d = entry.data;
+        const key = d.ingredient;
+        if (!ingredientMap[key]) {
+            ingredientMap[key] = { name: key, station: d.station || '', count: 0, bestSecPerUnit: Infinity, lastTimestamp: entry.timestamp };
+        }
+        const m = ingredientMap[key];
+        m.count++;
+        if (d.secPerUnit > 0 && d.secPerUnit < m.bestSecPerUnit) m.bestSecPerUnit = d.secPerUnit;
+        if (entry.timestamp > m.lastTimestamp) { m.lastTimestamp = entry.timestamp; m.station = d.station || m.station; }
+    });
+
+    const ingredients = Object.values(ingredientMap).sort((a, b) => b.lastTimestamp.localeCompare(a.lastTimestamp));
+
+    if (ingredients.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📝</div>
+                <p>No prep logs yet</p>
+                <p class="empty-sub">Complete tasks with timers to build your history</p>
+            </div>`;
+        return;
+    }
+
+    let html = `
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;padding:0 4px 10px;letter-spacing:0.3px;">${ingredients.length} ingredient${ingredients.length !== 1 ? 's' : ''} tracked</div>`;
+
+    ingredients.forEach(ing => {
+        const bestStr = ing.bestSecPerUnit < Infinity ? formatEstimate(ing.bestSecPerUnit) + '/unit' : '—';
+        const escapedName = ing.name.replace(/'/g, "\\'");
+        html += `
+        <button class="log-ingredient-card" onclick="handleClick(); openLogDetail('${escapedName}')">
+            <div class="log-ing-top">
+                <span class="log-ing-name">${ing.name}</span>
+                <span class="log-ing-count">${ing.count} log${ing.count !== 1 ? 's' : ''}</span>
+            </div>
+            <div class="log-ing-bottom">
+                <span class="log-ing-best">🏆 ${bestStr}</span>
+                <span class="log-ing-station">${ing.station}</span>
+            </div>
+            <svg class="log-ing-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`;
+    });
+
+    container.innerHTML = html;
+}
+
+function openLogDetail(ingredientName) {
+    logDetailIngredient = ingredientName;
+    currentView = 'logDetail';
+    sessionStorage.setItem('aqueous_currentView', 'logDetail');
+    renderCurrentView();
+}
+
+function renderLogDetail(container) {
+    if (!logDetailIngredient) { switchView('logs'); return; }
+
+    const entries = activityLog.filter(e =>
+        e.type === 'task_complete' && e.data && e.data.ingredient === logDetailIngredient && e.data.seconds > 0
+    ).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    // Find best time
+    let bestSecPerUnit = Infinity;
+    entries.forEach(e => {
+        if (e.data.secPerUnit > 0 && e.data.secPerUnit < bestSecPerUnit) bestSecPerUnit = e.data.secPerUnit;
+    });
+
+    const bestStr = bestSecPerUnit < Infinity ? formatEstimate(bestSecPerUnit) + '/unit' : '—';
+    const totalSessions = entries.length;
+    const totalSeconds = entries.reduce((sum, e) => sum + (e.data.seconds || 0), 0);
+
+    // Group entries by day
+    const grouped = {};
+    entries.forEach(entry => {
+        const dateKey = new Date(entry.timestamp).toISOString().split('T')[0];
+        if (!grouped[dateKey]) grouped[dateKey] = [];
+        grouped[dateKey].push(entry);
     });
 
     let html = `
-        <div class="neu-card" style="padding:14px;">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                <select id="logFilterIngredient" class="par-select" style="flex:1;" onchange="filterLogs()">
-                    <option value="">All Ingredients</option>
-                    ${[...allIngredients].sort().map(i => `<option value="${i}">${i}</option>`).join('')}
-                </select>
-                <select id="logFilterStation" class="par-select" style="flex:1;" onchange="filterLogs()">
-                    <option value="">All Stations</option>
-                    ${[...allStations].sort().map(s => `<option value="${s}">${s}</option>`).join('')}
-                </select>
+        <button class="log-back-btn" onclick="handleClick(); switchView('logs')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            Logs
+        </button>
+        <div class="log-detail-header">
+            <div class="log-detail-name">${logDetailIngredient}</div>
+            <div class="log-detail-stats">
+                <div class="log-stat">
+                    <span class="log-stat-value">🏆 ${bestStr}</span>
+                    <span class="log-stat-label">Best Time</span>
+                </div>
+                <div class="log-stat">
+                    <span class="log-stat-value">${totalSessions}</span>
+                    <span class="log-stat-label">Sessions</span>
+                </div>
+                <div class="log-stat">
+                    <span class="log-stat-value">${formatTime(totalSeconds)}</span>
+                    <span class="log-stat-label">Total</span>
+                </div>
             </div>
         </div>`;
 
-    // Find best times per ingredient
-    const bestTimes = {};
-    activityLog.forEach(entry => {
-        if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
-        const key = entry.data.ingredient;
-        const spu = entry.data.secPerUnit || 0;
-        if (spu > 0 && (!bestTimes[key] || spu < bestTimes[key])) bestTimes[key] = spu;
-    });
-
-    // Group by day
-    const grouped = {};
-    activityLog.forEach(entry => {
-        if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
-        const date = new Date(entry.timestamp);
-        const key = date.toISOString().split('T')[0];
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(entry);
-    });
-
     Object.keys(grouped).sort().reverse().forEach(dateKey => {
-        const entries = grouped[dateKey];
+        const dayEntries = grouped[dateKey];
         const dateObj = new Date(dateKey + 'T12:00:00');
         const dateStr = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
         html += `
-        <div class="log-day-card" data-day="${dateKey}">
+        <div class="log-day-card">
             <div class="log-day-header">
                 <span style="font-size:13px;font-weight:700;color:var(--text);">${dateStr}</span>
-                <span style="font-size:11px;color:var(--text-muted);">${entries.length} task${entries.length !== 1 ? 's' : ''}</span>
+                <span style="font-size:11px;color:var(--text-muted);">${dayEntries.length} session${dayEntries.length !== 1 ? 's' : ''}</span>
             </div>`;
 
-        entries.forEach(entry => {
+        dayEntries.forEach(entry => {
             const d = entry.data;
-            const isBest = bestTimes[d.ingredient] && d.secPerUnit <= bestTimes[d.ingredient];
+            const isBest = bestSecPerUnit < Infinity && d.secPerUnit > 0 && d.secPerUnit <= bestSecPerUnit;
             const time = new Date(entry.timestamp);
             const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
             html += `
-            <div class="log-entry ${isBest ? 'log-best' : ''}" data-ingredient="${d.ingredient}" data-station="${d.station || ''}">
+            <div class="log-entry ${isBest ? 'log-best' : ''}">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
-                    <div>
-                        <span style="font-size:13px;font-weight:700;">${d.ingredient}</span>
-                        ${isBest ? '<span style="font-size:10px;color:var(--accent);margin-left:6px;">🏆 Best</span>' : ''}
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:18px;font-weight:800;color:var(--accent);">⏱ ${formatTime(d.seconds)}</span>
+                        ${isBest ? '<span style="font-size:10px;color:var(--accent);">🏆 Best</span>' : ''}
                     </div>
                     <span style="font-size:10px;color:var(--text-muted);">${timeStr}</span>
                 </div>
                 <div style="display:flex;gap:14px;margin-top:4px;font-size:11px;color:var(--text-secondary);">
-                    <span>⏱ ${formatTime(d.seconds)}</span>
                     <span>📦 ${d.quantity} ${d.unit || 'units'}</span>
                     <span>⚡ ${formatEstimate(d.secPerUnit)}/unit</span>
+                    <span>${d.station || ''}</span>
                 </div>
-                <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${d.station || ''} · ${entry.cook || ''}</div>
+                ${entry.cook ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">👨‍🍳 ${entry.cook}</div>` : ''}
             </div>`;
         });
 
@@ -2061,22 +2131,6 @@ function renderLogs(container) {
     });
 
     container.innerHTML = html;
-}
-
-function filterLogs() {
-    const ingFilter = document.getElementById('logFilterIngredient')?.value || '';
-    const stFilter = document.getElementById('logFilterStation')?.value || '';
-
-    document.querySelectorAll('.log-entry').forEach(el => {
-        const matchIng = !ingFilter || el.dataset.ingredient === ingFilter;
-        const matchSt = !stFilter || el.dataset.station === stFilter;
-        el.style.display = (matchIng && matchSt) ? '' : 'none';
-    });
-
-    document.querySelectorAll('.log-day-card').forEach(card => {
-        const visible = card.querySelectorAll('.log-entry:not([style*="display: none"])');
-        card.style.display = visible.length > 0 ? '' : 'none';
-    });
 }
 
 function formatTime(totalSec) {

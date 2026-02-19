@@ -528,6 +528,96 @@
         }
 
         /* ===== LOGS ===== */
+        /* Log Ingredient Cards (main list) */
+        .log-ingredient-card {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 14px 18px;
+            margin-bottom: 10px;
+            background: var(--surface);
+            border: none;
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+            cursor: pointer;
+            text-align: left;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .log-ingredient-card:active {
+            box-shadow: var(--neu-inset);
+            transform: scale(0.97);
+            transition: all 0.08s ease;
+        }
+        .log-ing-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .log-ing-name { font-size: 14px; font-weight: 700; color: var(--text); }
+        .log-ing-count { font-size: 10px; font-weight: 600; color: var(--text-muted); }
+        .log-ing-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .log-ing-best { font-size: 12px; font-weight: 700; color: var(--accent); }
+        .log-ing-station { font-size: 10px; color: var(--text-muted); }
+        .log-ing-chevron {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            opacity: 0.4;
+        }
+
+        /* Log Detail */
+        .log-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            border: none;
+            background: none;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent);
+            cursor: pointer;
+            padding: 0 0 12px;
+            font-family: 'Inter', sans-serif;
+        }
+        .log-back-btn:active { opacity: 0.6; transform: scale(0.97); transition: all 0.08s; }
+        .log-detail-header {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 20px;
+            box-shadow: var(--neu-shadow);
+            margin-bottom: 14px;
+            text-align: center;
+        }
+        .log-detail-name {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 14px;
+        }
+        .log-detail-stats {
+            display: flex;
+            justify-content: space-around;
+            gap: 8px;
+        }
+        .log-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .log-stat-value { font-size: 15px; font-weight: 800; color: var(--accent); }
+        .log-stat-label { font-size: 9px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Log entries (shared by detail) */
         .log-entry {
             padding: 10px 0;
             border-bottom: 1px solid rgba(0,0,0,0.04);
