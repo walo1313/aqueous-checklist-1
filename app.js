@@ -934,8 +934,7 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
 
     const ingName = ing.name;
     const st = station.status[ingredientId];
-    const hasTime = t && t.seconds > 0;
-    const timeStr = hasTime ? formatTime(t.seconds) : null;
+    const timeStr = t ? formatTime(t.seconds) : '0:00';
     const defaultQty = st && st.parLevel ? (parseFloat(st.parLevel) || 1) : 1;
 
     // Pause timer if running
@@ -955,16 +954,12 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
         <div class="modal-content" style="text-align:center;">
             <div class="modal-header">✅ Task Done!</div>
             <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px;">${ingName}</p>
-            ${hasTime ? `
-                <p style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">You took</p>
-                <p style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:12px;">${timeStr}</p>
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label style="font-size:11px;font-weight:600;color:var(--text-secondary);">Quantity prepped</label>
-                    <input type="number" id="completeQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;">
-                </div>
-            ` : `
-                <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">No timer was running</p>
-            `}
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">You took</p>
+            <p style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:12px;">${timeStr}</p>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label style="font-size:11px;font-weight:600;color:var(--text-secondary);">Quantity prepped</label>
+                <input type="number" id="completeQty" class="form-control" value="${defaultQty}" min="0.1" step="0.5" style="text-align:center;font-size:18px;">
+            </div>
             <div class="btn-group">
                 <button class="btn btn-secondary squishy" onclick="handleClick(); cancelTaskComplete(${stationId}, ${ingredientId})">Continue</button>
                 <button class="btn btn-primary squishy" onclick="handleClick(); confirmTaskComplete(${stationId}, ${ingredientId})">Done ✅</button>
