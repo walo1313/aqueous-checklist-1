@@ -436,7 +436,7 @@ function renderCurrentView() {
     const fab = document.getElementById('fab');
 
     if (currentView === 'home') {
-        fab.style.display = 'block';
+        fab.style.display = 'none';
         renderHome(container);
     } else if (currentView === 'summary') {
         fab.style.display = 'none';
@@ -464,7 +464,7 @@ function renderHome(container) {
             <div class="empty-state">
                 <div class="empty-state-icon">📋</div>
                 <p>No stations created</p>
-                <p class="empty-sub">Tap the + button to add a station</p>
+                <p class="empty-sub">Go to Settings ⚙️ to add a station</p>
             </div>`;
         return;
     }
@@ -2232,6 +2232,17 @@ function renderSettings(container) {
     });
 
     let html = `
+        <div class="settings-group">
+            <div class="settings-group-title">Stations</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">${stations.length} station${stations.length !== 1 ? 's' : ''}</span>
+                    <span class="setting-desc">Manage your kitchen stations</span>
+                </div>
+                <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); showNewStationModal()">+ Add</button>
+            </div>
+        </div>
+
         <div class="settings-group">
             <div class="settings-group-title">Profile</div>
             <div class="setting-row">
