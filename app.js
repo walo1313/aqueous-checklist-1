@@ -26,13 +26,14 @@ let taskTimer = { active: false, stationId: null, ingredientId: null, ingName: '
 
 // Mascot definitions — type: 'video' for mp4, 'image' for png/gif
 const MASCOTS = {
-    mascot:    { file: 'mascot.png',            name: 'Chef Buddy',   personality: 'The Original',  emoji: '👨‍🍳', type: 'image' },
-    explosive: { file: 'mascot-explosive.mp4',  name: 'Fuego',        personality: 'The Explosive', emoji: '🔥', type: 'video' },
-    chill:     { file: 'mascot-rasta.mp4',       name: 'Rasta',        personality: 'The Chill One', emoji: '🌿', type: 'video' },
-    sad:       { file: 'mascot-sad.png',        name: 'Onion',        personality: 'The Sad One',   emoji: '😢', type: 'image' },
-    excited:   { file: 'mascot-excited.mp4',     name: 'Sparky',       personality: 'The Hyper One', emoji: '🎉', type: 'video' },
-    sexy:      { file: 'mascot-sexy.png',       name: 'Smooth',       personality: 'The Flirty One', emoji: '😏', type: 'image' },
-    asian:     { file: 'mascot-asian.png',      name: 'Umami',        personality: 'The Wise One',  emoji: '🍜', type: 'image' }
+    mascot:    { file: 'mascot.png',            name: 'Chef Buddy',   personality: 'The Original',   emoji: '👨‍🍳', type: 'image' },
+    explosive: { file: 'mascot-explosive.mp4',  name: 'Fuego',        personality: 'The Explosive',  emoji: '🔥', type: 'video' },
+    chill:     { file: 'mascot-rasta.mp4',      name: 'Rasta',        personality: 'The Chill One',  emoji: '🌿', type: 'video' },
+    sad:       { file: 'mascot-sad.mp4',        name: 'Onion',        personality: 'The Sad One',    emoji: '😢', type: 'video' },
+    excited:   { file: 'mascot-excited.mp4',    name: 'Sparky',       personality: 'The Hyper One',  emoji: '🎉', type: 'video' },
+    sexy:      { file: 'mascot-sexy.mp4',       name: 'Smooth',       personality: 'The Flirty One', emoji: '😏', type: 'video' },
+    wise:      { file: 'mascot-wise.mp4',       name: 'Umami',        personality: 'The Wise One',   emoji: '🍜', type: 'video' },
+    mexican:   { file: 'mascot-mexican.mp4',    name: 'El Jefe',      personality: 'The Arrogant',   emoji: '🇲🇽', type: 'video' }
 };
 
 // Debounce utility
