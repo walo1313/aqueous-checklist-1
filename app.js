@@ -780,23 +780,45 @@ async function requestNotificationPermission() {
     }
 }
 
+let activeNotification = null;
+
 function updateTimerNotification() {
     if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const running = Object.values(taskTimers).filter(t => t.running);
-    if (running.length === 0) return;
+
+    if (running.length === 0) {
+        // Close notification when no timers running
+        if (activeNotification) { activeNotification.close(); activeNotification = null; }
+        return;
+    }
 
     const lines = running.map(t => `⏱ ${t.ingName}: ${formatTime(t.seconds)}`).join('\n');
     const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
 
-    // Use a single notification that updates
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'TIMER_UPDATE',
+    // Close old notification and create new one (forces update on lock screen)
+    if (activeNotification) activeNotification.close();
+
+    try {
+        activeNotification = new Notification(`${m.emoji} Aqueous Timer`, {
             body: lines,
-            title: `${m.emoji} Aqueous Timer`,
-            tag: 'aqueous-timer'
+            tag: 'aqueous-timer',
+            renotify: true,
+            silent: true,
+            icon: 'icon-192.png',
+            requireInteraction: true
         });
+        activeNotification.onclick = () => { window.focus(); activeNotification.close(); };
+    } catch (e) {
+        // Fallback to SW if direct notification fails
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'TIMER_UPDATE',
+                body: lines,
+                title: `${m.emoji} Aqueous Timer`,
+                tag: 'aqueous-timer'
+            });
+        }
     }
 }
 
@@ -826,8 +848,8 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
             taskTimers[timerKey].seconds++;
             const clock = document.getElementById(`clock_${timerKey}`);
             if (clock) clock.textContent = formatTime(taskTimers[timerKey].seconds);
-            // Update notification every 5 seconds
-            if (taskTimers[timerKey].seconds % 5 === 0) updateTimerNotification();
+            // Update notification every 3 seconds
+            if (taskTimers[timerKey].seconds % 3 === 0) updateTimerNotification();
         }, 1000)
     };
 
@@ -858,7 +880,7 @@ function resumeTaskTimer(timerKey) {
         t.seconds++;
         const clock = document.getElementById(`clock_${timerKey}`);
         if (clock) clock.textContent = formatTime(t.seconds);
-        if (t.seconds % 5 === 0) updateTimerNotification();
+        if (t.seconds % 3 === 0) updateTimerNotification();
     }, 1000);
     checkAndManageWakeLock();
     const scrollY = window.scrollY;
