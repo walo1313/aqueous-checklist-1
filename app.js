@@ -520,9 +520,13 @@ function renderIngredients(station) {
 
         const unitOptions = ['quart','pint','cup','oz','lb','each','batch'];
 
+        const escapedIngName = ing.name.replace(/'/g, "\\'");
         html += `
         <div class="ingredient ${st.low ? 'low' : ''}">
-            <div class="ingredient-header">
+            <div class="ingredient-header"
+                 ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
+                 ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
+                 oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
                 <label class="ingredient-label">
                     <input type="checkbox" class="neu-check"
                         ${st.low ? 'checked' : ''}
@@ -568,6 +572,61 @@ function renderIngredients(station) {
         </div>`;
     });
     return html;
+}
+
+let longPressTimer = null;
+
+function startLongPress(event, stationId, ingId, ingName) {
+    longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        if (navigator.vibrate) navigator.vibrate(30);
+        showIngredientContextMenu(event, stationId, ingId, ingName);
+    }, 500);
+}
+
+function cancelLongPress() {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
+
+function showIngredientContextMenu(event, stationId, ingId, ingName) {
+    event.preventDefault();
+    const existing = document.getElementById('ingredientContextMenu');
+    if (existing) existing.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'ingredientContextMenu';
+    menu.className = 'context-menu-overlay';
+    menu.innerHTML = `
+        <div class="context-menu">
+            <div class="context-menu-title">${ingName}</div>
+            <button class="context-menu-item delete" onclick="deleteIngredientFromHome(${stationId}, ${ingId})">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                Delete
+            </button>
+        </div>`;
+    document.body.appendChild(menu);
+    menu.onclick = function(e) { if (e.target === menu) menu.remove(); };
+}
+
+function deleteIngredientFromHome(stationId, ingId) {
+    const menu = document.getElementById('ingredientContextMenu');
+    if (menu) menu.remove();
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const ing = station.ingredients.find(i => i.id === ingId);
+    const name = ing ? ing.name : 'ingredient';
+
+    station.ingredients = station.ingredients.filter(i => i.id !== ingId);
+    delete station.status[ingId];
+    if (taskTimers[`${stationId}_${ingId}`]) {
+        clearInterval(taskTimers[`${stationId}_${ingId}`].interval);
+        delete taskTimers[`${stationId}_${ingId}`];
+    }
+
+    saveData(true);
+    rerenderStationBody(stationId);
+    showToast(`${name} deleted`);
 }
 
 function toggleStation(stationId) {
