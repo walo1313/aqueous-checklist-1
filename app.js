@@ -4,7 +4,7 @@ let stations = [];
 let editingStationId = null;
 let currentView = 'home';
 let history = [];
-let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot' };
+let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit: N, count: N } }
 
 // Timer state
@@ -765,6 +765,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function checkAndManageWakeLock() {
+    if (!settings.wakeLock) { releaseWakeLock(); return; }
     const hasRunning = Object.values(taskTimers).some(t => t.running);
     if (hasRunning) {
         requestWakeLock();
@@ -780,6 +781,7 @@ async function requestNotificationPermission() {
 }
 
 function updateTimerNotification() {
+    if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const running = Object.values(taskTimers).filter(t => t.running);
     if (running.length === 0) return;
@@ -2095,6 +2097,26 @@ function renderSettings(container) {
                 </div>
                 <button class="neu-toggle ${settings.sound ? 'active' : ''}"
                     onclick="toggleSetting('sound', this)"></button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Timer</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Keep Screen On</span>
+                    <span class="setting-desc">Screen stays awake while timers run</span>
+                </div>
+                <button class="neu-toggle ${settings.wakeLock ? 'active' : ''}"
+                    onclick="toggleSetting('wakeLock', this); checkAndManageWakeLock()"></button>
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Lock Screen Timer</span>
+                    <span class="setting-desc">Show timer notifications when phone is locked</span>
+                </div>
+                <button class="neu-toggle ${settings.timerNotifications ? 'active' : ''}"
+                    onclick="toggleSetting('timerNotifications', this)"></button>
             </div>
         </div>
 
