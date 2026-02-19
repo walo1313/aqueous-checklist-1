@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v12';
+const CACHE_NAME = 'aqueous-v13';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -48,4 +48,33 @@ self.addEventListener('activate', event => {
     )
   );
   self.clients.claim();
+});
+
+// Handle timer notification updates from app
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'TIMER_UPDATE') {
+    self.registration.showNotification(event.data.title, {
+      body: event.data.body,
+      tag: event.data.tag,
+      renotify: true,
+      silent: true,
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      requireInteraction: false
+    });
+  }
+});
+
+// Open app when notification is tapped
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(windowClients => {
+      if (windowClients.length > 0) {
+        windowClients[0].focus();
+      } else {
+        clients.openWindow('./');
+      }
+    })
+  );
 });

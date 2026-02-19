@@ -25,6 +25,8 @@ const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 let taskTimers = {};
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
+// Wake Lock to keep screen on during timers
+let wakeLock = null;
 
 // Mascot definitions — type: 'video' for mp4, 'image' for png/gif
 const MASCOTS = {
@@ -736,6 +738,66 @@ function toggleCompleted(stationId, ingredientId) {
     }
 }
 
+// ==================== SCREEN WAKE LOCK & NOTIFICATIONS ====================
+
+async function requestWakeLock() {
+    if (wakeLock) return; // already active
+    try {
+        if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; });
+        }
+    } catch (e) { /* not supported or denied */ }
+}
+
+function releaseWakeLock() {
+    if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+    }
+}
+
+// Re-acquire wake lock when page becomes visible again (phone unlocked)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && Object.values(taskTimers).some(t => t.running)) {
+        requestWakeLock();
+    }
+});
+
+function checkAndManageWakeLock() {
+    const hasRunning = Object.values(taskTimers).some(t => t.running);
+    if (hasRunning) {
+        requestWakeLock();
+    } else {
+        releaseWakeLock();
+    }
+}
+
+async function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+    }
+}
+
+function updateTimerNotification() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const running = Object.values(taskTimers).filter(t => t.running);
+    if (running.length === 0) return;
+
+    const lines = running.map(t => `⏱ ${t.ingName}: ${formatTime(t.seconds)}`).join('\n');
+    const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
+
+    // Use a single notification that updates
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'TIMER_UPDATE',
+            body: lines,
+            title: `${m.emoji} Aqueous Timer`,
+            tag: 'aqueous-timer'
+        });
+    }
+}
+
 // ==================== MULTI-TASK TIMER SYSTEM ====================
 
 function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
@@ -749,18 +811,25 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
         return;
     }
 
+    // Request notification permission on first timer
+    requestNotificationPermission();
+
     // Start new timer
     taskTimers[timerKey] = {
         stationId, ingredientId, ingName,
         seconds: 0,
         running: true,
+        startedAt: Date.now(),
         interval: setInterval(() => {
             taskTimers[timerKey].seconds++;
             const clock = document.getElementById(`clock_${timerKey}`);
             if (clock) clock.textContent = formatTime(taskTimers[timerKey].seconds);
+            // Update notification every 5 seconds
+            if (taskTimers[timerKey].seconds % 5 === 0) updateTimerNotification();
         }, 1000)
     };
 
+    checkAndManageWakeLock();
     showToast(`⏱ Timing: ${ingName}`);
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
@@ -773,6 +842,7 @@ function pauseTaskTimer(timerKey) {
     if (t.interval) clearInterval(t.interval);
     t.interval = null;
     t.running = false;
+    checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
@@ -786,7 +856,9 @@ function resumeTaskTimer(timerKey) {
         t.seconds++;
         const clock = document.getElementById(`clock_${timerKey}`);
         if (clock) clock.textContent = formatTime(t.seconds);
+        if (t.seconds % 5 === 0) updateTimerNotification();
     }, 1000);
+    checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
@@ -797,6 +869,7 @@ function resetTaskTimer(timerKey) {
     if (!t) return;
     if (t.interval) clearInterval(t.interval);
     delete taskTimers[timerKey];
+    checkAndManageWakeLock();
     const scrollY = window.scrollY;
     renderSummary(document.getElementById('mainContent'));
     window.scrollTo(0, scrollY);
