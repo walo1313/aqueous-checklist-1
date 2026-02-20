@@ -506,12 +506,7 @@ function renderHome(container) {
                     ${lowCount > 0 ? `<span class="count-badge">${lowCount}</span>` : ''}
                 </div>
                 <div class="station-header-right">
-                    <button class="btn-icon" onclick="event.stopPropagation(); shareStation(${station.id})">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                    </button>
-                    <span class="chevron ${isExpanded ? 'expanded' : ''}">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    </span>
+                    <span class="expand-toggle" id="expandToggle-${station.id}">${isExpanded ? '−' : '+'}</span>
                 </div>
             </div>
             <div class="station-body ${isExpanded ? '' : 'collapsed'}" id="body-${station.id}">
@@ -712,7 +707,11 @@ function toggleStation(stationId) {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
     station.expanded = station.expanded === false ? true : false;
-    renderCurrentView();
+    const body = document.getElementById(`body-${stationId}`);
+    const toggle = document.getElementById(`expandToggle-${stationId}`);
+    if (body) body.classList.toggle('collapsed', !station.expanded);
+    if (toggle) toggle.textContent = station.expanded ? '−' : '+';
+    saveData();
 }
 
 // ==================== INGREDIENT ACTIONS ====================
