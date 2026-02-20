@@ -346,10 +346,6 @@ function saveSettings() {
 
 function saveData(silent) {
     localStorage.setItem('aqueous_stations', JSON.stringify(stations));
-    // Invalidate caches for views that depend on station data
-    delete viewCache['home'];
-    delete viewCache['summary'];
-    delete viewCache['share'];
     if (!silent) showToast('Saved');
 }
 
@@ -416,12 +412,6 @@ function resolveSwipeView(v) {
 }
 
 function renderViewInto(panel, view) {
-    // Use cache for adjacent panels during swipe if available
-    const cached = viewCache[view];
-    if (cached && !ALWAYS_FRESH.includes(view)) {
-        panel.innerHTML = cached.html;
-        return;
-    }
     panel.innerHTML = '';
     const saved = currentView;
     currentView = view;
@@ -432,19 +422,15 @@ function renderViewInto(panel, view) {
     currentView = saved;
 }
 
-// View state cache: stores DOM + scroll for instant restore
-const viewCache = {};
+// Scroll position cache per view
+const viewScrollCache = {};
+const ALWAYS_FRESH = ['summary'];
 
-function saveViewState() {
-    const container = document.getElementById('mainContent');
-    if (!container || !currentView) return;
-    viewCache[currentView] = {
-        html: container.innerHTML,
-        scrollY: window.scrollY
-    };
+function saveScrollPosition() {
+    if (currentView) viewScrollCache[currentView] = window.scrollY;
 }
 
-function switchView(view) {
+function switchView(view, skipRender) {
     // Toggle: if tapping mascot while already in settings, go back
     if (view === 'settings' && currentView === 'settings') {
         skipPopstate = true;
@@ -452,8 +438,8 @@ function switchView(view) {
         view = previousView || 'home';
     }
 
-    // Save current view state before leaving
-    saveViewState();
+    // Save scroll before leaving
+    saveScrollPosition();
 
     // Save previous view (but not settings itself)
     if (currentView !== 'settings') {
@@ -473,24 +459,13 @@ function switchView(view) {
     else if (view === 'history') navItems[1].classList.add('active');
     else if (view === 'logDetail') navItems[2].classList.add('active');
 
-    renderCurrentView();
+    if (!skipRender) renderCurrentView();
 }
-
-// Views that should always re-render (they have live data like timers)
-const ALWAYS_FRESH = ['summary'];
 
 function renderCurrentView() {
     const container = document.getElementById('mainContent');
     const fab = document.getElementById('fab');
     fab.style.display = 'none';
-
-    // Try restoring from cache (skip for views that need fresh data)
-    const cached = viewCache[currentView];
-    if (cached && !ALWAYS_FRESH.includes(currentView)) {
-        container.innerHTML = cached.html;
-        window.scrollTo(0, cached.scrollY);
-        return;
-    }
 
     if (currentView === 'home') renderHome(container);
     else if (currentView === 'summary') renderSummary(container);
@@ -500,8 +475,9 @@ function renderCurrentView() {
     else if (currentView === 'history') renderHistory(container);
     else if (currentView === 'logDetail') renderLogDetail(container);
 
-    // For fresh renders, scroll to top (except if coming from cache)
-    if (!cached) window.scrollTo(0, 0);
+    // Restore saved scroll position, or scroll to top
+    const savedScroll = viewScrollCache[currentView] || 0;
+    window.scrollTo(0, savedScroll);
 }
 
 // ==================== HOME VIEW ====================
@@ -1598,8 +1574,6 @@ function logActivity(type, data) {
     // Keep last 500 entries
     if (activityLog.length > 500) activityLog = activityLog.slice(-500);
     localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
-    delete viewCache['logs'];
-    delete viewCache['logDetail'];
 }
 
 function saveActivityLog() {
@@ -2739,6 +2713,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const track = document.getElementById('swipeTrack');
     const prevPanel = document.getElementById('swipePrev');
     const nextPanel = document.getElementById('swipeNext');
+    const mainContent = document.getElementById('mainContent');
     let swStartX = 0, swStartY = 0, swDx = 0;
     let swSwiping = false, swDirectionLocked = false, swIsHorizontal = false;
     let swPrevView = null, swNextView = null, swViewportW = 0;
@@ -2808,29 +2783,39 @@ document.addEventListener('DOMContentLoaded', () => {
         track.classList.add('snapping');
 
         if (shouldSwitch && swDx > 0 && swPrevView) {
-            // Snap to prev (translate to 0%)
             track.style.transform = 'translateX(0%)';
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
+                // Swap prev panel content into main — no re-render
+                saveScrollPosition();
+                mainContent.innerHTML = prevPanel.innerHTML;
+                prevPanel.innerHTML = '';
+                nextPanel.innerHTML = '';
                 track.style.transform = 'translateX(-33.333%)';
-                switchView(swPrevView);
+                switchView(swPrevView, true); // skip render
+                window.scrollTo(0, viewScrollCache[swPrevView] || 0);
             });
         } else if (shouldSwitch && swDx < 0 && swNextView) {
-            // Snap to next (translate to -66.666%)
             track.style.transform = 'translateX(-66.666%)';
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
+                saveScrollPosition();
+                mainContent.innerHTML = nextPanel.innerHTML;
+                prevPanel.innerHTML = '';
+                nextPanel.innerHTML = '';
                 track.style.transform = 'translateX(-33.333%)';
-                switchView(swNextView);
+                switchView(swNextView, true);
+                window.scrollTo(0, viewScrollCache[swNextView] || 0);
             });
         } else {
-            // Snap back
             track.style.transform = 'translateX(-33.333%)';
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
+                prevPanel.innerHTML = '';
+                nextPanel.innerHTML = '';
             });
         }
 
