@@ -768,7 +768,7 @@ function toggleStation(stationId) {
     const toggle = document.getElementById(`expandToggle-${stationId}`);
     if (body) body.classList.toggle('collapsed', !station.expanded);
     if (toggle) toggle.textContent = station.expanded ? '−' : '+';
-    saveData();
+    saveData(true);
 }
 
 // ==================== STATION RENAME (long-press) ====================
