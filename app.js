@@ -346,6 +346,10 @@ function saveSettings() {
 
 function saveData(silent) {
     localStorage.setItem('aqueous_stations', JSON.stringify(stations));
+    // Invalidate caches for views that depend on station data
+    delete viewCache['home'];
+    delete viewCache['summary'];
+    delete viewCache['share'];
     if (!silent) showToast('Saved');
 }
 
@@ -412,25 +416,44 @@ function resolveSwipeView(v) {
 }
 
 function renderViewInto(panel, view) {
-    const tempContainer = panel;
-    tempContainer.innerHTML = '';
+    // Use cache for adjacent panels during swipe if available
+    const cached = viewCache[view];
+    if (cached && !ALWAYS_FRESH.includes(view)) {
+        panel.innerHTML = cached.html;
+        return;
+    }
+    panel.innerHTML = '';
     const saved = currentView;
     currentView = view;
-    if (view === 'home') renderHome(tempContainer);
-    else if (view === 'summary') renderSummary(tempContainer);
-    else if (view === 'logs') renderLogs(tempContainer);
-    else if (view === 'share') renderShare(tempContainer);
+    if (view === 'home') renderHome(panel);
+    else if (view === 'summary') renderSummary(panel);
+    else if (view === 'logs') renderLogs(panel);
+    else if (view === 'share') renderShare(panel);
     currentView = saved;
+}
+
+// View state cache: stores DOM + scroll for instant restore
+const viewCache = {};
+
+function saveViewState() {
+    const container = document.getElementById('mainContent');
+    if (!container || !currentView) return;
+    viewCache[currentView] = {
+        html: container.innerHTML,
+        scrollY: window.scrollY
+    };
 }
 
 function switchView(view) {
     // Toggle: if tapping mascot while already in settings, go back
     if (view === 'settings' && currentView === 'settings') {
-        // Go back to previous view and pop the settings history entry
         skipPopstate = true;
         window.history.back();
         view = previousView || 'home';
     }
+
+    // Save current view state before leaving
+    saveViewState();
 
     // Save previous view (but not settings itself)
     if (currentView !== 'settings') {
@@ -453,32 +476,32 @@ function switchView(view) {
     renderCurrentView();
 }
 
+// Views that should always re-render (they have live data like timers)
+const ALWAYS_FRESH = ['summary'];
+
 function renderCurrentView() {
     const container = document.getElementById('mainContent');
     const fab = document.getElementById('fab');
+    fab.style.display = 'none';
 
-    if (currentView === 'home') {
-        fab.style.display = 'none';
-        renderHome(container);
-    } else if (currentView === 'summary') {
-        fab.style.display = 'none';
-        renderSummary(container);
-    } else if (currentView === 'logs') {
-        fab.style.display = 'none';
-        renderLogs(container);
-    } else if (currentView === 'share') {
-        fab.style.display = 'none';
-        renderShare(container);
-    } else if (currentView === 'settings') {
-        fab.style.display = 'none';
-        renderSettings(container);
-    } else if (currentView === 'history') {
-        fab.style.display = 'none';
-        renderHistory(container);
-    } else if (currentView === 'logDetail') {
-        fab.style.display = 'none';
-        renderLogDetail(container);
+    // Try restoring from cache (skip for views that need fresh data)
+    const cached = viewCache[currentView];
+    if (cached && !ALWAYS_FRESH.includes(currentView)) {
+        container.innerHTML = cached.html;
+        window.scrollTo(0, cached.scrollY);
+        return;
     }
+
+    if (currentView === 'home') renderHome(container);
+    else if (currentView === 'summary') renderSummary(container);
+    else if (currentView === 'logs') renderLogs(container);
+    else if (currentView === 'share') renderShare(container);
+    else if (currentView === 'settings') renderSettings(container);
+    else if (currentView === 'history') renderHistory(container);
+    else if (currentView === 'logDetail') renderLogDetail(container);
+
+    // For fresh renders, scroll to top (except if coming from cache)
+    if (!cached) window.scrollTo(0, 0);
 }
 
 // ==================== HOME VIEW ====================
@@ -1575,6 +1598,8 @@ function logActivity(type, data) {
     // Keep last 500 entries
     if (activityLog.length > 500) activityLog = activityLog.slice(-500);
     localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
+    delete viewCache['logs'];
+    delete viewCache['logDetail'];
 }
 
 function saveActivityLog() {
