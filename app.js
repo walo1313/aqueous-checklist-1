@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 54;
+const APP_BUILD = 55;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -31,6 +31,7 @@ let blockTimers = {}; // { "high": { seconds, running, interval }, "_all": { ...
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 // Wake Lock to keep screen on during timers
 let wakeLock = null;
+let historySelectedDate = null;
 
 // Mascot definitions — type: 'video' for mp4, 'image' for png/gif
 const MASCOTS = {
@@ -202,7 +203,8 @@ function initApp() {
     if (currentView === 'home') navItems[0].classList.add('active');
     else if (currentView === 'summary') navItems[1].classList.add('active');
     else if (currentView === 'logs') navItems[2].classList.add('active');
-    else if (currentView === 'share') navItems[3].classList.add('active');
+    else if (currentView === 'history') navItems[3].classList.add('active');
+    else if (currentView === 'share') navItems[4].classList.add('active');
 
     // Position track instantly (no animation) and render initial panel
     slideTrackTo(currentView, false);
@@ -416,11 +418,11 @@ function cleanOldHistory() {
 let previousView = 'home';
 let skipPopstate = false;
 
-const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'share'];
-const SWIPE_PANELS = { home: 'panelHome', summary: 'panelSummary', logs: 'panelLogs', share: 'panelShare' };
-const OVERLAY_VIEWS = ['settings', 'history', 'logDetail'];
+const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'history', 'share'];
+const SWIPE_PANELS = { home: 'panelHome', summary: 'panelSummary', logs: 'panelLogs', history: 'panelHistory', share: 'panelShare' };
+const OVERLAY_VIEWS = ['settings', 'logDetail'];
 // Track which panels have been rendered at least once
-const panelDirty = { home: true, summary: true, logs: true, share: true };
+const panelDirty = { home: true, summary: true, logs: true, history: true, share: true };
 
 function resolveSwipeView(v) {
     if (v === 'history') return 'summary';
@@ -442,7 +444,7 @@ function slideTrackTo(view, animate) {
         const onEnd = () => { track.removeEventListener('transitionend', onEnd); track.classList.remove('snapping'); };
         track.addEventListener('transitionend', onEnd);
     }
-    track.style.transform = `translateX(-${idx * 25}%)`;
+    track.style.transform = `translateX(-${idx * 20}%)`;
 }
 
 function showOverlay(show) {
@@ -489,6 +491,7 @@ function markAllPanelsDirty() {
     panelDirty.home = true;
     panelDirty.summary = true;
     panelDirty.logs = true;
+    panelDirty.history = true;
     panelDirty.share = true;
 }
 
@@ -520,17 +523,16 @@ function switchView(view, skipSlide) {
     if (view === 'home') navItems[0].classList.add('active');
     else if (view === 'summary') navItems[1].classList.add('active');
     else if (view === 'logs') navItems[2].classList.add('active');
-    else if (view === 'share') navItems[3].classList.add('active');
+    else if (view === 'history') navItems[3].classList.add('active');
+    else if (view === 'share') navItems[4].classList.add('active');
     else if (view === 'settings') { window.history.pushState({ view: 'settings' }, ''); }
-    else if (view === 'history') navItems[1].classList.add('active');
     else if (view === 'logDetail') navItems[2].classList.add('active');
 
-    // Overlay views (settings, history, logDetail)
+    // Overlay views (settings, logDetail)
     if (OVERLAY_VIEWS.includes(view)) {
         const overlay = document.getElementById('panelOverlay');
         showOverlay(true);
         if (view === 'settings') renderSettings(overlay);
-        else if (view === 'history') renderHistory(overlay);
         else if (view === 'logDetail') renderLogDetail(overlay);
         // Prepend pull bar for drag-to-dismiss
         const bar = document.createElement('div');
@@ -558,6 +560,7 @@ function renderPanel(view) {
     if (view === 'home') renderHome(panel);
     else if (view === 'summary') renderSummary(panel);
     else if (view === 'logs') renderLogs(panel);
+    else if (view === 'history') renderHistoryTab(panel);
     else if (view === 'share') renderShare(panel);
     panel.scrollTop = scrollBefore;
 }
@@ -566,7 +569,6 @@ function renderCurrentView() {
     if (OVERLAY_VIEWS.includes(currentView)) {
         const overlay = document.getElementById('panelOverlay');
         if (currentView === 'settings') renderSettings(overlay);
-        else if (currentView === 'history') renderHistory(overlay);
         else if (currentView === 'logDetail') renderLogDetail(overlay);
     } else {
         panelDirty[currentView] = true;
@@ -1116,11 +1118,7 @@ function renderSummary(container) {
             <div class="progress-bar-container">
                 <div class="progress-bar" style="width: ${progress}%"></div>
             </div>
-        </div>
-        <button class="btn btn-link" onclick="switchView('history')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            View 7-Day History
-        </button>`;
+        </div>`;
 
     if (highTasks.length > 0) {
         html += renderSummaryGroup('Before Service', 'high', highTasks);
@@ -1271,6 +1269,8 @@ function toggleCompleted(stationId, ingredientId) {
                 ingredient: station.ingredients.find(i => i.id === ingredientId)?.name || '',
                 station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
             });
+            const pLevel = station.status[ingredientId].priority || 'none';
+            checkBlockCompletion(pLevel);
             refreshSummaryPanel();
         }
     } else {
@@ -1578,6 +1578,7 @@ function toggleBlockTimer(level) {
     const estSeconds = getBlockEstimateSeconds(level);
     blockTimers[level] = {
         seconds: estSeconds,
+        goalSeconds: estSeconds,
         running: true,
         countdown: true,
         interval: setInterval(() => {
@@ -1633,6 +1634,45 @@ function resetBlockTimer(level) {
     delete blockTimers[level];
     updateTimerNotification();
     checkAndManageWakeLock();
+    refreshSummaryPanel();
+}
+
+function checkBlockCompletion(level) {
+    const bt = blockTimers[level];
+    if (!bt) return;
+    let allDone = true;
+    let taskCount = 0;
+    stations.forEach(station => {
+        station.ingredients.forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st) return;
+            if ((st.priority || 'none') !== level) return;
+            taskCount++;
+            if (!st.completed) allDone = false;
+        });
+    });
+    if (!allDone || taskCount === 0) return;
+
+    const seconds = bt.seconds;
+    const goal = bt.goalSeconds || 0;
+    let status;
+    if (seconds < -30) status = 'behind';
+    else if (seconds > 30) status = 'record';
+    else status = 'ontime';
+
+    const labels = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority', none: 'No Priority Set' };
+    const label = labels[level] || level;
+
+    if (bt.interval) clearInterval(bt.interval);
+    delete blockTimers[level];
+    updateTimerNotification();
+    checkAndManageWakeLock();
+
+    logActivity('block_complete', { level, label, seconds, goal, status });
+
+    const msgs = { behind: 'Behind', ontime: 'On Time', record: 'New Record!' };
+    const icons = { behind: '\u23F0', ontime: '\u2705', record: '\uD83C\uDFC6' };
+    showToast(`${label}: ${icons[status]} ${msgs[status]}`);
     refreshSummaryPanel();
 }
 
@@ -1750,6 +1790,10 @@ function confirmTaskComplete(stationId, ingredientId) {
     if (modal) modal.remove();
 
     animateMascot();
+    if (station && station.status[ingredientId]) {
+        const pLevel = station.status[ingredientId].priority || 'none';
+        checkBlockCompletion(pLevel);
+    }
     refreshSummaryPanel();
 }
 
@@ -2403,71 +2447,79 @@ function calculateBlockGoals() {
 }
 
 
-// ==================== HISTORY VIEW ====================
+// ==================== HISTORY TAB ====================
 
-function renderHistory(container) {
-    if (history.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📅</div>
-                <p>No history yet</p>
-                <p class="empty-sub">Daily reports will appear here after each day</p>
-            </div>
-            <button class="btn btn-link" onclick="switchView('summary')">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-                Back to Summary
-            </button>`;
+function getDateKey(d) {
+    return d.toISOString().slice(0, 10);
+}
+
+function selectHistoryDate(dateKey) {
+    historySelectedDate = dateKey;
+    panelDirty.history = true;
+    renderPanel('history');
+}
+
+function renderHistoryTab(container) {
+    const today = new Date();
+    if (!historySelectedDate) historySelectedDate = getDateKey(today);
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const key = getDateKey(d);
+        const label = i === 0 ? 'Today' : i === 1 ? 'Yesterday' : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        days.push({ key, label });
+    }
+
+    let html = '<div class="history-date-chips">';
+    days.forEach(d => {
+        html += `<button class="history-chip ${d.key === historySelectedDate ? 'active' : ''}" onclick="selectHistoryDate('${d.key}')">${d.label}</button>`;
+    });
+    html += '</div>';
+
+    const entries = activityLog.filter(e => e.type === 'block_complete' && e.timestamp && e.timestamp.startsWith(historySelectedDate));
+
+    if (entries.length === 0) {
+        html += `<div class="history-day-status">
+            <div class="history-day-icon">📋</div>
+            <div class="history-day-label">No Data</div>
+            <div class="history-day-sub">No block timers completed this day</div>
+        </div>`;
+        container.innerHTML = html;
         return;
     }
 
-    let html = `
-        <button class="btn btn-link" onclick="switchView('summary')">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            Back to Summary
-        </button>
-        <h3 class="history-title">7-Day History</h3>`;
+    const hasBehind = entries.some(e => e.data && e.data.status === 'behind');
+    const allRecord = entries.every(e => e.data && e.data.status === 'record');
 
-    history.forEach(entry => {
-        const date = new Date(entry.date);
-        const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    let dayIcon, dayLabel;
+    if (hasBehind) { dayIcon = '\u23F0'; dayLabel = 'Behind'; }
+    else if (allRecord) { dayIcon = '\uD83C\uDFC6'; dayLabel = 'Perfect!'; }
+    else { dayIcon = '\u2705'; dayLabel = 'On Time'; }
 
-        let totalLow = 0;
-        let totalCompleted = 0;
+    html += `<div class="history-day-status">
+        <div class="history-day-icon">${dayIcon}</div>
+        <div class="history-day-label">${dayLabel}</div>
+        <div class="history-day-sub">${entries.length} block${entries.length !== 1 ? 's' : ''} completed</div>
+    </div>`;
 
-        entry.stations.forEach(station => {
-            station.ingredients.forEach(ing => {
-                const st = station.status[ing.id];
-                if (st && st.low) {
-                    totalLow++;
-                    if (st.completed) totalCompleted++;
-                }
-            });
-        });
+    entries.forEach(e => {
+        const d = e.data || {};
+        const statusLabels = { behind: 'Behind', ontime: 'On Time', record: 'New Record' };
+        const statusClass = d.status || 'ontime';
+        const goalSec = d.goal || 0;
+        const actualSec = goalSec - (d.seconds || 0);
+        const goalStr = formatTime(Math.abs(goalSec));
+        const actualStr = formatTime(Math.abs(actualSec));
 
-        html += `
-        <div class="history-card">
-            <div class="history-card-header">
-                <span class="history-date">${dateStr}</span>
-                <span class="history-stats">${totalCompleted}/${totalLow} done</span>
-            </div>`;
-
-        entry.stations.forEach(station => {
-            const lowItems = station.ingredients.filter(i => station.status[i.id] && station.status[i.id].low);
-            if (lowItems.length > 0) {
-                html += `<div class="history-station">
-                    <span class="history-station-name">${station.name}</span>`;
-                lowItems.forEach(i => {
-                    const st = station.status[i.id];
-                    html += `<div class="history-item ${st.completed ? 'done' : ''}">
-                        ${st.completed ? '✅' : '⬜'} ${i.name}
-                        ${st.parLevel ? `<span class="par-tag">${st.parLevel}</span>` : ''}
-                    </div>`;
-                });
-                html += '</div>';
-            }
-        });
-
-        html += '</div>';
+        html += `<div class="history-block-card">
+            <div class="history-block-info">
+                <div class="history-block-name">${d.label || d.level || 'Block'}</div>
+                <div class="history-block-time">Goal: ${goalStr} &nbsp; Actual: ${actualStr}</div>
+            </div>
+            <span class="history-block-badge ${statusClass}">${statusLabels[statusClass] || 'On Time'}</span>
+        </div>`;
     });
 
     container.innerHTML = html;
@@ -3015,8 +3067,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         swSwiping = true;
         swDx = dx;
-        const basePct = swBaseIdx * 25;
-        const offsetPct = (dx / swViewportW) * 25;
+        const basePct = swBaseIdx * 20;
+        const offsetPct = (dx / swViewportW) * 20;
         track.style.transform = `translateX(${-(basePct) + offsetPct}%)`;
     }, { passive: true });
 

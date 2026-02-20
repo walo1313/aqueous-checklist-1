@@ -1132,50 +1132,86 @@
             box-shadow: none;
         }
 
-        /* ===== HISTORY ===== */
-        .history-title {
-            font-size: 15px;
-            font-weight: 800;
-            margin-bottom: 14px;
+        /* ===== HISTORY TAB ===== */
+        .history-date-chips {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 10px 0 14px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
         }
-
-        .history-card {
+        .history-date-chips::-webkit-scrollbar { display: none; }
+        .history-chip {
+            flex-shrink: 0;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
             background: var(--surface);
-            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text-secondary);
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .history-chip.active {
+            box-shadow: var(--neu-inset);
+            color: var(--accent);
+            font-weight: 700;
+        }
+        .history-day-status {
+            text-align: center;
             padding: 18px;
-            margin-bottom: 14px;
+            margin-bottom: 16px;
+            border-radius: var(--radius);
+            background: var(--surface);
             box-shadow: var(--neu-shadow);
         }
-
-        .history-card-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 12px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid rgba(0,0,0,0.04);
-        }
-
-        .history-date { font-weight: 700; font-size: 13px; }
-        .history-stats { font-size: 12px; color: var(--accent); font-weight: 700; }
-
-        .history-station { margin-bottom: 10px; }
-        .history-station-name {
-            font-size: 10px;
+        .history-day-icon { font-size: 36px; margin-bottom: 6px; }
+        .history-day-label {
+            font-size: 16px;
             font-weight: 800;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            color: var(--text);
         }
-
-        .history-item {
+        .history-day-sub {
             font-size: 12px;
-            padding: 4px 0;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+        .history-block-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: var(--neu-shadow);
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-weight: 500;
+            justify-content: space-between;
         }
-        .history-item.done { opacity: 0.4; text-decoration: line-through; }
+        .history-block-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .history-block-name {
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .history-block-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .history-block-badge {
+            padding: 5px 12px;
+            border-radius: 14px;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .history-block-badge.behind { background: rgba(229,62,62,0.15); color: #e53e3e; }
+        .history-block-badge.ontime { background: rgba(0,184,148,0.15); color: #00b894; }
+        .history-block-badge.record { background: rgba(253,203,110,0.2); color: #e5a100; }
 
         /* ===== BUTTONS ===== */
         .btn {
@@ -1388,7 +1424,7 @@
             flex-direction: column;
             align-items: center;
             gap: 2px;
-            padding: 6px 12px;
+            padding: 6px 8px;
             cursor: pointer;
             border: none;
             background: none;
@@ -1830,7 +1866,7 @@
         }
         .swipe-track {
             display: flex;
-            width: 400%;
+            width: 500%;
             height: 100%;
             transform: translateX(0%);
             will-change: transform;
@@ -1839,7 +1875,7 @@
             transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         .swipe-panel {
-            width: 25%;
+            width: 20%;
             flex-shrink: 0;
             height: 100%;
             overflow-y: auto;
@@ -1913,6 +1949,7 @@
             <div class="swipe-panel" id="panelHome"></div>
             <div class="swipe-panel" id="panelSummary"></div>
             <div class="swipe-panel" id="panelLogs"></div>
+            <div class="swipe-panel" id="panelHistory"></div>
             <div class="swipe-panel" id="panelShare"></div>
         </div>
         <div class="swipe-overlay" id="panelOverlay"></div>
@@ -1949,6 +1986,13 @@
                 <polyline points="10 9 9 9 8 9"/>
             </svg>
             Logs
+        </button>
+        <button class="nav-item" onclick="switchView('history')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+            </svg>
+            History
         </button>
         <button class="nav-item" onclick="switchView('share')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
