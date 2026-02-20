@@ -346,6 +346,7 @@ function saveSettings() {
 
 function saveData(silent) {
     localStorage.setItem('aqueous_stations', JSON.stringify(stations));
+    invalidateViewCache();
     if (!silent) showToast('Saved');
 }
 
@@ -413,6 +414,12 @@ function resolveSwipeView(v) {
 
 function renderViewInto(panel, view) {
     panel.innerHTML = '';
+    // Use cached DOM if available
+    if (viewDOMCache[view]) {
+        panel.appendChild(viewDOMCache[view]);
+        delete viewDOMCache[view];
+        return;
+    }
     const saved = currentView;
     currentView = view;
     if (view === 'home') renderHome(panel);
@@ -422,12 +429,28 @@ function renderViewInto(panel, view) {
     currentView = saved;
 }
 
-// Scroll position cache per view
+// View state cache: scroll position + DOM nodes
 const viewScrollCache = {};
+const viewDOMCache = {};
 const ALWAYS_FRESH = ['summary'];
 
 function saveScrollPosition() {
     if (currentView) viewScrollCache[currentView] = window.scrollY;
+}
+
+function cacheCurrentView() {
+    saveScrollPosition();
+    if (!currentView || ALWAYS_FRESH.includes(currentView)) return;
+    const container = document.getElementById('mainContent');
+    if (!container || !container.childNodes.length) return;
+    const frag = document.createDocumentFragment();
+    while (container.firstChild) frag.appendChild(container.firstChild);
+    viewDOMCache[currentView] = frag;
+}
+
+function invalidateViewCache(view) {
+    if (view) delete viewDOMCache[view];
+    else Object.keys(viewDOMCache).forEach(k => delete viewDOMCache[k]);
 }
 
 function switchView(view, skipRender) {
@@ -438,8 +461,8 @@ function switchView(view, skipRender) {
         view = previousView || 'home';
     }
 
-    // Save scroll before leaving
-    saveScrollPosition();
+    // Cache current view DOM + scroll before leaving (skip if swipe already cached)
+    if (!skipRender) cacheCurrentView();
 
     // Save previous view (but not settings itself)
     if (currentView !== 'settings') {
@@ -466,6 +489,21 @@ function renderCurrentView() {
     const container = document.getElementById('mainContent');
     const fab = document.getElementById('fab');
     fab.style.display = 'none';
+    const savedScroll = viewScrollCache[currentView] || 0;
+
+    // Try to restore cached DOM nodes (instant, no flash)
+    if (viewDOMCache[currentView]) {
+        container.style.visibility = 'hidden';
+        container.innerHTML = '';
+        container.appendChild(viewDOMCache[currentView]);
+        delete viewDOMCache[currentView];
+        window.scrollTo(0, savedScroll);
+        container.style.visibility = '';
+        return;
+    }
+
+    // Fresh render — hide during render+scroll to avoid flash
+    container.style.visibility = 'hidden';
 
     if (currentView === 'home') renderHome(container);
     else if (currentView === 'summary') renderSummary(container);
@@ -475,9 +513,9 @@ function renderCurrentView() {
     else if (currentView === 'history') renderHistory(container);
     else if (currentView === 'logDetail') renderLogDetail(container);
 
-    // Restore saved scroll position, or scroll to top
-    const savedScroll = viewScrollCache[currentView] || 0;
     window.scrollTo(0, savedScroll);
+    // Reveal after scroll is set — requestAnimationFrame ensures scroll sticks
+    requestAnimationFrame(() => { container.style.visibility = ''; });
 }
 
 // ==================== HOME VIEW ====================
@@ -1573,6 +1611,7 @@ function logActivity(type, data) {
     // Keep last 500 entries
     if (activityLog.length > 500) activityLog = activityLog.slice(-500);
     localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
+    invalidateViewCache();
 }
 
 function saveActivityLog() {
@@ -2786,27 +2825,32 @@ document.addEventListener('DOMContentLoaded', () => {
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
-                // Swap prev panel content into main — no re-render
-                saveScrollPosition();
-                mainContent.innerHTML = prevPanel.innerHTML;
-                prevPanel.innerHTML = '';
+                cacheCurrentView();
+                const targetScroll = viewScrollCache[swPrevView] || 0;
+                mainContent.style.visibility = 'hidden';
+                mainContent.innerHTML = '';
+                while (prevPanel.firstChild) mainContent.appendChild(prevPanel.firstChild);
                 nextPanel.innerHTML = '';
                 track.style.transform = 'translateX(-33.333%)';
-                switchView(swPrevView, true); // skip render
-                window.scrollTo(0, viewScrollCache[swPrevView] || 0);
+                switchView(swPrevView, true);
+                window.scrollTo(0, targetScroll);
+                mainContent.style.visibility = '';
             });
         } else if (shouldSwitch && swDx < 0 && swNextView) {
             track.style.transform = 'translateX(-66.666%)';
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
-                saveScrollPosition();
-                mainContent.innerHTML = nextPanel.innerHTML;
+                cacheCurrentView();
+                const targetScroll = viewScrollCache[swNextView] || 0;
+                mainContent.style.visibility = 'hidden';
+                mainContent.innerHTML = '';
+                while (nextPanel.firstChild) mainContent.appendChild(nextPanel.firstChild);
                 prevPanel.innerHTML = '';
-                nextPanel.innerHTML = '';
                 track.style.transform = 'translateX(-33.333%)';
                 switchView(swNextView, true);
-                window.scrollTo(0, viewScrollCache[swNextView] || 0);
+                window.scrollTo(0, targetScroll);
+                mainContent.style.visibility = '';
             });
         } else {
             track.style.transform = 'translateX(-33.333%)';
