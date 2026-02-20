@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 57;
+const APP_BUILD = 58;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -212,7 +212,7 @@ function initApp() {
     else if (currentView === 'summary') navItems[1].classList.add('active');
     else if (currentView === 'logs') navItems[2].classList.add('active');
     else if (currentView === 'history') navItems[3].classList.add('active');
-    else if (currentView === 'share') navItems[4].classList.add('active');
+    if (currentView === 'share') currentView = 'home';
 
     // Position track instantly (no animation) and render initial panel
     slideTrackTo(currentView, false);
@@ -426,11 +426,11 @@ function cleanOldHistory() {
 let previousView = 'home';
 let skipPopstate = false;
 
-const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'history', 'share'];
-const SWIPE_PANELS = { home: 'panelHome', summary: 'panelSummary', logs: 'panelLogs', history: 'panelHistory', share: 'panelShare' };
+const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'history'];
+const SWIPE_PANELS = { home: 'panelHome', summary: 'panelSummary', logs: 'panelLogs', history: 'panelHistory' };
 const OVERLAY_VIEWS = ['settings', 'logDetail'];
 // Track which panels have been rendered at least once
-const panelDirty = { home: true, summary: true, logs: true, history: true, share: true };
+const panelDirty = { home: true, summary: true, logs: true, history: true };
 
 function resolveSwipeView(v) {
     if (v === 'history') return 'summary';
@@ -452,7 +452,7 @@ function slideTrackTo(view, animate) {
         const onEnd = () => { track.removeEventListener('transitionend', onEnd); track.classList.remove('snapping'); };
         track.addEventListener('transitionend', onEnd);
     }
-    track.style.transform = `translateX(-${idx * 20}%)`;
+    track.style.transform = `translateX(-${idx * 25}%)`;
 }
 
 function showOverlay(show) {
@@ -500,7 +500,6 @@ function markAllPanelsDirty() {
     panelDirty.summary = true;
     panelDirty.logs = true;
     panelDirty.history = true;
-    panelDirty.share = true;
 }
 
 function switchView(view, skipSlide) {
@@ -532,7 +531,6 @@ function switchView(view, skipSlide) {
     else if (view === 'summary') navItems[1].classList.add('active');
     else if (view === 'logs') navItems[2].classList.add('active');
     else if (view === 'history') navItems[3].classList.add('active');
-    else if (view === 'share') navItems[4].classList.add('active');
     else if (view === 'settings') { window.history.pushState({ view: 'settings' }, ''); }
     else if (view === 'logDetail') navItems[2].classList.add('active');
 
@@ -569,7 +567,6 @@ function renderPanel(view) {
     else if (view === 'summary') renderSummary(panel);
     else if (view === 'logs') renderLogs(panel);
     else if (view === 'history') renderHistoryTab(panel);
-    else if (view === 'share') renderShare(panel);
     panel.scrollTop = scrollBefore;
 }
 
@@ -2719,6 +2716,27 @@ function renderSettings(container) {
             </div>
         </div>
         <div class="settings-group">
+            <div class="settings-group-title">Share</div>
+            <div class="share-cards">
+                <button class="share-card" onclick="handleClick(); shareAllWhatsApp()">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                    <span>WhatsApp</span>
+                </button>
+                <button class="share-card" onclick="handleClick(); shareAllSMS()">
+                    <span style="font-size:28px;">📱</span>
+                    <span>Text / SMS</span>
+                </button>
+                <button class="share-card" onclick="handleClick(); shareAppLink()">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1a73e8" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                    <span>Copy Link</span>
+                </button>
+                ${navigator.share ? `<button class="share-card" onclick="handleClick(); nativeShareAll()">
+                    <span style="font-size:28px;">📤</span>
+                    <span>More</span>
+                </button>` : `<button class="share-card" style="visibility:hidden;"></button>`}
+            </div>
+        </div>
+        <div class="settings-group">
             <div class="settings-group-title">About</div>
             <div class="version-card">
                 <div class="version-title">Kitchen Station Manager</div>
@@ -3021,8 +3039,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         swSwiping = true;
         swDx = dx;
-        const basePct = swBaseIdx * 20;
-        const offsetPct = (dx / swViewportW) * 20;
+        const basePct = swBaseIdx * 25;
+        const offsetPct = (dx / swViewportW) * 25;
         track.style.transform = `translateX(${-(basePct) + offsetPct}%)`;
     }, { passive: true });
 
