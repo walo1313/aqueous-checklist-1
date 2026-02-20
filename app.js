@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 60;
+const APP_BUILD = 61;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -54,20 +54,22 @@ function debounce(key, fn, delay) {
 
 // ==================== UNIT CONVERSIONS ====================
 
-const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1 };
-const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz'];
-const WEIGHT_UNITS = ['lb'];
-const COUNT_UNITS = ['each', 'batch'];
+const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1, '1/9pan': 38, '1/6pan': 58, '1/3pan': 128, '1/2pan': 214, 'fullpan': 448 };
+const UNIT_TO_G = { kg: 1000, lb: 453.592, g: 1 };
+const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz', '1/9pan', '1/6pan', '1/3pan', '1/2pan', 'fullpan'];
+const WEIGHT_UNITS = ['kg', 'lb', 'g'];
+const COUNT_UNITS = ['each', 'recipe'];
 
 function getBaseUnit(unit) {
     if (VOLUME_UNITS.includes(unit)) return 'oz';
-    if (WEIGHT_UNITS.includes(unit)) return 'lb';
+    if (WEIGHT_UNITS.includes(unit)) return 'g';
     if (COUNT_UNITS.includes(unit)) return unit;
     return 'unit';
 }
 
 function convertToBase(qty, unit) {
     if (VOLUME_UNITS.includes(unit)) return qty * (UNIT_TO_OZ[unit] || 1);
+    if (WEIGHT_UNITS.includes(unit)) return qty * (UNIT_TO_G[unit] || 1);
     return qty;
 }
 
@@ -86,7 +88,8 @@ function getIngredientEstimate(ingName, parQty, parUnit) {
     if (pt.baseUnit && pt.baseUnit !== 'unit' && pt.baseUnit !== baseUnit) return null;
     const baseQty = convertToBase(parQty, parUnit);
     const estSeconds = Math.round(pt.bestSecPerUnit * baseQty);
-    const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * (UNIT_TO_OZ[parUnit] || 1));
+    const convFactor = UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1;
+    const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * convFactor);
     return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit };
 }
 
@@ -352,6 +355,20 @@ function loadData() {
         const pt = prepTimes[key];
         if (pt.bestSecPerUnit === undefined) pt.bestSecPerUnit = pt.avgSecPerUnit;
         if (pt.baseUnit === undefined) pt.baseUnit = 'unit';
+        if (pt.baseUnit === 'batch') pt.baseUnit = 'recipe';
+        if (pt.baseUnit === 'lb') {
+            pt.avgSecPerUnit = pt.avgSecPerUnit / 453.592;
+            pt.bestSecPerUnit = pt.bestSecPerUnit / 453.592;
+            pt.baseUnit = 'g';
+        }
+    });
+    savePrepTimes();
+
+    // Migrate parUnit batch → recipe
+    stations.forEach(station => {
+        Object.values(station.status || {}).forEach(st => {
+            if (st.parUnit === 'batch') st.parUnit = 'recipe';
+        });
     });
 }
 
@@ -649,7 +666,7 @@ function renderIngredients(station) {
             parDisplay += `<span class="par-display" style="font-style:italic;margin-left:4px;font-size:9px;">${st.parNotes}</span>`;
         }
 
-        const unitOptions = ['quart','pint','cup','oz','lb','each','batch'];
+        const unitOptions = ['quart','pint','cup','oz','1/9pan','1/6pan','1/3pan','1/2pan','fullpan','kg','lb','g','each','recipe'];
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
         html += `
@@ -679,14 +696,14 @@ function renderIngredients(station) {
                 </div>
                 <div class="par-row">
                     <div class="par-stepper">
-                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -0.5)">−</button>
+                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5})">−</button>
                         <input type="number" class="par-qty-input"
                             value="${st.parQty || ''}"
                             placeholder="0"
-                            min="0" step="0.5" inputmode="decimal"
+                            min="0" step="${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5}" inputmode="decimal"
                             oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
                             onclick="event.stopPropagation()">
-                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, 0.5)">+</button>
+                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, ${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5})">+</button>
                     </div>
                     <select class="par-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
                         <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
@@ -962,6 +979,9 @@ function setParUnit(stationId, ingredientId, value) {
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
     station.status[ingredientId].parUnit = value;
+    if (value && !station.status[ingredientId].parQty) {
+        station.status[ingredientId].parQty = 1;
+    }
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
@@ -2765,11 +2785,12 @@ function renderSettings(container) {
 function renderPrepTimesTable() {
     let html = '<div style="margin-top:8px;">';
     Object.entries(prepTimes).forEach(([key, pt]) => {
-        const mins = Math.floor(pt.avgSecPerUnit / 60);
-        const secs = Math.round(pt.avgSecPerUnit % 60);
+        const mins = Math.floor(pt.bestSecPerUnit / 60);
+        const secs = Math.round(pt.bestSecPerUnit % 60);
+        const unit = pt.baseUnit || 'unit';
         html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);font-size:11px;">
             <span style="font-weight:600;text-transform:capitalize;">${key}</span>
-            <span style="color:var(--text-muted);">${mins}m ${secs}s/unit (${pt.count} logs)</span>
+            <span style="color:var(--text-muted);">Best: ${mins}m ${secs}s/${unit} (${pt.count} logs)</span>
         </div>`;
     });
     html += '</div>';
