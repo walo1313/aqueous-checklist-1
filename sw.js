@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v46';
+const CACHE_NAME = 'aqueous-v47';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -63,17 +63,16 @@ self.addEventListener('message', event => {
       body: event.data.body,
       tag: 'aqueous-timer',
       renotify: isFirst,
-      icon: './icon-192.png',
-      badge: './icon-192.png',
+      icon: './mascot.png',
+      badge: './mascot.png',
       requireInteraction: true,
       actions: [
-        { action: 'pause_all', title: '⏸ Pause All' },
-        { action: 'open', title: '📋 Open' }
+        { action: 'pause_all', title: 'Pause All' },
+        { action: 'open', title: 'Open' }
       ]
     };
 
     if (isFirst) {
-      // High priority: vibrate briefly to force lock screen visibility
       options.vibrate = [100];
       options.silent = false;
     } else {

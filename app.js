@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 46;
+const APP_BUILD = 47;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1390,17 +1390,18 @@ function updateTimerNotification() {
         return;
     }
 
-    let lines = running.map(t => `⏱ ${t.ingName}: ${formatTime(t.seconds)}`);
-    runningBlocks.forEach(([k, v]) => {
-        lines.push(`🔲 ${blockLabels[k] || k}: ${formatTime(v.seconds)}`);
-    });
     const totalActive = running.length + runningBlocks.length;
-    const m = MASCOTS[settings.mascot] || MASCOTS.mascot;
+
+    // Clean per-timer lines: "Name  mm:ss"
+    let lines = running.map(t => `${t.ingName}  ${formatTime(t.seconds)}`);
+    runningBlocks.forEach(([k, v]) => {
+        lines.push(`${blockLabels[k] || k}  ${formatTime(v.seconds)}`);
+    });
 
     sendSWMessage({
         type: 'TIMER_UPDATE',
         body: lines.join('\n'),
-        title: `${m.emoji} Aqueous — ${totalActive} timer${totalActive > 1 ? 's' : ''} active`
+        title: `Aqueous \u2014 ${totalActive} timer${totalActive > 1 ? 's' : ''}`
     });
 }
 
@@ -1445,8 +1446,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
             taskTimers[timerKey].seconds++;
             const clock = document.getElementById(`clock_${timerKey}`);
             if (clock) clock.textContent = formatTime(taskTimers[timerKey].seconds);
-            // Update notification every 3 seconds
-            if (taskTimers[timerKey].seconds % 3 === 0) updateTimerNotification();
+            updateTimerNotification();
         }, 1000)
     };
 
@@ -1477,7 +1477,7 @@ function resumeTaskTimer(timerKey) {
         t.seconds++;
         const clock = document.getElementById(`clock_${timerKey}`);
         if (clock) clock.textContent = formatTime(t.seconds);
-        if (t.seconds % 3 === 0) updateTimerNotification();
+        updateTimerNotification();
     }, 1000);
 
     checkAndManageWakeLock();
@@ -1522,7 +1522,7 @@ function toggleBlockTimer(level) {
                     }
                 });
             }
-            if (blockTimers[level].seconds % 3 === 0) updateTimerNotification();
+            updateTimerNotification();
         }, 1000)
     };
     // If starting ALL, also start any block that doesn't have a timer
@@ -1573,7 +1573,7 @@ function resumeBlockTimer(level) {
                 }
             });
         }
-        if (bt.seconds % 3 === 0) updateTimerNotification();
+        updateTimerNotification();
     }, 1000);
     if (level === '_all') {
         ['high', 'medium', 'low', 'none'].forEach(lv => {
