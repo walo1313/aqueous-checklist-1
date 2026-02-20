@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 53;
+const APP_BUILD = 54;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1333,7 +1333,19 @@ function sendSWMessage(msg) {
     }
 }
 
+// Throttle notification updates: max 1 per second regardless of timer count
+let _notifPending = false;
+let _notifTimeout = null;
+
 function updateTimerNotification() {
+    if (_notifPending) return; // already scheduled
+    _notifPending = true;
+    if (_notifTimeout) clearTimeout(_notifTimeout);
+    _notifTimeout = setTimeout(_doUpdateTimerNotification, 900);
+}
+
+function _doUpdateTimerNotification() {
+    _notifPending = false;
     if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;

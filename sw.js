@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v53';
+const CACHE_NAME = 'aqueous-v54';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -49,7 +49,7 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Track active notification tags to clean up stale ones
+// Track active notification tags to detect new vs update
 let activeTimerTags = new Set();
 
 // Handle timer notification updates from app
@@ -58,7 +58,7 @@ self.addEventListener('message', event => {
     const timers = event.data.timers || [];
     const newTags = new Set();
 
-    timers.forEach((t, i) => {
+    timers.forEach(t => {
       const tag = `aqueous-t-${t.key}`;
       newTags.add(tag);
       const isNew = !activeTimerTags.has(tag);
@@ -68,8 +68,9 @@ self.addEventListener('message', event => {
         tag,
         badge: './badge-96.png',
         requireInteraction: true,
-        silent: !isNew,
-        renotify: isNew,
+        // CRITICAL: never re-notify on updates — prevents vibration/badge pop
+        silent: true,
+        renotify: false,
         data: { timerKey: t.key, timerType: t.type, running: t.running },
         actions: [
           { action: 'toggle_pause', title: t.running ? 'Pause' : 'Resume' },
@@ -77,22 +78,26 @@ self.addEventListener('message', event => {
         ]
       };
 
+      // Only vibrate + sound on the very first appearance of this timer
       if (isNew) {
         options.vibrate = [100];
         options.silent = false;
+        options.renotify = true;
       }
 
       self.registration.showNotification(t.name, options);
     });
 
     // Close notifications for timers that no longer exist
-    self.registration.getNotifications().then(notifications => {
-      notifications.forEach(n => {
-        if (n.tag && n.tag.startsWith('aqueous-t-') && !newTags.has(n.tag)) {
-          n.close();
-        }
+    if (activeTimerTags.size > 0) {
+      self.registration.getNotifications().then(notifications => {
+        notifications.forEach(n => {
+          if (n.tag && n.tag.startsWith('aqueous-t-') && !newTags.has(n.tag)) {
+            n.close();
+          }
+        });
       });
-    });
+    }
 
     activeTimerTags = newTags;
   }
