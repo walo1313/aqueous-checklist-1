@@ -540,7 +540,11 @@ function renderHome(container) {
         <div class="neu-card">
             <div class="station-header" onclick="toggleStation(${station.id})">
                 <div class="station-header-left">
-                    <span class="station-name">${station.name}</span>
+                    <span class="station-name"
+                          ontouchstart="startStationLongPress(event, ${station.id})"
+                          ontouchend="cancelStationLongPress()"
+                          ontouchmove="cancelStationLongPress()"
+                          oncontextmenu="event.preventDefault(); event.stopPropagation(); showRenameStationModal(${station.id})">${station.name}</span>
                     ${lowCount > 0 ? `<span class="count-badge">${lowCount}</span>` : ''}
                 </div>
                 <div class="station-header-right">
@@ -750,6 +754,75 @@ function toggleStation(stationId) {
     if (body) body.classList.toggle('collapsed', !station.expanded);
     if (toggle) toggle.textContent = station.expanded ? '−' : '+';
     saveData();
+}
+
+// ==================== STATION RENAME (long-press) ====================
+
+let stationLongPressTimer = null;
+
+function startStationLongPress(event, stationId) {
+    stationLongPressTimer = setTimeout(() => {
+        stationLongPressTimer = null;
+        if (navigator.vibrate) navigator.vibrate(30);
+        event.stopPropagation();
+        showRenameStationModal(stationId);
+    }, 500);
+}
+
+function cancelStationLongPress() {
+    if (stationLongPressTimer) { clearTimeout(stationLongPressTimer); stationLongPressTimer = null; }
+}
+
+function showRenameStationModal(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const existing = document.getElementById('modalRenameStation');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalRenameStation';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Rename Station</div>
+            <div class="form-group">
+                <input type="text" id="renameStationInput" class="form-control" value="${station.name}" maxlength="30" placeholder="Station name" style="text-align:center;font-size:16px;">
+                <div class="rename-char-count" id="renameCharCount">${station.name.length}/30</div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-outline" onclick="document.getElementById('modalRenameStation').remove()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmRenameStation(${stationId})">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+
+    const input = document.getElementById('renameStationInput');
+    input.focus();
+    input.select();
+    input.addEventListener('input', () => {
+        document.getElementById('renameCharCount').textContent = input.value.length + '/30';
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') confirmRenameStation(stationId);
+    });
+}
+
+function confirmRenameStation(stationId) {
+    const input = document.getElementById('renameStationInput');
+    const newName = input.value.trim();
+    if (!newName) { showToast('Name cannot be empty'); return; }
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    station.name = newName;
+    saveData(true);
+    document.getElementById('modalRenameStation').remove();
+    invalidateViewCache();
+    renderCurrentView();
+    showToast('Station renamed');
 }
 
 // ==================== INGREDIENT ACTIONS ====================
