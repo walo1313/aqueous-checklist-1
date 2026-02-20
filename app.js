@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 59;
+const APP_BUILD = 60;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1138,11 +1138,6 @@ function renderSummary(container) {
     }
 
     container.innerHTML = html;
-
-    // Check if all completed
-    if (completedCount === totalCount && totalCount > 0) {
-        launchCelebration();
-    }
 }
 
 function renderSummaryGroup(title, level, tasks) {
