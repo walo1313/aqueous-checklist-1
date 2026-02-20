@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v56';
+const CACHE_NAME = 'aqueous-v57';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -49,95 +49,50 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Track active notification tags to detect new vs update
-let activeTimerTags = new Set();
+const NOTIF_TAG = 'aqueous-active';
+let notifShown = false;
 
-// Handle timer notification updates from app
+// Handle messages from app
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'TIMER_UPDATE_ALL') {
-    const timers = event.data.timers || [];
-    const newTags = new Set();
+  if (!event.data) return;
 
-    timers.forEach(t => {
-      const tag = `aqueous-t-${t.key}`;
-      newTags.add(tag);
-      const isNew = !activeTimerTags.has(tag);
-
-      const options = {
-        body: t.time,
-        tag,
-        badge: './badge-96.png',
-        requireInteraction: true,
-        // CRITICAL: never re-notify on updates — prevents vibration/badge pop
-        silent: true,
-        renotify: false,
-        data: { timerKey: t.key, timerType: t.type, running: t.running },
-        actions: [
-          { action: 'toggle_pause', title: t.running ? 'Pause' : 'Resume' },
-          { action: 'done', title: 'Done' }
-        ]
-      };
-
-      // Only vibrate + sound on the very first appearance of this timer
-      if (isNew) {
-        options.vibrate = [100];
-        options.silent = false;
-        options.renotify = true;
-      }
-
-      self.registration.showNotification(t.name, options);
-    });
-
-    // Close notifications for timers that no longer exist
-    if (activeTimerTags.size > 0) {
-      self.registration.getNotifications().then(notifications => {
-        notifications.forEach(n => {
-          if (n.tag && n.tag.startsWith('aqueous-t-') && !newTags.has(n.tag)) {
-            n.close();
-          }
-        });
-      });
+  if (event.data.type === 'TIMER_STATUS') {
+    const isNew = event.data.isNew || !notifShown;
+    const options = {
+      body: event.data.body,
+      tag: NOTIF_TAG,
+      badge: './badge-96.png',
+      requireInteraction: true,
+      silent: !isNew,
+      renotify: isNew,
+      data: { action: 'open_summary' }
+    };
+    if (isNew) {
+      options.vibrate = [100];
     }
-
-    activeTimerTags = newTags;
+    self.registration.showNotification('Active', options);
+    notifShown = true;
   }
 
-  if (event.data && event.data.type === 'TIMER_CLEAR_ALL') {
+  if (event.data.type === 'TIMER_CLEAR_ALL') {
     self.registration.getNotifications().then(notifications => {
-      notifications.forEach(n => {
-        if (n.tag && n.tag.startsWith('aqueous-t-')) n.close();
-      });
+      notifications.forEach(n => n.close());
     });
-    activeTimerTags = new Set();
+    notifShown = false;
   }
 });
 
-// Handle notification clicks and action buttons
+// Handle notification tap — open app on Summary
 self.addEventListener('notificationclick', event => {
   event.notification.close();
 
-  const action = event.action;
-  const data = event.notification.data || {};
-  const timerKey = data.timerKey;
-  const timerType = data.timerType;
-
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      if (action === 'toggle_pause' && timerKey) {
-        windowClients.forEach(client => {
-          client.postMessage({ type: 'TOGGLE_PAUSE_TIMER', timerKey, timerType });
-        });
-      } else if (action === 'done' && timerKey) {
-        windowClients.forEach(client => {
-          client.postMessage({ type: 'DONE_TIMER', timerKey, timerType });
-        });
+      if (windowClients.length > 0) {
+        windowClients[0].focus();
+        windowClients[0].postMessage({ type: 'OPEN_SUMMARY' });
       } else {
-        // Default tap: open or focus the app
-        if (windowClients.length > 0) {
-          windowClients[0].focus();
-        } else {
-          clients.openWindow('./');
-        }
+        clients.openWindow('./?view=summary');
       }
     })
   );

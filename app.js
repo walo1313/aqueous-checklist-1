@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 56;
+const APP_BUILD = 57;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -194,6 +194,14 @@ function initApp() {
     loadData();
     processCarryOver();
     updateHeader();
+
+    // Check URL params (e.g. opened from notification)
+    const urlParams = new URLSearchParams(window.location.search);
+    const viewParam = urlParams.get('view');
+    if (viewParam && SWIPE_VIEW_ORDER.includes(viewParam)) {
+        currentView = viewParam;
+        window.history.replaceState(null, '', window.location.pathname);
+    }
 
     // Restore saved view and nav highlight
     const navItems = document.querySelectorAll('.nav-item');
@@ -1334,136 +1342,64 @@ function sendSWMessage(msg) {
 }
 
 // Throttle notification updates: max 1 per second regardless of timer count
-let _notifPending = false;
-let _notifTimeout = null;
-let _notifLastSent = 0;
+let _lastNotifSignature = '';
 
 function updateTimerNotification() {
-    if (_notifPending) return;
-    _notifPending = true;
-    if (_notifTimeout) clearTimeout(_notifTimeout);
-    const now = Date.now();
-    const elapsed = now - _notifLastSent;
-    const delay = elapsed >= 3000 ? 100 : 3000 - elapsed;
-    _notifTimeout = setTimeout(_doUpdateTimerNotification, delay);
+    // no-op for interval ticks — static notification doesn't need per-second updates
 }
 
 function forceUpdateTimerNotification() {
-    _notifPending = false;
-    if (_notifTimeout) clearTimeout(_notifTimeout);
-    _doUpdateTimerNotification();
-}
-
-function _doUpdateTimerNotification() {
-    _notifPending = false;
-    _notifLastSent = Date.now();
     if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;
 
-    const blockLabels = { high: 'Before Service', medium: 'Necessary', low: 'Backup', none: 'No Priority' };
+    const blockLabels = { high: 'High Priority Block', medium: 'Medium Priority Block', low: 'Low Priority Block', none: 'Block' };
+    const lines = [];
 
-    // Build list of all active timers (running + paused)
-    const timers = [];
     Object.entries(taskTimers).forEach(([key, t]) => {
-        timers.push({
-            key,
-            name: t.ingName,
-            time: formatTime(t.seconds),
-            running: t.running,
-            type: 'task'
-        });
+        lines.push(t.ingName);
     });
+
     Object.entries(blockTimers).forEach(([key, v]) => {
         if (v.synced) return;
-        const overtime = v.seconds < 0;
-        timers.push({
-            key: `block_${key}`,
-            name: blockLabels[key] || key,
-            time: `${overtime ? '-' : ''}${formatTime(Math.abs(v.seconds))}`,
-            running: v.running,
-            type: 'block'
+        const blockName = blockLabels[key] || key;
+        const ings = [];
+        stations.forEach(station => {
+            station.ingredients.forEach(ing => {
+                const st = station.status[ing.id];
+                if (!st || st.completed) return;
+                if ((st.priority || 'none') !== key) return;
+                ings.push(ing.name);
+            });
         });
+        if (ings.length > 0) lines.push(`${blockName}: ${ings.join(', ')}`);
+        else lines.push(blockName);
     });
 
-    if (timers.length === 0) {
+    if (lines.length === 0) {
+        _lastNotifSignature = '';
         sendSWMessage({ type: 'TIMER_CLEAR_ALL' });
         return;
     }
 
+    const sig = lines.join('|');
+    if (sig === _lastNotifSignature) return;
+    const wasEmpty = _lastNotifSignature === '';
+    _lastNotifSignature = sig;
+
     sendSWMessage({
-        type: 'TIMER_UPDATE_ALL',
-        timers
+        type: 'TIMER_STATUS',
+        body: lines.join('\n'),
+        isNew: wasEmpty
     });
 }
 
-// Listen for messages from Service Worker (notification action buttons)
+// Listen for messages from Service Worker
 if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', event => {
         if (!event.data) return;
-        const { type, timerKey, timerType } = event.data;
-
-        if (type === 'TOGGLE_PAUSE_TIMER' && timerKey) {
-            if (timerType === 'task') {
-                const t = taskTimers[timerKey];
-                if (t) {
-                    if (t.running) {
-                        pauseTaskTimer(timerKey);
-                        showToast(`Paused: ${t.ingName}`);
-                    } else {
-                        resumeTaskTimer(timerKey);
-                        showToast(`Resumed: ${t.ingName}`);
-                    }
-                }
-            } else if (timerType === 'block') {
-                const level = timerKey.replace('block_', '');
-                const bt = blockTimers[level];
-                if (bt) {
-                    if (bt.running) {
-                        pauseBlockTimer(level);
-                    } else {
-                        resumeBlockTimer(level);
-                    }
-                }
-            }
-            panelDirty.home = true;
-            renderPanel('home');
-            forceUpdateTimerNotification();
-        }
-
-        if (type === 'DONE_TIMER' && timerKey) {
-            if (timerType === 'task') {
-                const t = taskTimers[timerKey];
-                if (t) {
-                    const station = stations.find(s => s.id === t.stationId);
-                    if (station && station.status[t.ingredientId]) {
-                        station.status[t.ingredientId].completed = true;
-                        logActivity('task_complete', {
-                            ingredient: t.ingName,
-                            station: station.name,
-                            seconds: t.seconds,
-                            quantity: 0,
-                            secPerUnit: 0
-                        });
-                    }
-                    if (t.interval) clearInterval(t.interval);
-                    delete taskTimers[timerKey];
-                    forceUpdateTimerNotification();
-                    saveData(true);
-                    animateMascot();
-                    checkAndManageWakeLock();
-                    refreshSummaryPanel();
-                    panelDirty.home = true;
-                    renderPanel('home');
-                    showToast(`Done: ${t.ingName}`);
-                }
-            } else if (timerType === 'block') {
-                const level = timerKey.replace('block_', '');
-                resetBlockTimer(level);
-                showToast(`Block done: ${level}`);
-                panelDirty.home = true;
-                renderPanel('home');
-            }
+        if (event.data.type === 'OPEN_SUMMARY') {
+            switchView('summary');
         }
     });
 }
