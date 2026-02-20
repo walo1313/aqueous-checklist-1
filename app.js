@@ -545,13 +545,15 @@ function renderHome(container) {
         return;
     }
 
-    let html = '';
+    let html = '<div class="ptr-indicator" id="ptrIndicator"><div class="ptr-spinner"></div>Refreshing…</div>';
     stations.forEach(station => {
         const lowCount = Object.values(station.status).filter(s => s.low).length;
+        const totalCount = station.ingredients.length;
         const isExpanded = station.expanded !== false;
+        const allDone = lowCount > 0 && lowCount === totalCount;
 
         html += `
-        <div class="neu-card">
+        <div class="neu-card station-card">
             <div class="station-header"
                  onclick="toggleStation(${station.id})"
                  ontouchstart="startStationLongPress(event, ${station.id})"
@@ -560,7 +562,7 @@ function renderHome(container) {
                  oncontextmenu="if(!event.target.closest('.expand-toggle')){event.preventDefault(); event.stopPropagation(); showRenameStationModal(${station.id})}">
                 <div class="station-header-left">
                     <span class="station-name">${station.name}</span>
-                    ${lowCount > 0 ? `<span class="count-badge">${lowCount}</span>` : ''}
+                    <span class="station-count${allDone ? ' all-done' : ''}" id="stationCount-${station.id}">${lowCount}/${totalCount}</span>
                 </div>
                 <div class="station-header-right">
                     <span class="expand-toggle" id="expandToggle-${station.id}">${isExpanded ? '−' : '+'}</span>
@@ -997,6 +999,18 @@ function rerenderStationBody(stationId) {
         body.innerHTML = renderIngredients(station) + stationFooter(stationId);
         if (panel) panel.scrollTop = scrollBefore;
     }
+    updateStationCount(stationId);
+}
+
+function updateStationCount(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const el = document.getElementById(`stationCount-${stationId}`);
+    if (!el) return;
+    const lowCount = Object.values(station.status).filter(s => s.low).length;
+    const totalCount = station.ingredients.length;
+    el.textContent = `${lowCount}/${totalCount}`;
+    el.classList.toggle('all-done', lowCount > 0 && lowCount === totalCount);
 }
 
 // ==================== SUMMARY VIEW ====================
@@ -2813,7 +2827,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Gesture-driven swipe navigation
     // Gesture-driven swipe — 4 persistent panels
     const track = document.getElementById('swipeTrack');
     let swStartX = 0, swStartY = 0, swDx = 0;
@@ -2910,6 +2923,47 @@ document.addEventListener('DOMContentLoaded', () => {
         swSwiping = false;
         swStartX = 0; swStartY = 0;
         swDx = 0;
+    }, { passive: true });
+
+    // Pull-to-refresh on Home panel
+    const homePanel = document.getElementById('panelHome');
+    let ptrStartY = 0, ptrActive = false;
+
+    homePanel.addEventListener('touchstart', (e) => {
+        if (homePanel.scrollTop <= 0 && currentView === 'home') {
+            ptrStartY = e.touches[0].clientY;
+        } else {
+            ptrStartY = 0;
+        }
+        ptrActive = false;
+    }, { passive: true });
+
+    homePanel.addEventListener('touchmove', (e) => {
+        if (!ptrStartY || homePanel.scrollTop > 0) return;
+        const dy = e.touches[0].clientY - ptrStartY;
+        if (dy > 50 && !ptrActive) {
+            ptrActive = true;
+            const indicator = document.getElementById('ptrIndicator');
+            if (indicator) indicator.classList.add('pulling');
+        }
+    }, { passive: true });
+
+    homePanel.addEventListener('touchend', () => {
+        if (ptrActive) {
+            const indicator = document.getElementById('ptrIndicator');
+            if (indicator) {
+                indicator.classList.remove('pulling');
+                indicator.classList.add('refreshing');
+            }
+            panelDirty.home = true;
+            renderPanel('home');
+            setTimeout(() => {
+                const ind = document.getElementById('ptrIndicator');
+                if (ind) ind.classList.remove('refreshing');
+            }, 400);
+        }
+        ptrStartY = 0;
+        ptrActive = false;
     }, { passive: true });
 
     // Splash screen: only show full on first visit, skip on return visits
