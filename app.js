@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 58;
+const APP_BUILD = 59;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -433,7 +433,6 @@ const OVERLAY_VIEWS = ['settings', 'logDetail'];
 const panelDirty = { home: true, summary: true, logs: true, history: true };
 
 function resolveSwipeView(v) {
-    if (v === 'history') return 'summary';
     if (v === 'logDetail') return 'logs';
     if (v === 'settings') return null;
     return v;
