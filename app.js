@@ -186,14 +186,15 @@ function initApp() {
     const navItems = document.querySelectorAll('.nav-item');
     navItems.forEach(item => item.classList.remove('active'));
     if (currentView === 'timer') currentView = 'logs'; // legacy redirect
+    if (OVERLAY_VIEWS.includes(currentView)) currentView = 'home';
     if (currentView === 'home') navItems[0].classList.add('active');
     else if (currentView === 'summary') navItems[1].classList.add('active');
     else if (currentView === 'logs') navItems[2].classList.add('active');
     else if (currentView === 'share') navItems[3].classList.add('active');
-    else if (currentView === 'history') navItems[1].classList.add('active');
-    else if (currentView === 'settings') { currentView = 'home'; navItems[0].classList.add('active'); }
 
-    renderCurrentView();
+    // Position track instantly (no animation) and render initial panel
+    slideTrackTo(currentView, false);
+    renderPanel(currentView);
 
     // First time: ask cook name
     if (!settings.cookName) {
@@ -346,7 +347,7 @@ function saveSettings() {
 
 function saveData(silent) {
     localStorage.setItem('aqueous_stations', JSON.stringify(stations));
-    invalidateViewCache();
+    markAllPanelsDirty();
     if (!silent) showToast('Saved');
 }
 
@@ -404,6 +405,10 @@ let previousView = 'home';
 let skipPopstate = false;
 
 const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'share'];
+const SWIPE_PANELS = { home: 'panelHome', summary: 'panelSummary', logs: 'panelLogs', share: 'panelShare' };
+const OVERLAY_VIEWS = ['settings', 'history', 'logDetail'];
+// Track which panels have been rendered at least once
+const panelDirty = { home: true, summary: true, logs: true, share: true };
 
 function resolveSwipeView(v) {
     if (v === 'history') return 'summary';
@@ -412,48 +417,36 @@ function resolveSwipeView(v) {
     return v;
 }
 
-function renderViewInto(panel, view) {
-    panel.innerHTML = '';
-    // Use cached DOM if available
-    if (viewDOMCache[view]) {
-        panel.appendChild(viewDOMCache[view]);
-        delete viewDOMCache[view];
-        return;
+function getPanel(view) {
+    return document.getElementById(SWIPE_PANELS[view] || '');
+}
+
+function slideTrackTo(view, animate) {
+    const idx = SWIPE_VIEW_ORDER.indexOf(view);
+    if (idx === -1) return;
+    const track = document.getElementById('swipeTrack');
+    if (animate) {
+        track.classList.add('snapping');
+        const onEnd = () => { track.removeEventListener('transitionend', onEnd); track.classList.remove('snapping'); };
+        track.addEventListener('transitionend', onEnd);
     }
-    const saved = currentView;
-    currentView = view;
-    if (view === 'home') renderHome(panel);
-    else if (view === 'summary') renderSummary(panel);
-    else if (view === 'logs') renderLogs(panel);
-    else if (view === 'share') renderShare(panel);
-    currentView = saved;
+    track.style.transform = `translateX(-${idx * 25}%)`;
 }
 
-// View state cache: scroll position + DOM nodes
-const viewScrollCache = {};
-const viewDOMCache = {};
-const ALWAYS_FRESH = ['summary'];
-
-function saveScrollPosition() {
-    if (currentView) viewScrollCache[currentView] = window.scrollY;
+function showOverlay(show) {
+    const overlay = document.getElementById('panelOverlay');
+    if (show) { overlay.classList.add('active'); }
+    else { overlay.classList.remove('active'); overlay.innerHTML = ''; }
 }
 
-function cacheCurrentView() {
-    saveScrollPosition();
-    if (!currentView || ALWAYS_FRESH.includes(currentView)) return;
-    const container = document.getElementById('mainContent');
-    if (!container || !container.childNodes.length) return;
-    const frag = document.createDocumentFragment();
-    while (container.firstChild) frag.appendChild(container.firstChild);
-    viewDOMCache[currentView] = frag;
+function markAllPanelsDirty() {
+    panelDirty.home = true;
+    panelDirty.summary = true;
+    panelDirty.logs = true;
+    panelDirty.share = true;
 }
 
-function invalidateViewCache(view) {
-    if (view) delete viewDOMCache[view];
-    else Object.keys(viewDOMCache).forEach(k => delete viewDOMCache[k]);
-}
-
-function switchView(view, skipRender) {
+function switchView(view, skipSlide) {
     // Toggle: if tapping mascot while already in settings, go back
     if (view === 'settings' && currentView === 'settings') {
         skipPopstate = true;
@@ -461,17 +454,21 @@ function switchView(view, skipRender) {
         view = previousView || 'home';
     }
 
-    // Cache current view DOM + scroll before leaving (skip if swipe already cached)
-    if (!skipRender) cacheCurrentView();
-
     // Save previous view (but not settings itself)
-    if (currentView !== 'settings') {
+    if (currentView !== 'settings' && !OVERLAY_VIEWS.includes(currentView)) {
         previousView = currentView;
+    }
+
+    // Hide overlay when leaving overlay views
+    if (OVERLAY_VIEWS.includes(currentView) && !OVERLAY_VIEWS.includes(view)) {
+        showOverlay(false);
     }
 
     if (view === 'timer') view = 'logs'; // legacy redirect
     currentView = view;
     sessionStorage.setItem('aqueous_currentView', view);
+
+    // Nav highlight
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItems = document.querySelectorAll('.nav-item');
     if (view === 'home') navItems[0].classList.add('active');
@@ -482,40 +479,57 @@ function switchView(view, skipRender) {
     else if (view === 'history') navItems[1].classList.add('active');
     else if (view === 'logDetail') navItems[2].classList.add('active');
 
-    if (!skipRender) renderCurrentView();
-}
-
-function renderCurrentView() {
-    const container = document.getElementById('mainContent');
-    const fab = document.getElementById('fab');
-    fab.style.display = 'none';
-    const savedScroll = viewScrollCache[currentView] || 0;
-
-    // Try to restore cached DOM nodes (instant, no flash)
-    if (viewDOMCache[currentView]) {
-        container.style.visibility = 'hidden';
-        container.innerHTML = '';
-        container.appendChild(viewDOMCache[currentView]);
-        delete viewDOMCache[currentView];
-        window.scrollTo(0, savedScroll);
-        container.style.visibility = '';
+    // Overlay views (settings, history, logDetail)
+    if (OVERLAY_VIEWS.includes(view)) {
+        const overlay = document.getElementById('panelOverlay');
+        showOverlay(true);
+        if (view === 'settings') renderSettings(overlay);
+        else if (view === 'history') renderHistory(overlay);
+        else if (view === 'logDetail') renderLogDetail(overlay);
+        overlay.scrollTop = 0;
         return;
     }
 
-    // Fresh render — hide during render+scroll to avoid flash
-    container.style.visibility = 'hidden';
+    // Swipe views — slide track + render if needed
+    if (!skipSlide) slideTrackTo(view, true);
+    renderPanel(view);
+}
 
-    if (currentView === 'home') renderHome(container);
-    else if (currentView === 'summary') renderSummary(container);
-    else if (currentView === 'logs') renderLogs(container);
-    else if (currentView === 'share') renderShare(container);
-    else if (currentView === 'settings') renderSettings(container);
-    else if (currentView === 'history') renderHistory(container);
-    else if (currentView === 'logDetail') renderLogDetail(container);
+function renderPanel(view) {
+    const panel = getPanel(view);
+    if (!panel) return;
+    document.getElementById('fab').style.display = 'none';
 
-    window.scrollTo(0, savedScroll);
-    // Reveal after scroll is set — requestAnimationFrame ensures scroll sticks
-    requestAnimationFrame(() => { container.style.visibility = ''; });
+    // Only re-render if dirty (data changed) or never rendered
+    if (!panelDirty[view]) return;
+    panelDirty[view] = false;
+
+    const scrollBefore = panel.scrollTop;
+    if (view === 'home') renderHome(panel);
+    else if (view === 'summary') renderSummary(panel);
+    else if (view === 'logs') renderLogs(panel);
+    else if (view === 'share') renderShare(panel);
+    panel.scrollTop = scrollBefore;
+}
+
+function renderCurrentView() {
+    if (OVERLAY_VIEWS.includes(currentView)) {
+        const overlay = document.getElementById('panelOverlay');
+        if (currentView === 'settings') renderSettings(overlay);
+        else if (currentView === 'history') renderHistory(overlay);
+        else if (currentView === 'logDetail') renderLogDetail(overlay);
+    } else {
+        panelDirty[currentView] = true;
+        renderPanel(currentView);
+    }
+}
+
+function refreshSummaryPanel() {
+    const panel = document.getElementById('panelSummary');
+    if (!panel) return;
+    const scrollBefore = panel.scrollTop;
+    renderSummary(panel);
+    panel.scrollTop = scrollBefore;
 }
 
 // ==================== HOME VIEW ====================
@@ -820,7 +834,7 @@ function confirmRenameStation(stationId) {
     station.name = newName;
     saveData(true);
     document.getElementById('modalRenameStation').remove();
-    invalidateViewCache();
+    markAllPanelsDirty();
     renderCurrentView();
     showToast('Station renamed');
 }
@@ -976,9 +990,10 @@ function rerenderStationBody(stationId) {
     if (!station) return;
     const body = document.getElementById(`body-${stationId}`);
     if (body) {
-        const scrollY = window.scrollY;
+        const panel = getPanel('home');
+        const scrollBefore = panel ? panel.scrollTop : 0;
         body.innerHTML = renderIngredients(station) + stationFooter(stationId);
-        window.scrollTo(0, scrollY);
+        if (panel) panel.scrollTop = scrollBefore;
     }
 }
 
@@ -1233,17 +1248,13 @@ function toggleCompleted(stationId, ingredientId) {
                 ingredient: station.ingredients.find(i => i.id === ingredientId)?.name || '',
                 station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
             });
-            const scrollY = window.scrollY;
-            renderSummary(document.getElementById('mainContent'));
-            window.scrollTo(0, scrollY);
+            refreshSummaryPanel();
         }
     } else {
         // Unchecking — just toggle directly
         station.status[ingredientId].completed = false;
         saveData(true);
-        const scrollY = window.scrollY;
-        renderSummary(document.getElementById('mainContent'));
-        window.scrollTo(0, scrollY);
+        refreshSummaryPanel();
     }
 }
 
@@ -1377,9 +1388,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
 
     checkAndManageWakeLock();
     showToast(`⏱ Timing: ${ingName}`);
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function pauseTaskTimer(timerKey) {
@@ -1391,9 +1400,7 @@ function pauseTaskTimer(timerKey) {
     updateTimerNotification();
 
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function resumeTaskTimer(timerKey) {
@@ -1408,9 +1415,7 @@ function resumeTaskTimer(timerKey) {
     }, 1000);
 
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function resetTaskTimer(timerKey) {
@@ -1421,9 +1426,7 @@ function resetTaskTimer(timerKey) {
     updateTimerNotification();
 
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 // ── Block Timers ──
@@ -1466,9 +1469,7 @@ function toggleBlockTimer(level) {
     }
     updateTimerNotification();
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function pauseBlockTimer(level) {
@@ -1486,9 +1487,7 @@ function pauseBlockTimer(level) {
     }
     updateTimerNotification();
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function resumeBlockTimer(level) {
@@ -1518,9 +1517,7 @@ function resumeBlockTimer(level) {
         });
     }
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function resetBlockTimer(level) {
@@ -1537,9 +1534,7 @@ function resetBlockTimer(level) {
     }
     updateTimerNotification();
     checkAndManageWakeLock();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function showTaskCompleteConfirm(stationId, ingredientId) {
@@ -1656,9 +1651,7 @@ function confirmTaskComplete(stationId, ingredientId) {
     if (modal) modal.remove();
 
     animateMascot();
-    const scrollY = window.scrollY;
-    renderSummary(document.getElementById('mainContent'));
-    window.scrollTo(0, scrollY);
+    refreshSummaryPanel();
 }
 
 function cancelTaskComplete(stationId, ingredientId) {
@@ -1684,7 +1677,7 @@ function logActivity(type, data) {
     // Keep last 500 entries
     if (activityLog.length > 500) activityLog = activityLog.slice(-500);
     localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
-    invalidateViewCache();
+    markAllPanelsDirty();
 }
 
 function saveActivityLog() {
@@ -2166,9 +2159,7 @@ function renderLogs(container) {
 
 function openLogDetail(ingredientName) {
     logDetailIngredient = ingredientName;
-    currentView = 'logDetail';
-    sessionStorage.setItem('aqueous_currentView', 'logDetail');
-    renderCurrentView();
+    switchView('logDetail');
 }
 
 function renderLogDetail(container) {
@@ -2653,7 +2644,7 @@ function selectMascot(key) {
     settings.mascot = key;
     saveSettings();
     updateHeader();
-    renderSettings(document.getElementById('mainContent'));
+    renderSettings(document.getElementById('panelOverlay'));
     const m = MASCOTS[key];
     showToast(`${m.emoji} ${m.name} selected!`);
 }
@@ -2690,7 +2681,7 @@ function confirmEditName() {
     updateHeader();
     const modal = document.getElementById('modalEditName');
     if (modal) modal.remove();
-    renderSettings(document.getElementById('mainContent'));
+    renderSettings(document.getElementById('panelOverlay'));
     showToast('Name updated!');
 }
 
@@ -2698,7 +2689,7 @@ function clearPrepTimes() {
     if (!confirm('Clear all logged prep times?')) return;
     prepTimes = {};
     savePrepTimes();
-    renderSettings(document.getElementById('mainContent'));
+    renderSettings(document.getElementById('panelOverlay'));
     showToast('Prep times cleared');
 }
 
@@ -2821,16 +2812,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Gesture-driven swipe navigation
+    // Gesture-driven swipe — 4 persistent panels
     const track = document.getElementById('swipeTrack');
-    const prevPanel = document.getElementById('swipePrev');
-    const nextPanel = document.getElementById('swipeNext');
-    const mainContent = document.getElementById('mainContent');
     let swStartX = 0, swStartY = 0, swDx = 0;
     let swSwiping = false, swDirectionLocked = false, swIsHorizontal = false;
     let swPrevView = null, swNextView = null, swViewportW = 0;
+    let swBaseIdx = 0;
 
     document.addEventListener('touchstart', (e) => {
         if (track.classList.contains('snapping')) return;
+        if (OVERLAY_VIEWS.includes(currentView)) return;
         swStartX = e.touches[0].clientX;
         swStartY = e.touches[0].clientY;
         swDx = 0;
@@ -2839,19 +2830,17 @@ document.addEventListener('DOMContentLoaded', () => {
         swIsHorizontal = false;
         swViewportW = window.innerWidth;
 
-        // Pre-render adjacent views
         const resolved = resolveSwipeView(currentView);
-        if (!resolved) return; // settings — skip
-        const idx = SWIPE_VIEW_ORDER.indexOf(resolved);
-        if (idx === -1) return;
+        if (!resolved) return;
+        swBaseIdx = SWIPE_VIEW_ORDER.indexOf(resolved);
+        if (swBaseIdx === -1) return;
 
-        swPrevView = idx > 0 ? SWIPE_VIEW_ORDER[idx - 1] : null;
-        swNextView = idx < SWIPE_VIEW_ORDER.length - 1 ? SWIPE_VIEW_ORDER[idx + 1] : null;
+        swPrevView = swBaseIdx > 0 ? SWIPE_VIEW_ORDER[swBaseIdx - 1] : null;
+        swNextView = swBaseIdx < SWIPE_VIEW_ORDER.length - 1 ? SWIPE_VIEW_ORDER[swBaseIdx + 1] : null;
 
-        if (swPrevView) renderViewInto(prevPanel, swPrevView);
-        else prevPanel.innerHTML = '';
-        if (swNextView) renderViewInto(nextPanel, swNextView);
-        else nextPanel.innerHTML = '';
+        // Pre-render adjacent panels if dirty
+        if (swPrevView) renderPanel(swPrevView);
+        if (swNextView) renderPanel(swNextView);
     }, { passive: true });
 
     document.addEventListener('touchmove', (e) => {
@@ -2861,7 +2850,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const dx = x - swStartX;
         const dy = y - swStartY;
 
-        // Lock direction on first significant move
         if (!swDirectionLocked) {
             if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
                 swDirectionLocked = true;
@@ -2871,15 +2859,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!swIsHorizontal) return;
-
-        // Block if no view in that direction
         if (dx > 0 && !swPrevView) return;
         if (dx < 0 && !swNextView) return;
 
         swSwiping = true;
         swDx = dx;
-        const pct = (dx / swViewportW) * 33.333;
-        track.style.transform = `translateX(calc(-33.333% + ${pct}%))`;
+        const basePct = swBaseIdx * 25;
+        const offsetPct = (dx / swViewportW) * 25;
+        track.style.transform = `translateX(${-(basePct) + offsetPct}%)`;
     }, { passive: true });
 
     document.addEventListener('touchend', () => {
@@ -2894,44 +2881,27 @@ document.addEventListener('DOMContentLoaded', () => {
         track.classList.add('snapping');
 
         if (shouldSwitch && swDx > 0 && swPrevView) {
-            track.style.transform = 'translateX(0%)';
+            // Swipe right → previous view
+            slideTrackTo(swPrevView, false); // snapping class already on
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
-                cacheCurrentView();
-                const targetScroll = viewScrollCache[swPrevView] || 0;
-                mainContent.style.visibility = 'hidden';
-                mainContent.innerHTML = '';
-                while (prevPanel.firstChild) mainContent.appendChild(prevPanel.firstChild);
-                nextPanel.innerHTML = '';
-                track.style.transform = 'translateX(-33.333%)';
-                switchView(swPrevView, true);
-                window.scrollTo(0, targetScroll);
-                mainContent.style.visibility = '';
+                switchView(swPrevView, true); // skipSlide — already there
             });
         } else if (shouldSwitch && swDx < 0 && swNextView) {
-            track.style.transform = 'translateX(-66.666%)';
+            // Swipe left → next view
+            slideTrackTo(swNextView, false);
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
-                cacheCurrentView();
-                const targetScroll = viewScrollCache[swNextView] || 0;
-                mainContent.style.visibility = 'hidden';
-                mainContent.innerHTML = '';
-                while (nextPanel.firstChild) mainContent.appendChild(nextPanel.firstChild);
-                prevPanel.innerHTML = '';
-                track.style.transform = 'translateX(-33.333%)';
                 switchView(swNextView, true);
-                window.scrollTo(0, targetScroll);
-                mainContent.style.visibility = '';
             });
         } else {
-            track.style.transform = 'translateX(-33.333%)';
+            // Snap back
+            slideTrackTo(SWIPE_VIEW_ORDER[swBaseIdx], false);
             track.addEventListener('transitionend', function handler() {
                 track.removeEventListener('transitionend', handler);
                 track.classList.remove('snapping');
-                prevPanel.innerHTML = '';
-                nextPanel.innerHTML = '';
             });
         }
 

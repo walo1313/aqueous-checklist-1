@@ -89,16 +89,18 @@
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg);
-            min-height: 100vh;
+            height: 100vh;
+            height: 100dvh;
             color: var(--text);
             -webkit-font-smoothing: antialiased;
-            overflow-x: hidden;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         /* ===== HEADER ===== */
         .header {
-            position: sticky;
-            top: 0;
+            flex-shrink: 0;
             z-index: 100;
             padding: 32px 24px 24px;
             background: var(--bg);
@@ -183,9 +185,6 @@
         }
 
         /* ===== MAIN CONTENT ===== */
-        .main-content {
-            padding: 0 20px 100px;
-        }
         .swipe-panel { padding: 0 20px 100px; }
 
         /* ===== NEUMORPHIC CARDS ===== */
@@ -1779,25 +1778,42 @@
 
         .neu-card, .glass-card { animation: fadeIn 0.25s ease; }
 
-        /* Gesture-driven swipe */
+        /* Gesture-driven swipe — 4 persistent panels */
         .swipe-viewport {
-            overflow: hidden;
             position: relative;
+            overflow: hidden;
+            flex: 1;
+            min-height: 0;
         }
         .swipe-track {
             display: flex;
-            width: 300%;
-            transform: translateX(-33.333%);
+            width: 400%;
+            height: 100%;
+            transform: translateX(0%);
             will-change: transform;
         }
         .swipe-track.snapping {
             transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         .swipe-panel {
-            width: 33.333%;
+            width: 25%;
             flex-shrink: 0;
-            min-height: 1px;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
         }
+        .swipe-overlay {
+            display: none;
+            position: absolute;
+            inset: 0;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            background: var(--bg);
+            z-index: 50;
+            padding: 0 20px 100px;
+        }
+        .swipe-overlay.active { display: block; }
 
         /* Smooth scroll fix */
         html { scroll-behavior: smooth; }
@@ -1828,12 +1844,14 @@
         </div>
     </div>
 
-    <div class="swipe-viewport">
+    <div class="swipe-viewport" id="swipeViewport">
         <div class="swipe-track" id="swipeTrack">
-            <div class="swipe-panel" id="swipePrev"></div>
-            <div class="swipe-panel main-content" id="mainContent"></div>
-            <div class="swipe-panel" id="swipeNext"></div>
+            <div class="swipe-panel" id="panelHome"></div>
+            <div class="swipe-panel" id="panelSummary"></div>
+            <div class="swipe-panel" id="panelLogs"></div>
+            <div class="swipe-panel" id="panelShare"></div>
         </div>
+        <div class="swipe-overlay" id="panelOverlay"></div>
     </div>
 
     <button class="fab" id="fab" onclick="showNewStationModal()">+</button>
