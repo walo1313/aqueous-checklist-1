@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 48;
+const APP_BUILD = 49;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1392,21 +1392,29 @@ function updateTimerNotification() {
 
     const totalActive = running.length + runningBlocks.length;
 
-    // Clean per-timer lines: "Name  mm:ss"
-    let lines = running.map(t => `${t.ingName}  ${formatTime(t.seconds)}`);
-    runningBlocks.forEach(([k, v]) => {
-        lines.push(`${blockLabels[k] || k}  ${formatTime(v.seconds)}`);
-    });
+    // Build all timer entries
+    const allTimers = [];
+    running.forEach(t => allTimers.push({ name: t.ingName, time: formatTime(t.seconds) }));
+    runningBlocks.forEach(([k, v]) => allTimers.push({ name: blockLabels[k] || k, time: formatTime(v.seconds) }));
 
-    // Send first running task timer key for Pause/Done targeting
+    // Title = first timer name, Body = time (+ others if multiple)
+    const first = allTimers[0];
+    let title = first.name;
+    let body = first.time;
+    if (allTimers.length > 1) {
+        title = `${first.name}  +${allTimers.length - 1} more`;
+        body = allTimers.map(t => `${t.name}  ${t.time}`).join('\n');
+    }
+
+    // First running task timer key for Pause/Done targeting
     const firstRunningKey = running.length > 0
         ? Object.entries(taskTimers).find(([k, t]) => t.running)?.[0] || null
         : null;
 
     sendSWMessage({
         type: 'TIMER_UPDATE',
-        body: lines.join('\n'),
-        title: `Aqueous \u2014 ${totalActive} timer${totalActive > 1 ? 's' : ''}`,
+        title,
+        body,
         firstTimerKey: firstRunningKey
     });
 }

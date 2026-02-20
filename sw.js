@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v48';
+const CACHE_NAME = 'aqueous-v49';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -6,6 +6,7 @@ const urlsToCache = [
   './icon-192.png',
   './icon-512.png',
   './mascot.png',
+  './badge-96.png',
   './mascot-explosive.mp4',
   './mascot-rasta.mp4',
   './mascot-sad.mp4',
@@ -66,7 +67,7 @@ self.addEventListener('message', event => {
       tag: 'aqueous-timer',
       renotify: isFirst,
       icon: './mascot.png',
-      badge: './mascot.png',
+      badge: './badge-96.png',
       requireInteraction: true,
       actions: [
         { action: 'pause', title: 'Pause' },
