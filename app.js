@@ -509,7 +509,19 @@ function renderPanel(view) {
     else if (view === 'summary') renderSummary(panel);
     else if (view === 'logs') renderLogs(panel);
     else if (view === 'share') renderShare(panel);
+    // Re-insert PTR indicator at top (render functions replace innerHTML)
+    ensurePTR(panel, view);
     panel.scrollTop = scrollBefore;
+}
+
+function ensurePTR(panel, view) {
+    if (!document.getElementById(`ptr-${view}`)) {
+        const el = document.createElement('div');
+        el.className = 'ptr-indicator';
+        el.id = `ptr-${view}`;
+        el.innerHTML = '<div class="ptr-spinner"></div>Refreshing…';
+        panel.prepend(el);
+    }
 }
 
 function renderCurrentView() {
@@ -545,7 +557,7 @@ function renderHome(container) {
         return;
     }
 
-    let html = '<div class="ptr-indicator" id="ptrIndicator"><div class="ptr-spinner"></div>Refreshing…</div>';
+    let html = '';
     stations.forEach(station => {
         const lowCount = Object.values(station.status).filter(s => s.low).length;
         const totalCount = station.ingredients.length;
@@ -2925,46 +2937,48 @@ document.addEventListener('DOMContentLoaded', () => {
         swDx = 0;
     }, { passive: true });
 
-    // Pull-to-refresh on Home panel
-    const homePanel = document.getElementById('panelHome');
-    let ptrStartY = 0, ptrActive = false;
+    // Pull-to-refresh on all panels
+    SWIPE_VIEW_ORDER.forEach(view => {
+        const panel = document.getElementById(SWIPE_PANELS[view]);
+        if (!panel) return;
 
-    homePanel.addEventListener('touchstart', (e) => {
-        if (homePanel.scrollTop <= 0 && currentView === 'home') {
-            ptrStartY = e.touches[0].clientY;
-        } else {
-            ptrStartY = 0;
-        }
-        ptrActive = false;
-    }, { passive: true });
+        // Insert PTR indicator at top of each panel
+        const ptrEl = document.createElement('div');
+        ptrEl.className = 'ptr-indicator';
+        ptrEl.id = `ptr-${view}`;
+        ptrEl.innerHTML = '<div class="ptr-spinner"></div>Refreshing…';
+        panel.prepend(ptrEl);
 
-    homePanel.addEventListener('touchmove', (e) => {
-        if (!ptrStartY || homePanel.scrollTop > 0) return;
-        const dy = e.touches[0].clientY - ptrStartY;
-        if (dy > 50 && !ptrActive) {
-            ptrActive = true;
-            const indicator = document.getElementById('ptrIndicator');
-            if (indicator) indicator.classList.add('pulling');
-        }
-    }, { passive: true });
+        let ptrY = 0, ptrFired = false;
 
-    homePanel.addEventListener('touchend', () => {
-        if (ptrActive) {
-            const indicator = document.getElementById('ptrIndicator');
-            if (indicator) {
-                indicator.classList.remove('pulling');
-                indicator.classList.add('refreshing');
+        panel.addEventListener('touchstart', (e) => {
+            ptrY = panel.scrollTop <= 0 ? e.touches[0].clientY : 0;
+            ptrFired = false;
+        }, { passive: true });
+
+        panel.addEventListener('touchmove', (e) => {
+            if (!ptrY || panel.scrollTop > 0) return;
+            if (e.touches[0].clientY - ptrY > 50 && !ptrFired) {
+                ptrFired = true;
+                ptrEl.classList.add('pulling');
             }
-            panelDirty.home = true;
-            renderPanel('home');
-            setTimeout(() => {
-                const ind = document.getElementById('ptrIndicator');
-                if (ind) ind.classList.remove('refreshing');
-            }, 400);
-        }
-        ptrStartY = 0;
-        ptrActive = false;
-    }, { passive: true });
+        }, { passive: true });
+
+        panel.addEventListener('touchend', () => {
+            if (ptrFired) {
+                panelDirty[view] = true;
+                renderPanel(view);
+                const ind = document.getElementById(`ptr-${view}`);
+                if (ind) {
+                    ind.classList.remove('pulling');
+                    ind.classList.add('refreshing');
+                    setTimeout(() => ind.classList.remove('refreshing'), 400);
+                }
+            }
+            ptrY = 0;
+            ptrFired = false;
+        }, { passive: true });
+    });
 
     // Splash screen: only show full on first visit, skip on return visits
     const splash = document.getElementById('splashScreen');
