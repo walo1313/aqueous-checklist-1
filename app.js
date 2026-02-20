@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 45;
+const APP_BUILD = 46;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -3026,81 +3026,6 @@ document.addEventListener('DOMContentLoaded', () => {
         swSwiping = false;
         swStartX = 0; swStartY = 0;
         swDx = 0;
-    }, { passive: true });
-
-    // Full-page pull-to-refresh (header + content pull down together)
-    const appShell = document.getElementById('appShell');
-    const ptrFixed = document.getElementById('ptrFixed');
-    const PTR_MAX = 80, PTR_THRESHOLD = 56;
-    let ptrStartY = 0, ptrPulling = false, ptrDy = 0;
-
-    function getActivePanel() {
-        const id = SWIPE_PANELS[currentView];
-        return id ? document.getElementById(id) : null;
-    }
-
-    document.addEventListener('touchstart', (e) => {
-        if (OVERLAY_VIEWS.includes(currentView)) return;
-        if (appShell.classList.contains('snapping')) return;
-        const panel = getActivePanel();
-        ptrStartY = (panel && panel.scrollTop <= 0) ? e.touches[0].clientY : 0;
-        ptrPulling = false;
-        ptrDy = 0;
-    }, { passive: true });
-
-    document.addEventListener('touchmove', (e) => {
-        if (!ptrStartY) return;
-        const panel = getActivePanel();
-        if (panel && panel.scrollTop > 0) { ptrStartY = 0; return; }
-        const dy = e.touches[0].clientY - ptrStartY;
-        if (dy <= 0) return;
-
-        // Don't conflict with horizontal swipe
-        if (swSwiping) { ptrStartY = 0; return; }
-
-        ptrPulling = true;
-        ptrDy = dy;
-        // Rubber-band: diminishing pull
-        const pull = Math.min(dy * 0.45, PTR_MAX);
-        appShell.style.transform = `translateY(${pull}px)`;
-        ptrFixed.classList.toggle('visible', pull > 20);
-    }, { passive: true });
-
-    document.addEventListener('touchend', () => {
-        if (!ptrPulling) { ptrStartY = 0; return; }
-
-        const pull = Math.min(ptrDy * 0.45, PTR_MAX);
-        appShell.classList.add('snapping');
-
-        if (pull >= PTR_THRESHOLD * 0.45 || ptrDy >= PTR_THRESHOLD) {
-            // Hold at pull position briefly to show spinner
-            setTimeout(() => {
-                // Refresh current panel
-                panelDirty[currentView] = true;
-                renderPanel(currentView);
-                updateLastSync();
-                if (navigator.vibrate) navigator.vibrate(15);
-                // Snap back
-                appShell.style.transform = '';
-                ptrFixed.classList.remove('visible');
-                appShell.addEventListener('transitionend', function h() {
-                    appShell.removeEventListener('transitionend', h);
-                    appShell.classList.remove('snapping');
-                    showToast(`✓ Synced – ${lastSync}`);
-                });
-            }, 300);
-        } else {
-            // Snap back immediately
-            appShell.style.transform = '';
-            ptrFixed.classList.remove('visible');
-            appShell.addEventListener('transitionend', function h() {
-                appShell.removeEventListener('transitionend', h);
-                appShell.classList.remove('snapping');
-            });
-        }
-        ptrStartY = 0;
-        ptrPulling = false;
-        ptrDy = 0;
     }, { passive: true });
 
     // Overlay drag-to-dismiss (bottom-sheet style)
