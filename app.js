@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 55;
+const APP_BUILD = 56;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1336,16 +1336,27 @@ function sendSWMessage(msg) {
 // Throttle notification updates: max 1 per second regardless of timer count
 let _notifPending = false;
 let _notifTimeout = null;
+let _notifLastSent = 0;
 
 function updateTimerNotification() {
-    if (_notifPending) return; // already scheduled
+    if (_notifPending) return;
     _notifPending = true;
     if (_notifTimeout) clearTimeout(_notifTimeout);
-    _notifTimeout = setTimeout(_doUpdateTimerNotification, 900);
+    const now = Date.now();
+    const elapsed = now - _notifLastSent;
+    const delay = elapsed >= 3000 ? 100 : 3000 - elapsed;
+    _notifTimeout = setTimeout(_doUpdateTimerNotification, delay);
+}
+
+function forceUpdateTimerNotification() {
+    _notifPending = false;
+    if (_notifTimeout) clearTimeout(_notifTimeout);
+    _doUpdateTimerNotification();
 }
 
 function _doUpdateTimerNotification() {
     _notifPending = false;
+    _notifLastSent = Date.now();
     if (!settings.timerNotifications) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;
@@ -1417,7 +1428,7 @@ if (navigator.serviceWorker) {
             }
             panelDirty.home = true;
             renderPanel('home');
-            updateTimerNotification();
+            forceUpdateTimerNotification();
         }
 
         if (type === 'DONE_TIMER' && timerKey) {
@@ -1437,7 +1448,7 @@ if (navigator.serviceWorker) {
                     }
                     if (t.interval) clearInterval(t.interval);
                     delete taskTimers[timerKey];
-                    updateTimerNotification();
+                    forceUpdateTimerNotification();
                     saveData(true);
                     animateMascot();
                     checkAndManageWakeLock();
@@ -1487,7 +1498,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
         }, 1000)
     };
 
-    updateTimerNotification();
+    forceUpdateTimerNotification();
 
     checkAndManageWakeLock();
     showToast(`⏱ Timing: ${ingName}`);
@@ -1500,7 +1511,7 @@ function pauseTaskTimer(timerKey) {
     if (t.interval) clearInterval(t.interval);
     t.interval = null;
     t.running = false;
-    updateTimerNotification();
+    forceUpdateTimerNotification();
 
     checkAndManageWakeLock();
     refreshSummaryPanel();
@@ -1526,7 +1537,7 @@ function resetTaskTimer(timerKey) {
     if (!t) return;
     if (t.interval) clearInterval(t.interval);
     delete taskTimers[timerKey];
-    updateTimerNotification();
+    forceUpdateTimerNotification();
 
     checkAndManageWakeLock();
     refreshSummaryPanel();
@@ -1593,7 +1604,7 @@ function toggleBlockTimer(level) {
             updateTimerNotification();
         }, 1000)
     };
-    updateTimerNotification();
+    forceUpdateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1604,7 +1615,7 @@ function pauseBlockTimer(level) {
     if (bt.interval) clearInterval(bt.interval);
     bt.interval = null;
     bt.running = false;
-    updateTimerNotification();
+    forceUpdateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1632,7 +1643,7 @@ function resetBlockTimer(level) {
     if (!bt) return;
     if (bt.interval) clearInterval(bt.interval);
     delete blockTimers[level];
-    updateTimerNotification();
+    forceUpdateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1656,8 +1667,8 @@ function checkBlockCompletion(level) {
     const seconds = bt.seconds;
     const goal = bt.goalSeconds || 0;
     let status;
-    if (seconds < -30) status = 'behind';
-    else if (seconds > 30) status = 'record';
+    if (seconds < -15) status = 'behind';
+    else if (seconds > 15) status = 'ahead';
     else status = 'ontime';
 
     const labels = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority', none: 'No Priority Set' };
@@ -1665,13 +1676,13 @@ function checkBlockCompletion(level) {
 
     if (bt.interval) clearInterval(bt.interval);
     delete blockTimers[level];
-    updateTimerNotification();
+    forceUpdateTimerNotification();
     checkAndManageWakeLock();
 
     logActivity('block_complete', { level, label, seconds, goal, status });
 
-    const msgs = { behind: 'Behind', ontime: 'On Time', record: 'New Record!' };
-    const icons = { behind: '\u23F0', ontime: '\u2705', record: '\uD83C\uDFC6' };
+    const msgs = { behind: 'Behind', ontime: 'On Time', ahead: 'Ahead!' };
+    const icons = { behind: '\u23F0', ontime: '\u2705', ahead: '\uD83C\uDFC6' };
     showToast(`${label}: ${icons[status]} ${msgs[status]}`);
     refreshSummaryPanel();
 }
@@ -1779,8 +1790,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         if (t.interval) clearInterval(t.interval);
         delete taskTimers[timerKey];
     }
-    updateTimerNotification();
-
+    forceUpdateTimerNotification();
 
     // Mark completed
     if (station) station.status[ingredientId].completed = true;
@@ -2490,23 +2500,31 @@ function renderHistoryTab(container) {
         return;
     }
 
-    const hasBehind = entries.some(e => e.data && e.data.status === 'behind');
-    const allRecord = entries.every(e => e.data && e.data.status === 'record');
-
-    let dayIcon, dayLabel;
-    if (hasBehind) { dayIcon = '\u23F0'; dayLabel = 'Behind'; }
-    else if (allRecord) { dayIcon = '\uD83C\uDFC6'; dayLabel = 'Perfect!'; }
+    let totalGoal = 0;
+    let totalActual = 0;
+    entries.forEach(e => {
+        const d = e.data || {};
+        totalGoal += d.goal || 0;
+        totalActual += (d.goal || 0) - (d.seconds || 0);
+    });
+    const dayDiff = totalGoal - totalActual;
+    let dayIcon, dayLabel, daySub;
+    if (dayDiff < -15) { dayIcon = '\u23F0'; dayLabel = 'Behind'; }
+    else if (dayDiff > 15) { dayIcon = '\uD83C\uDFC6'; dayLabel = 'Ahead!'; }
     else { dayIcon = '\u2705'; dayLabel = 'On Time'; }
+    const totalGoalStr = formatTime(Math.abs(totalGoal));
+    const totalActualStr = formatTime(Math.abs(totalActual));
+    daySub = `${entries.length} block${entries.length !== 1 ? 's' : ''} \u2022 Goal: ${totalGoalStr} \u2022 Actual: ${totalActualStr}`;
 
     html += `<div class="history-day-status">
         <div class="history-day-icon">${dayIcon}</div>
         <div class="history-day-label">${dayLabel}</div>
-        <div class="history-day-sub">${entries.length} block${entries.length !== 1 ? 's' : ''} completed</div>
+        <div class="history-day-sub">${daySub}</div>
     </div>`;
 
     entries.forEach(e => {
         const d = e.data || {};
-        const statusLabels = { behind: 'Behind', ontime: 'On Time', record: 'New Record' };
+        const statusLabels = { behind: 'Behind', ontime: 'On Time', ahead: 'Ahead' };
         const statusClass = d.status || 'ontime';
         const goalSec = d.goal || 0;
         const actualSec = goalSec - (d.seconds || 0);
