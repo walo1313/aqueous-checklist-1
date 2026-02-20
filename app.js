@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 44;
+const APP_BUILD = 45;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -448,12 +448,18 @@ function slideTrackTo(view, animate) {
 function showOverlay(show) {
     const overlay = document.getElementById('panelOverlay');
     if (show) {
-        overlay.classList.add('active');
-        // Trigger slide-in on next frame so transition plays
-        requestAnimationFrame(() => overlay.classList.add('slide-in'));
+        // Start at bottom, then animate up
+        overlay.style.transform = 'translateY(100%)';
+        overlay.classList.add('open');
+        // Force reflow so the browser registers the start position
+        overlay.offsetHeight;
+        overlay.classList.add('animating');
+        overlay.style.transform = '';
+        const onEnd = () => { overlay.removeEventListener('transitionend', onEnd); overlay.classList.remove('animating'); };
+        overlay.addEventListener('transitionend', onEnd);
     } else {
-        overlay.classList.remove('slide-in');
-        overlay.classList.remove('active');
+        // Instant hide (used by nav-bar clicks)
+        overlay.classList.remove('open', 'animating');
         overlay.innerHTML = '';
         overlay.style.transform = '';
     }
@@ -461,10 +467,11 @@ function showOverlay(show) {
 
 function dismissOverlay() {
     const overlay = document.getElementById('panelOverlay');
-    overlay.classList.add('slide-out');
+    overlay.classList.add('animating');
+    overlay.style.transform = 'translateY(100%)';
     overlay.addEventListener('transitionend', function handler() {
         overlay.removeEventListener('transitionend', handler);
-        overlay.classList.remove('slide-out', 'slide-in', 'active');
+        overlay.classList.remove('open', 'animating');
         overlay.innerHTML = '';
         overlay.style.transform = '';
         // Navigate back to previous swipe view
@@ -3108,7 +3115,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         ovDragging = false;
         ovDy = 0;
-        overlayEl.classList.remove('slide-in');
+        // Remove transition during drag for instant finger-tracking
+        overlayEl.classList.remove('animating');
     }, { passive: true });
 
     overlayEl.addEventListener('touchmove', (e) => {
@@ -3127,12 +3135,17 @@ document.addEventListener('DOMContentLoaded', () => {
     overlayEl.addEventListener('touchend', () => {
         if (!ovDragging) { ovStartY = 0; return; }
         if (ovDy > 120) {
-            // Dismiss
+            // Dismiss — animate down to 100% then clean up
             dismissOverlay();
         } else {
-            // Snap back
-            overlayEl.classList.add('slide-in');
-            overlayEl.style.transform = 'translateY(0)';
+            // Snap back — animate back to translateY(0)
+            overlayEl.classList.add('animating');
+            overlayEl.style.transform = '';
+            const onSnap = () => {
+                overlayEl.removeEventListener('transitionend', onSnap);
+                overlayEl.classList.remove('animating');
+            };
+            overlayEl.addEventListener('transitionend', onSnap);
         }
         ovStartY = 0;
         ovDragging = false;
