@@ -552,13 +552,14 @@ function renderHome(container) {
 
         html += `
         <div class="neu-card">
-            <div class="station-header" onclick="toggleStation(${station.id})">
+            <div class="station-header"
+                 onclick="toggleStation(${station.id})"
+                 ontouchstart="startStationLongPress(event, ${station.id})"
+                 ontouchend="cancelStationLongPress()"
+                 ontouchmove="cancelStationLongPress()"
+                 oncontextmenu="if(!event.target.closest('.expand-toggle')){event.preventDefault(); event.stopPropagation(); showRenameStationModal(${station.id})}">
                 <div class="station-header-left">
-                    <span class="station-name"
-                          ontouchstart="startStationLongPress(event, ${station.id})"
-                          ontouchend="cancelStationLongPress()"
-                          ontouchmove="cancelStationLongPress()"
-                          oncontextmenu="event.preventDefault(); event.stopPropagation(); showRenameStationModal(${station.id})">${station.name}</span>
+                    <span class="station-name">${station.name}</span>
                     ${lowCount > 0 ? `<span class="count-badge">${lowCount}</span>` : ''}
                 </div>
                 <div class="station-header-right">
@@ -775,6 +776,7 @@ function toggleStation(stationId) {
 let stationLongPressTimer = null;
 
 function startStationLongPress(event, stationId) {
+    if (event.target.closest('.expand-toggle')) return;
     stationLongPressTimer = setTimeout(() => {
         stationLongPressTimer = null;
         if (navigator.vibrate) navigator.vibrate(30);
