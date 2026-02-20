@@ -435,8 +435,35 @@ function slideTrackTo(view, animate) {
 
 function showOverlay(show) {
     const overlay = document.getElementById('panelOverlay');
-    if (show) { overlay.classList.add('active'); }
-    else { overlay.classList.remove('active'); overlay.innerHTML = ''; }
+    if (show) {
+        overlay.classList.add('active');
+        // Trigger slide-in on next frame so transition plays
+        requestAnimationFrame(() => overlay.classList.add('slide-in'));
+    } else {
+        overlay.classList.remove('slide-in');
+        overlay.classList.remove('active');
+        overlay.innerHTML = '';
+        overlay.style.transform = '';
+    }
+}
+
+function dismissOverlay() {
+    const overlay = document.getElementById('panelOverlay');
+    overlay.classList.add('slide-out');
+    overlay.addEventListener('transitionend', function handler() {
+        overlay.removeEventListener('transitionend', handler);
+        overlay.classList.remove('slide-out', 'slide-in', 'active');
+        overlay.innerHTML = '';
+        overlay.style.transform = '';
+        // Navigate back to previous swipe view
+        const target = previousView || 'home';
+        currentView = target;
+        sessionStorage.setItem('aqueous_currentView', target);
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        const navItems = document.querySelectorAll('.nav-item');
+        const idx = SWIPE_VIEW_ORDER.indexOf(target);
+        if (idx >= 0 && navItems[idx]) navItems[idx].classList.add('active');
+    });
 }
 
 function markAllPanelsDirty() {
@@ -486,6 +513,10 @@ function switchView(view, skipSlide) {
         if (view === 'settings') renderSettings(overlay);
         else if (view === 'history') renderHistory(overlay);
         else if (view === 'logDetail') renderLogDetail(overlay);
+        // Prepend pull bar for drag-to-dismiss
+        const bar = document.createElement('div');
+        bar.className = 'overlay-pull-bar';
+        overlay.prepend(bar);
         overlay.scrollTop = 0;
         return;
     }
@@ -2979,6 +3010,49 @@ document.addEventListener('DOMContentLoaded', () => {
             ptrFired = false;
         }, { passive: true });
     });
+
+    // Overlay drag-to-dismiss (bottom-sheet style)
+    const overlayEl = document.getElementById('panelOverlay');
+    let ovStartY = 0, ovDragging = false, ovDy = 0;
+
+    overlayEl.addEventListener('touchstart', (e) => {
+        if (overlayEl.scrollTop <= 0) {
+            ovStartY = e.touches[0].clientY;
+        } else {
+            ovStartY = 0;
+        }
+        ovDragging = false;
+        ovDy = 0;
+        overlayEl.classList.remove('slide-in');
+    }, { passive: true });
+
+    overlayEl.addEventListener('touchmove', (e) => {
+        if (!ovStartY) return;
+        const dy = e.touches[0].clientY - ovStartY;
+        // Only drag down (positive dy), and only when at scroll top
+        if (dy > 0 && overlayEl.scrollTop <= 0) {
+            ovDragging = true;
+            ovDy = dy;
+            // Rubber-band resistance: diminish movement as you drag further
+            const dampened = dy * 0.6;
+            overlayEl.style.transform = `translateY(${dampened}px)`;
+        }
+    }, { passive: true });
+
+    overlayEl.addEventListener('touchend', () => {
+        if (!ovDragging) { ovStartY = 0; return; }
+        if (ovDy > 120) {
+            // Dismiss
+            dismissOverlay();
+        } else {
+            // Snap back
+            overlayEl.classList.add('slide-in');
+            overlayEl.style.transform = 'translateY(0)';
+        }
+        ovStartY = 0;
+        ovDragging = false;
+        ovDy = 0;
+    }, { passive: true });
 
     // Splash screen: only show full on first visit, skip on return visits
     const splash = document.getElementById('splashScreen');
