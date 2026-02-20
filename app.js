@@ -540,19 +540,7 @@ function renderPanel(view) {
     else if (view === 'summary') renderSummary(panel);
     else if (view === 'logs') renderLogs(panel);
     else if (view === 'share') renderShare(panel);
-    // Re-insert PTR indicator at top (render functions replace innerHTML)
-    ensurePTR(panel, view);
     panel.scrollTop = scrollBefore;
-}
-
-function ensurePTR(panel, view) {
-    if (!document.getElementById(`ptr-${view}`)) {
-        const el = document.createElement('div');
-        el.className = 'ptr-indicator';
-        el.id = `ptr-${view}`;
-        el.innerHTML = '<div class="ptr-spinner"></div>Refreshing…';
-        panel.prepend(el);
-    }
 }
 
 function renderCurrentView() {
@@ -2968,48 +2956,77 @@ document.addEventListener('DOMContentLoaded', () => {
         swDx = 0;
     }, { passive: true });
 
-    // Pull-to-refresh on all panels
-    SWIPE_VIEW_ORDER.forEach(view => {
-        const panel = document.getElementById(SWIPE_PANELS[view]);
-        if (!panel) return;
+    // Full-page pull-to-refresh (header + content pull down together)
+    const appShell = document.getElementById('appShell');
+    const ptrFixed = document.getElementById('ptrFixed');
+    const PTR_MAX = 80, PTR_THRESHOLD = 56;
+    let ptrStartY = 0, ptrPulling = false, ptrDy = 0;
 
-        // Insert PTR indicator at top of each panel
-        const ptrEl = document.createElement('div');
-        ptrEl.className = 'ptr-indicator';
-        ptrEl.id = `ptr-${view}`;
-        ptrEl.innerHTML = '<div class="ptr-spinner"></div>Refreshing…';
-        panel.prepend(ptrEl);
+    function getActivePanel() {
+        const id = SWIPE_PANELS[currentView];
+        return id ? document.getElementById(id) : null;
+    }
 
-        let ptrY = 0, ptrFired = false;
+    document.addEventListener('touchstart', (e) => {
+        if (OVERLAY_VIEWS.includes(currentView)) return;
+        if (appShell.classList.contains('snapping')) return;
+        const panel = getActivePanel();
+        ptrStartY = (panel && panel.scrollTop <= 0) ? e.touches[0].clientY : 0;
+        ptrPulling = false;
+        ptrDy = 0;
+    }, { passive: true });
 
-        panel.addEventListener('touchstart', (e) => {
-            ptrY = panel.scrollTop <= 0 ? e.touches[0].clientY : 0;
-            ptrFired = false;
-        }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+        if (!ptrStartY) return;
+        const panel = getActivePanel();
+        if (panel && panel.scrollTop > 0) { ptrStartY = 0; return; }
+        const dy = e.touches[0].clientY - ptrStartY;
+        if (dy <= 0) return;
 
-        panel.addEventListener('touchmove', (e) => {
-            if (!ptrY || panel.scrollTop > 0) return;
-            if (e.touches[0].clientY - ptrY > 50 && !ptrFired) {
-                ptrFired = true;
-                ptrEl.classList.add('pulling');
-            }
-        }, { passive: true });
+        // Don't conflict with horizontal swipe
+        if (swSwiping) { ptrStartY = 0; return; }
 
-        panel.addEventListener('touchend', () => {
-            if (ptrFired) {
-                panelDirty[view] = true;
-                renderPanel(view);
-                const ind = document.getElementById(`ptr-${view}`);
-                if (ind) {
-                    ind.classList.remove('pulling');
-                    ind.classList.add('refreshing');
-                    setTimeout(() => ind.classList.remove('refreshing'), 400);
-                }
-            }
-            ptrY = 0;
-            ptrFired = false;
-        }, { passive: true });
-    });
+        ptrPulling = true;
+        ptrDy = dy;
+        // Rubber-band: diminishing pull
+        const pull = Math.min(dy * 0.45, PTR_MAX);
+        appShell.style.transform = `translateY(${pull}px)`;
+        ptrFixed.classList.toggle('visible', pull > 20);
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!ptrPulling) { ptrStartY = 0; return; }
+
+        const pull = Math.min(ptrDy * 0.45, PTR_MAX);
+        appShell.classList.add('snapping');
+
+        if (pull >= PTR_THRESHOLD * 0.45 || ptrDy >= PTR_THRESHOLD) {
+            // Hold at pull position briefly to show spinner
+            setTimeout(() => {
+                // Refresh current panel
+                panelDirty[currentView] = true;
+                renderPanel(currentView);
+                // Snap back
+                appShell.style.transform = '';
+                ptrFixed.classList.remove('visible');
+                appShell.addEventListener('transitionend', function h() {
+                    appShell.removeEventListener('transitionend', h);
+                    appShell.classList.remove('snapping');
+                });
+            }, 300);
+        } else {
+            // Snap back immediately
+            appShell.style.transform = '';
+            ptrFixed.classList.remove('visible');
+            appShell.addEventListener('transitionend', function h() {
+                appShell.removeEventListener('transitionend', h);
+                appShell.classList.remove('snapping');
+            });
+        }
+        ptrStartY = 0;
+        ptrPulling = false;
+        ptrDy = 0;
+    }, { passive: true });
 
     // Overlay drag-to-dismiss (bottom-sheet style)
     const overlayEl = document.getElementById('panelOverlay');
