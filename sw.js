@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v52';
+const CACHE_NAME = 'aqueous-v53';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -49,45 +49,61 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Track if we already have an active timer notification
-let timerNotificationActive = false;
-let lastFirstTimerKey = null;
+// Track active notification tags to clean up stale ones
+let activeTimerTags = new Set();
 
 // Handle timer notification updates from app
 self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'TIMER_UPDATE') {
-    // First notification: vibrate + sound to trigger lock screen display
-    // Subsequent updates: silent to avoid annoying the user
-    const isFirst = !timerNotificationActive;
-    timerNotificationActive = true;
-    lastFirstTimerKey = event.data.firstTimerKey || null;
+  if (event.data && event.data.type === 'TIMER_UPDATE_ALL') {
+    const timers = event.data.timers || [];
+    const newTags = new Set();
 
-    const options = {
-      body: event.data.body,
-      tag: 'aqueous-timer',
-      renotify: isFirst,
-      badge: './badge-96.png',
-      requireInteraction: true,
-      actions: [
-        { action: 'pause', title: 'Pause' },
-        { action: 'done', title: 'Done' }
-      ]
-    };
+    timers.forEach((t, i) => {
+      const tag = `aqueous-t-${t.key}`;
+      newTags.add(tag);
+      const isNew = !activeTimerTags.has(tag);
 
-    if (isFirst) {
-      options.vibrate = [100];
-      options.silent = false;
-    } else {
-      options.silent = true;
-    }
+      const options = {
+        body: t.time,
+        tag,
+        badge: './badge-96.png',
+        requireInteraction: true,
+        silent: !isNew,
+        renotify: isNew,
+        data: { timerKey: t.key, timerType: t.type, running: t.running },
+        actions: [
+          { action: 'toggle_pause', title: t.running ? 'Pause' : 'Resume' },
+          { action: 'done', title: 'Done' }
+        ]
+      };
 
-    self.registration.showNotification(event.data.title, options);
-  }
-  if (event.data && event.data.type === 'TIMER_CLEAR') {
-    timerNotificationActive = false;
-    self.registration.getNotifications({ tag: 'aqueous-timer' }).then(notifications => {
-      notifications.forEach(n => n.close());
+      if (isNew) {
+        options.vibrate = [100];
+        options.silent = false;
+      }
+
+      self.registration.showNotification(t.name, options);
     });
+
+    // Close notifications for timers that no longer exist
+    self.registration.getNotifications().then(notifications => {
+      notifications.forEach(n => {
+        if (n.tag && n.tag.startsWith('aqueous-t-') && !newTags.has(n.tag)) {
+          n.close();
+        }
+      });
+    });
+
+    activeTimerTags = newTags;
+  }
+
+  if (event.data && event.data.type === 'TIMER_CLEAR_ALL') {
+    self.registration.getNotifications().then(notifications => {
+      notifications.forEach(n => {
+        if (n.tag && n.tag.startsWith('aqueous-t-')) n.close();
+      });
+    });
+    activeTimerTags = new Set();
   }
 });
 
@@ -96,20 +112,20 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
 
   const action = event.action;
-  const timerKey = lastFirstTimerKey;
+  const data = event.notification.data || {};
+  const timerKey = data.timerKey;
+  const timerType = data.timerType;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      if (action === 'pause' && timerKey) {
+      if (action === 'toggle_pause' && timerKey) {
         windowClients.forEach(client => {
-          client.postMessage({ type: 'PAUSE_TIMER', timerKey });
+          client.postMessage({ type: 'TOGGLE_PAUSE_TIMER', timerKey, timerType });
         });
-        if (windowClients.length > 0) windowClients[0].focus();
       } else if (action === 'done' && timerKey) {
         windowClients.forEach(client => {
-          client.postMessage({ type: 'DONE_TIMER', timerKey });
+          client.postMessage({ type: 'DONE_TIMER', timerKey, timerType });
         });
-        if (windowClients.length > 0) windowClients[0].focus();
       } else {
         // Default tap: open or focus the app
         if (windowClients.length > 0) {

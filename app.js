@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 52;
+const APP_BUILD = 53;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1338,44 +1338,39 @@ function updateTimerNotification() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;
 
-    const running = Object.values(taskTimers).filter(t => t.running);
-    const blockLabels = { high: 'Before Service', medium: 'Necessary', low: 'Backup', none: 'No Priority', _all: 'All Blocks' };
-    const runningBlocks = Object.entries(blockTimers).filter(([k, v]) => v.running && !v.synced);
+    const blockLabels = { high: 'Before Service', medium: 'Necessary', low: 'Backup', none: 'No Priority' };
 
-    if (running.length === 0 && runningBlocks.length === 0) {
-        sendSWMessage({ type: 'TIMER_CLEAR' });
+    // Build list of all active timers (running + paused)
+    const timers = [];
+    Object.entries(taskTimers).forEach(([key, t]) => {
+        timers.push({
+            key,
+            name: t.ingName,
+            time: formatTime(t.seconds),
+            running: t.running,
+            type: 'task'
+        });
+    });
+    Object.entries(blockTimers).forEach(([key, v]) => {
+        if (v.synced) return;
+        const overtime = v.seconds < 0;
+        timers.push({
+            key: `block_${key}`,
+            name: blockLabels[key] || key,
+            time: `${overtime ? '-' : ''}${formatTime(Math.abs(v.seconds))}`,
+            running: v.running,
+            type: 'block'
+        });
+    });
+
+    if (timers.length === 0) {
+        sendSWMessage({ type: 'TIMER_CLEAR_ALL' });
         return;
     }
 
-    const totalActive = running.length + runningBlocks.length;
-
-    // Build all timer entries
-    const allTimers = [];
-    running.forEach(t => allTimers.push({ name: t.ingName, time: formatTime(t.seconds) }));
-    runningBlocks.forEach(([k, v]) => {
-        const overtime = v.seconds < 0;
-        allTimers.push({ name: blockLabels[k] || k, time: `${overtime ? '-' : ''}${formatTime(Math.abs(v.seconds))}` });
-    });
-
-    // Title = first timer name, Body = time (+ others if multiple)
-    const first = allTimers[0];
-    let title = first.name;
-    let body = first.time;
-    if (allTimers.length > 1) {
-        title = `${first.name}  +${allTimers.length - 1} more`;
-        body = allTimers.map(t => `${t.name}  ${t.time}`).join('\n');
-    }
-
-    // First running task timer key for Pause/Done targeting
-    const firstRunningKey = running.length > 0
-        ? Object.entries(taskTimers).find(([k, t]) => t.running)?.[0] || null
-        : null;
-
     sendSWMessage({
-        type: 'TIMER_UPDATE',
-        title,
-        body,
-        firstTimerKey: firstRunningKey
+        type: 'TIMER_UPDATE_ALL',
+        timers
     });
 }
 
@@ -1383,41 +1378,68 @@ function updateTimerNotification() {
 if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', event => {
         if (!event.data) return;
-        const { type, timerKey } = event.data;
+        const { type, timerKey, timerType } = event.data;
 
-        if (type === 'PAUSE_TIMER' && timerKey) {
-            if (taskTimers[timerKey] && taskTimers[timerKey].running) {
-                pauseTaskTimer(timerKey);
-                showToast(`Paused: ${taskTimers[timerKey]?.ingName || timerKey}`);
+        if (type === 'TOGGLE_PAUSE_TIMER' && timerKey) {
+            if (timerType === 'task') {
+                const t = taskTimers[timerKey];
+                if (t) {
+                    if (t.running) {
+                        pauseTaskTimer(timerKey);
+                        showToast(`Paused: ${t.ingName}`);
+                    } else {
+                        resumeTaskTimer(timerKey);
+                        showToast(`Resumed: ${t.ingName}`);
+                    }
+                }
+            } else if (timerType === 'block') {
+                const level = timerKey.replace('block_', '');
+                const bt = blockTimers[level];
+                if (bt) {
+                    if (bt.running) {
+                        pauseBlockTimer(level);
+                    } else {
+                        resumeBlockTimer(level);
+                    }
+                }
             }
             panelDirty.home = true;
             renderPanel('home');
+            updateTimerNotification();
         }
 
         if (type === 'DONE_TIMER' && timerKey) {
-            const t = taskTimers[timerKey];
-            if (t) {
-                const station = stations.find(s => s.id === t.stationId);
-                if (station && station.status[t.ingredientId]) {
-                    station.status[t.ingredientId].completed = true;
-                    logActivity('task_complete', {
-                        ingredient: t.ingName,
-                        station: station.name,
-                        seconds: t.seconds,
-                        quantity: 0,
-                        secPerUnit: 0
-                    });
+            if (timerType === 'task') {
+                const t = taskTimers[timerKey];
+                if (t) {
+                    const station = stations.find(s => s.id === t.stationId);
+                    if (station && station.status[t.ingredientId]) {
+                        station.status[t.ingredientId].completed = true;
+                        logActivity('task_complete', {
+                            ingredient: t.ingName,
+                            station: station.name,
+                            seconds: t.seconds,
+                            quantity: 0,
+                            secPerUnit: 0
+                        });
+                    }
+                    if (t.interval) clearInterval(t.interval);
+                    delete taskTimers[timerKey];
+                    updateTimerNotification();
+                    saveData(true);
+                    animateMascot();
+                    checkAndManageWakeLock();
+                    refreshSummaryPanel();
+                    panelDirty.home = true;
+                    renderPanel('home');
+                    showToast(`Done: ${t.ingName}`);
                 }
-                if (t.interval) clearInterval(t.interval);
-                delete taskTimers[timerKey];
-                updateTimerNotification();
-                saveData(true);
-                animateMascot();
-                checkAndManageWakeLock();
-                refreshSummaryPanel();
+            } else if (timerType === 'block') {
+                const level = timerKey.replace('block_', '');
+                resetBlockTimer(level);
+                showToast(`Block done: ${level}`);
                 panelDirty.home = true;
                 renderPanel('home');
-                showToast(`Done: ${t.ingName}`);
             }
         }
     });
