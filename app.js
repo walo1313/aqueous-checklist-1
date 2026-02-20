@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 47;
+const APP_BUILD = 48;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1398,24 +1398,59 @@ function updateTimerNotification() {
         lines.push(`${blockLabels[k] || k}  ${formatTime(v.seconds)}`);
     });
 
+    // Send first running task timer key for Pause/Done targeting
+    const firstRunningKey = running.length > 0
+        ? Object.entries(taskTimers).find(([k, t]) => t.running)?.[0] || null
+        : null;
+
     sendSWMessage({
         type: 'TIMER_UPDATE',
         body: lines.join('\n'),
-        title: `Aqueous \u2014 ${totalActive} timer${totalActive > 1 ? 's' : ''}`
+        title: `Aqueous \u2014 ${totalActive} timer${totalActive > 1 ? 's' : ''}`,
+        firstTimerKey: firstRunningKey
     });
 }
 
 // Listen for messages from Service Worker (notification action buttons)
 if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', event => {
-        if (event.data && event.data.type === 'PAUSE_ALL_TIMERS') {
-            Object.keys(taskTimers).forEach(key => {
-                if (taskTimers[key].running) pauseTaskTimer(key);
-            });
-            Object.keys(blockTimers).forEach(key => {
-                if (blockTimers[key].running) pauseBlockTimer(key);
-            });
-            showToast('⏸ All timers paused');
+        if (!event.data) return;
+        const { type, timerKey } = event.data;
+
+        if (type === 'PAUSE_TIMER' && timerKey) {
+            if (taskTimers[timerKey] && taskTimers[timerKey].running) {
+                pauseTaskTimer(timerKey);
+                showToast(`Paused: ${taskTimers[timerKey]?.ingName || timerKey}`);
+            }
+            panelDirty.home = true;
+            renderPanel('home');
+        }
+
+        if (type === 'DONE_TIMER' && timerKey) {
+            const t = taskTimers[timerKey];
+            if (t) {
+                const station = stations.find(s => s.id === t.stationId);
+                if (station && station.status[t.ingredientId]) {
+                    station.status[t.ingredientId].completed = true;
+                    logActivity('task_complete', {
+                        ingredient: t.ingName,
+                        station: station.name,
+                        seconds: t.seconds,
+                        quantity: 0,
+                        secPerUnit: 0
+                    });
+                }
+                if (t.interval) clearInterval(t.interval);
+                delete taskTimers[timerKey];
+                updateTimerNotification();
+                saveData(true);
+                animateMascot();
+                checkAndManageWakeLock();
+                refreshSummaryPanel();
+                panelDirty.home = true;
+                renderPanel('home');
+                showToast(`Done: ${t.ingName}`);
+            }
         }
     });
 }

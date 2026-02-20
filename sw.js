@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v47';
+const CACHE_NAME = 'aqueous-v48';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -50,6 +50,7 @@ self.addEventListener('activate', event => {
 
 // Track if we already have an active timer notification
 let timerNotificationActive = false;
+let lastFirstTimerKey = null;
 
 // Handle timer notification updates from app
 self.addEventListener('message', event => {
@@ -58,6 +59,7 @@ self.addEventListener('message', event => {
     // Subsequent updates: silent to avoid annoying the user
     const isFirst = !timerNotificationActive;
     timerNotificationActive = true;
+    lastFirstTimerKey = event.data.firstTimerKey || null;
 
     const options = {
       body: event.data.body,
@@ -67,8 +69,8 @@ self.addEventListener('message', event => {
       badge: './mascot.png',
       requireInteraction: true,
       actions: [
-        { action: 'pause_all', title: 'Pause All' },
-        { action: 'open', title: 'Open' }
+        { action: 'pause', title: 'Pause' },
+        { action: 'done', title: 'Done' }
       ]
     };
 
@@ -94,20 +96,22 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
 
   const action = event.action;
+  const timerKey = lastFirstTimerKey;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      // Send action to the app
-      if (action === 'pause_all') {
+      if (action === 'pause' && timerKey) {
         windowClients.forEach(client => {
-          client.postMessage({ type: 'PAUSE_ALL_TIMERS' });
+          client.postMessage({ type: 'PAUSE_TIMER', timerKey });
         });
-        // Also focus the app
-        if (windowClients.length > 0) {
-          windowClients[0].focus();
-        }
+        if (windowClients.length > 0) windowClients[0].focus();
+      } else if (action === 'done' && timerKey) {
+        windowClients.forEach(client => {
+          client.postMessage({ type: 'DONE_TIMER', timerKey });
+        });
+        if (windowClients.length > 0) windowClients[0].focus();
       } else {
-        // Default: open or focus the app
+        // Default tap: open or focus the app
         if (windowClients.length > 0) {
           windowClients[0].focus();
         } else {
