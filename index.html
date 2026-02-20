@@ -184,6 +184,7 @@
         .main-content {
             padding: 0 20px 100px;
         }
+        .swipe-panel { padding: 0 20px 100px; }
 
         /* ===== NEUMORPHIC CARDS ===== */
         .neu-card {
@@ -1753,27 +1754,25 @@
 
         .neu-card, .glass-card { animation: fadeIn 0.25s ease; }
 
-        /* Swipe transitions */
-        @keyframes swipeOutLeft {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(-25%); opacity: 0; }
+        /* Gesture-driven swipe */
+        .swipe-viewport {
+            overflow: hidden;
+            position: relative;
         }
-        @keyframes swipeOutRight {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(25%); opacity: 0; }
+        .swipe-track {
+            display: flex;
+            width: 300%;
+            transform: translateX(-33.333%);
+            will-change: transform;
         }
-        @keyframes swipeInRight {
-            from { transform: translateX(25%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        .swipe-track.snapping {
+            transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
-        @keyframes swipeInLeft {
-            from { transform: translateX(-25%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+        .swipe-panel {
+            width: 33.333%;
+            flex-shrink: 0;
+            min-height: 1px;
         }
-        .swipe-out-left { animation: swipeOutLeft 0.12s ease forwards; }
-        .swipe-out-right { animation: swipeOutRight 0.12s ease forwards; }
-        .swipe-in-right { animation: swipeInRight 0.2s ease forwards; }
-        .swipe-in-left { animation: swipeInLeft 0.2s ease forwards; }
 
         /* Smooth scroll fix */
         html { scroll-behavior: smooth; }
@@ -1804,7 +1803,13 @@
         </div>
     </div>
 
-    <div class="main-content" id="mainContent"></div>
+    <div class="swipe-viewport">
+        <div class="swipe-track" id="swipeTrack">
+            <div class="swipe-panel" id="swipePrev"></div>
+            <div class="swipe-panel main-content" id="mainContent"></div>
+            <div class="swipe-panel" id="swipeNext"></div>
+        </div>
+    </div>
 
     <button class="fab" id="fab" onclick="showNewStationModal()">+</button>
 

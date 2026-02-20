@@ -402,18 +402,25 @@ function cleanOldHistory() {
 let previousView = 'home';
 let skipPopstate = false;
 
-function swipeTransition(direction, targetView) {
-    const container = document.getElementById('mainContent');
-    const outClass = direction === 'left' ? 'swipe-out-left' : 'swipe-out-right';
-    const inClass = direction === 'left' ? 'swipe-in-right' : 'swipe-in-left';
+const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'share'];
 
-    container.classList.add(outClass);
-    setTimeout(() => {
-        container.classList.remove(outClass);
-        switchView(targetView);
-        container.classList.add(inClass);
-        setTimeout(() => container.classList.remove(inClass), 200);
-    }, 120);
+function resolveSwipeView(v) {
+    if (v === 'history') return 'summary';
+    if (v === 'logDetail') return 'logs';
+    if (v === 'settings') return null;
+    return v;
+}
+
+function renderViewInto(panel, view) {
+    const tempContainer = panel;
+    tempContainer.innerHTML = '';
+    const saved = currentView;
+    currentView = view;
+    if (view === 'home') renderHome(tempContainer);
+    else if (view === 'summary') renderSummary(tempContainer);
+    else if (view === 'logs') renderLogs(tempContainer);
+    else if (view === 'share') renderShare(tempContainer);
+    currentView = saved;
 }
 
 function switchView(view) {
@@ -2706,45 +2713,108 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Swipe left/right gestures — sequential navigation between main views
-    const swipeViewOrder = ['home', 'summary', 'logs', 'share'];
-    let touchStartX = 0;
-    let touchStartY = 0;
-    let touchStartTime = 0;
-    let swipeLocked = false;
+    // Gesture-driven swipe navigation
+    const track = document.getElementById('swipeTrack');
+    const prevPanel = document.getElementById('swipePrev');
+    const nextPanel = document.getElementById('swipeNext');
+    let swStartX = 0, swStartY = 0, swDx = 0;
+    let swSwiping = false, swDirectionLocked = false, swIsHorizontal = false;
+    let swPrevView = null, swNextView = null, swViewportW = 0;
 
     document.addEventListener('touchstart', (e) => {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = Date.now();
-        swipeLocked = false;
-    }, { passive: true });
+        if (track.classList.contains('snapping')) return;
+        swStartX = e.touches[0].clientX;
+        swStartY = e.touches[0].clientY;
+        swDx = 0;
+        swSwiping = false;
+        swDirectionLocked = false;
+        swIsHorizontal = false;
+        swViewportW = window.innerWidth;
 
-    document.addEventListener('touchend', (e) => {
-        if (swipeLocked) return;
-        const dx = e.changedTouches[0].clientX - touchStartX;
-        const dy = e.changedTouches[0].clientY - touchStartY;
-        const dt = Date.now() - touchStartTime;
-
-        // Require: horizontal > 60px, more horizontal than vertical, under 400ms
-        if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.3 || dt > 400) return;
-
-        // Resolve current position: sub-views map to their parent
-        let resolved = currentView;
-        if (resolved === 'history') resolved = 'summary';
-        if (resolved === 'logDetail') resolved = 'logs';
-        if (resolved === 'settings') { switchView(previousView || 'home'); return; }
-
-        const idx = swipeViewOrder.indexOf(resolved);
+        // Pre-render adjacent views
+        const resolved = resolveSwipeView(currentView);
+        if (!resolved) return; // settings — skip
+        const idx = SWIPE_VIEW_ORDER.indexOf(resolved);
         if (idx === -1) return;
 
-        if (dx > 0 && idx > 0) {
-            // Swipe right → previous view
-            swipeTransition('right', swipeViewOrder[idx - 1]);
-        } else if (dx < 0 && idx < swipeViewOrder.length - 1) {
-            // Swipe left → next view
-            swipeTransition('left', swipeViewOrder[idx + 1]);
+        swPrevView = idx > 0 ? SWIPE_VIEW_ORDER[idx - 1] : null;
+        swNextView = idx < SWIPE_VIEW_ORDER.length - 1 ? SWIPE_VIEW_ORDER[idx + 1] : null;
+
+        if (swPrevView) renderViewInto(prevPanel, swPrevView);
+        else prevPanel.innerHTML = '';
+        if (swNextView) renderViewInto(nextPanel, swNextView);
+        else nextPanel.innerHTML = '';
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!swStartX && !swStartY) return;
+        const x = e.touches[0].clientX;
+        const y = e.touches[0].clientY;
+        const dx = x - swStartX;
+        const dy = y - swStartY;
+
+        // Lock direction on first significant move
+        if (!swDirectionLocked) {
+            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+                swDirectionLocked = true;
+                swIsHorizontal = Math.abs(dx) > Math.abs(dy);
+            }
+            return;
         }
+
+        if (!swIsHorizontal) return;
+
+        // Block if no view in that direction
+        if (dx > 0 && !swPrevView) return;
+        if (dx < 0 && !swNextView) return;
+
+        swSwiping = true;
+        swDx = dx;
+        const pct = (dx / swViewportW) * 33.333;
+        track.style.transform = `translateX(calc(-33.333% + ${pct}%))`;
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+        if (!swSwiping) {
+            swStartX = 0; swStartY = 0;
+            return;
+        }
+
+        const threshold = swViewportW * 0.2;
+        const shouldSwitch = Math.abs(swDx) > threshold;
+
+        track.classList.add('snapping');
+
+        if (shouldSwitch && swDx > 0 && swPrevView) {
+            // Snap to prev (translate to 0%)
+            track.style.transform = 'translateX(0%)';
+            track.addEventListener('transitionend', function handler() {
+                track.removeEventListener('transitionend', handler);
+                track.classList.remove('snapping');
+                track.style.transform = 'translateX(-33.333%)';
+                switchView(swPrevView);
+            });
+        } else if (shouldSwitch && swDx < 0 && swNextView) {
+            // Snap to next (translate to -66.666%)
+            track.style.transform = 'translateX(-66.666%)';
+            track.addEventListener('transitionend', function handler() {
+                track.removeEventListener('transitionend', handler);
+                track.classList.remove('snapping');
+                track.style.transform = 'translateX(-33.333%)';
+                switchView(swNextView);
+            });
+        } else {
+            // Snap back
+            track.style.transform = 'translateX(-33.333%)';
+            track.addEventListener('transitionend', function handler() {
+                track.removeEventListener('transitionend', handler);
+                track.classList.remove('snapping');
+            });
+        }
+
+        swSwiping = false;
+        swStartX = 0; swStartY = 0;
+        swDx = 0;
     }, { passive: true });
 
     // Splash screen: only show full on first visit, skip on return visits
