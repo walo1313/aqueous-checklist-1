@@ -792,6 +792,9 @@
             min-width: 52px;
             text-align: right;
         }
+        .block-timer-clock.overtime {
+            color: #e53e3e;
+        }
         .block-timer-ctrl {
             width: 26px;
             height: 26px;
@@ -821,49 +824,6 @@
         }
 
         /* Global Timer Card */
-        .global-timer-card {
-            margin-top: 14px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(0,0,0,0.06);
-        }
-        .global-timer-start {
-            width: 100%;
-            border: none;
-            background: linear-gradient(135deg, var(--accent), #00b894);
-            color: white;
-            border-radius: var(--radius-sm);
-            padding: 10px;
-            font-size: 13px;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 3px 10px var(--accent-glow);
-            transition: all 0.15s;
-        }
-        .global-timer-start:active { transform: scale(0.96); box-shadow: 0 1px 4px var(--accent-glow); filter: brightness(0.92); transition: all 0.08s ease; }
-        .global-timer-label {
-            font-size: 10px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-muted);
-            margin-bottom: 6px;
-        }
-        .global-timer-display {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .global-timer-clock {
-            font-size: 26px;
-            font-weight: 800;
-            color: var(--accent);
-            font-variant-numeric: tabular-nums;
-        }
-        .global-timer-controls {
-            display: flex;
-            gap: 6px;
-        }
-
         .summary-item {
             display: flex;
             align-items: center;

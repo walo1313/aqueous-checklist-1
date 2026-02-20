@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 51;
+const APP_BUILD = 52;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1104,42 +1104,6 @@ function renderSummary(container) {
     const today = new Date();
     const summaryDateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    // Global "All Blocks" timer
-    const allBt = blockTimers['_all'];
-    const allBtRunning = allBt && allBt.running;
-    const allBtPaused = allBt && !allBt.running && allBt.seconds > 0;
-    const allBtActive = allBtRunning || allBtPaused;
-    const allBtTime = allBt ? formatTime(allBt.seconds) : '00:00';
-    const incompletTotal = allTasks.filter(t => !t.status.completed).length;
-
-    let globalTimerHTML = '';
-    if (incompletTotal > 0) {
-        if (allBtActive) {
-            globalTimerHTML = `
-                <div class="global-timer-card">
-                    <div class="global-timer-label">All Blocks</div>
-                    <div class="global-timer-display">
-                        <span class="global-timer-clock" id="blockClock__all">${allBtTime}</span>
-                        <div class="global-timer-controls">
-                            ${allBtRunning ? `
-                                <button class="block-timer-ctrl pause" onclick="pauseBlockTimer('_all')">⏸</button>
-                            ` : `
-                                <button class="block-timer-ctrl resume" onclick="resumeBlockTimer('_all')">▶</button>
-                            `}
-                            <button class="block-timer-ctrl reset" onclick="resetBlockTimer('_all')">✕</button>
-                        </div>
-                    </div>
-                </div>`;
-        } else {
-            globalTimerHTML = `
-                <div class="global-timer-card">
-                    <button class="global-timer-start" onclick="toggleBlockTimer('_all')">
-                        ⏱ Start All Blocks
-                    </button>
-                </div>`;
-        }
-    }
-
     let html = `
         <div class="summary-header-card">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -1152,7 +1116,6 @@ function renderSummary(container) {
             <div class="progress-bar-container">
                 <div class="progress-bar" style="width: ${progress}%"></div>
             </div>
-            ${globalTimerHTML}
         </div>
         <button class="btn btn-link" onclick="switchView('history')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1183,43 +1146,37 @@ function renderSummary(container) {
 function renderSummaryGroup(title, level, tasks) {
     const colorClass = level === 'none' ? '' : `summary-${level}`;
 
-    // Calculate block time estimate
-    let totalEstSeconds = 0;
-    let hasEstimates = false;
+    // Block timer: only show if there's timing data for ingredients in this block
     const incompleteTasks = tasks.filter(t => !t.status.completed);
-    incompleteTasks.forEach(task => {
-        const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit);
-        if (est) { totalEstSeconds += est.totalSeconds; hasEstimates = true; }
-    });
-    const estLabel = hasEstimates ? `⏱ ~${formatEstimate(totalEstSeconds)}` : '';
+    const hasTimingData = blockHasTimingData(level);
+    const totalEstSeconds = getBlockEstimateSeconds(level);
 
     // Block timer state
     const bt = blockTimers[level];
     const btRunning = bt && bt.running;
-    const btPaused = bt && !bt.running && bt.seconds > 0;
+    const btPaused = bt && !bt.running;
     const btActive = btRunning || btPaused;
-    const btTime = bt ? formatTime(bt.seconds) : '00:00';
+    const btAbsTime = bt ? formatTime(Math.abs(bt.seconds)) : '00:00';
+    const btOvertime = bt && bt.seconds < 0;
 
     // Block timer controls for header
     let blockTimerHTML = '';
-    if (incompleteTasks.length > 0) {
-        if (btActive) {
-            blockTimerHTML = `
-                <div class="block-timer-row">
-                    <span class="block-timer-clock" id="blockClock_${level}">${btTime}</span>
-                    ${btRunning ? `
-                        <button class="block-timer-ctrl pause" onclick="event.stopPropagation(); pauseBlockTimer('${level}')">⏸</button>
-                    ` : `
-                        <button class="block-timer-ctrl resume" onclick="event.stopPropagation(); resumeBlockTimer('${level}')">▶</button>
-                    `}
-                    <button class="block-timer-ctrl reset" onclick="event.stopPropagation(); resetBlockTimer('${level}')">✕</button>
-                </div>`;
-        } else {
-            blockTimerHTML = `
-                <button class="block-timer-start ${btRunning ? 'active' : ''}" onclick="event.stopPropagation(); toggleBlockTimer('${level}')">
-                    ⏱ ${estLabel || 'Start'}
-                </button>`;
-        }
+    if (incompleteTasks.length > 0 && btActive) {
+        blockTimerHTML = `
+            <div class="block-timer-row">
+                <span class="block-timer-clock ${btOvertime ? 'overtime' : ''}" id="blockClock_${level}">${btOvertime ? '-' : ''}${btAbsTime}</span>
+                ${btRunning ? `
+                    <button class="block-timer-ctrl pause" onclick="event.stopPropagation(); pauseBlockTimer('${level}')">⏸</button>
+                ` : `
+                    <button class="block-timer-ctrl resume" onclick="event.stopPropagation(); resumeBlockTimer('${level}')">▶</button>
+                `}
+                <button class="block-timer-ctrl reset" onclick="event.stopPropagation(); resetBlockTimer('${level}')">✕</button>
+            </div>`;
+    } else if (incompleteTasks.length > 0 && hasTimingData) {
+        blockTimerHTML = `
+            <button class="block-timer-start" onclick="event.stopPropagation(); toggleBlockTimer('${level}')">
+                ⏱ ~${formatEstimate(totalEstSeconds)}
+            </button>`;
     }
 
     let html = `
@@ -1395,7 +1352,10 @@ function updateTimerNotification() {
     // Build all timer entries
     const allTimers = [];
     running.forEach(t => allTimers.push({ name: t.ingName, time: formatTime(t.seconds) }));
-    runningBlocks.forEach(([k, v]) => allTimers.push({ name: blockLabels[k] || k, time: formatTime(v.seconds) }));
+    runningBlocks.forEach(([k, v]) => {
+        const overtime = v.seconds < 0;
+        allTimers.push({ name: blockLabels[k] || k, time: `${overtime ? '-' : ''}${formatTime(Math.abs(v.seconds))}` });
+    });
 
     // Title = first timer name, Body = time (+ others if multiple)
     const first = allTimers[0];
@@ -1538,7 +1498,38 @@ function resetTaskTimer(timerKey) {
     refreshSummaryPanel();
 }
 
-// ── Block Timers ──
+// ── Block Timers (countdown from estimated total) ──
+function getBlockEstimateSeconds(level) {
+    // Calculate total estimated seconds for incomplete tasks in this block
+    const levelMap = { high: 'Before Service', medium: 'Necessary', low: 'Backup', none: 'No Priority' };
+    let totalEst = 0;
+    stations.forEach(station => {
+        station.ingredients.forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st || st.completed) return;
+            if ((st.priority || 'none') !== level) return;
+            const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit);
+            if (est) totalEst += est.totalSeconds;
+        });
+    });
+    return totalEst;
+}
+
+function blockHasTimingData(level) {
+    // Check if ANY incomplete ingredient in this block has prepTimes data
+    let has = false;
+    stations.forEach(station => {
+        station.ingredients.forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st || st.completed) return;
+            if ((st.priority || 'none') !== level) return;
+            const key = ing.name.toLowerCase();
+            if (prepTimes[key] && prepTimes[key].bestSecPerUnit) has = true;
+        });
+    });
+    return has;
+}
+
 function toggleBlockTimer(level) {
     handleClick();
     if (blockTimers[level]) {
@@ -1550,32 +1541,23 @@ function toggleBlockTimer(level) {
         return;
     }
     requestNotificationPermission();
+    const estSeconds = getBlockEstimateSeconds(level);
     blockTimers[level] = {
-        seconds: 0,
+        seconds: estSeconds,
         running: true,
+        countdown: true,
         interval: setInterval(() => {
-            blockTimers[level].seconds++;
+            blockTimers[level].seconds--;
             const clock = document.getElementById(`blockClock_${level}`);
-            if (clock) clock.textContent = formatTime(blockTimers[level].seconds);
-            if (level === '_all') {
-                Object.keys(blockTimers).forEach(k => {
-                    if (k !== '_all') {
-                        const c = document.getElementById(`blockClock_${k}`);
-                        if (c && blockTimers[k]) c.textContent = formatTime(blockTimers[k].seconds);
-                    }
-                });
+            if (clock) clock.textContent = formatTime(Math.abs(blockTimers[level].seconds));
+            // At zero: vibrate to signal time is up, keep counting negative
+            if (blockTimers[level].seconds === 0) {
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+                showToast('Block time reached!');
             }
             updateTimerNotification();
         }, 1000)
     };
-    // If starting ALL, also start any block that doesn't have a timer
-    if (level === '_all') {
-        ['high', 'medium', 'low', 'none'].forEach(lv => {
-            if (!blockTimers[lv] && document.getElementById(`blockClock_${lv}`)) {
-                blockTimers[lv] = { seconds: 0, running: true, interval: null, synced: true };
-            }
-        });
-    }
     updateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
@@ -1587,13 +1569,6 @@ function pauseBlockTimer(level) {
     if (bt.interval) clearInterval(bt.interval);
     bt.interval = null;
     bt.running = false;
-    if (level === '_all') {
-        ['high', 'medium', 'low', 'none'].forEach(lv => {
-            if (blockTimers[lv] && blockTimers[lv].synced) {
-                blockTimers[lv].running = false;
-            }
-        });
-    }
     updateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
@@ -1604,27 +1579,15 @@ function resumeBlockTimer(level) {
     if (!bt || bt.running) return;
     bt.running = true;
     bt.interval = setInterval(() => {
-        bt.seconds++;
+        bt.seconds--;
         const clock = document.getElementById(`blockClock_${level}`);
-        if (clock) clock.textContent = formatTime(bt.seconds);
-        if (level === '_all') {
-            Object.keys(blockTimers).forEach(k => {
-                if (k !== '_all' && blockTimers[k] && blockTimers[k].synced) {
-                    blockTimers[k].seconds++;
-                    const c = document.getElementById(`blockClock_${k}`);
-                    if (c) c.textContent = formatTime(blockTimers[k].seconds);
-                }
-            });
+        if (clock) clock.textContent = formatTime(Math.abs(bt.seconds));
+        if (bt.seconds === 0) {
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            showToast('Block time reached!');
         }
         updateTimerNotification();
     }, 1000);
-    if (level === '_all') {
-        ['high', 'medium', 'low', 'none'].forEach(lv => {
-            if (blockTimers[lv] && blockTimers[lv].synced) {
-                blockTimers[lv].running = true;
-            }
-        });
-    }
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1634,13 +1597,6 @@ function resetBlockTimer(level) {
     if (!bt) return;
     if (bt.interval) clearInterval(bt.interval);
     delete blockTimers[level];
-    if (level === '_all') {
-        ['high', 'medium', 'low', 'none'].forEach(lv => {
-            if (blockTimers[lv] && blockTimers[lv].synced) {
-                delete blockTimers[lv];
-            }
-        });
-    }
     updateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
