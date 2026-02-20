@@ -1,5 +1,17 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
+const APP_VERSION = 'B2.0';
+const APP_BUILD = 44;
+let lastSync = localStorage.getItem('aqueous_lastSync') || null;
+
+function updateLastSync() {
+    lastSync = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+    localStorage.setItem('aqueous_lastSync', lastSync);
+    // Update settings display if visible
+    const el = document.getElementById('lastSyncDisplay');
+    if (el) el.textContent = lastSync;
+}
+
 let stations = [];
 let editingStationId = null;
 let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
@@ -2662,10 +2674,29 @@ function renderSettings(container) {
         </div>
         <div class="settings-group">
             <div class="settings-group-title">About</div>
-            <div class="setting-row">
-                <div class="setting-info">
-                    <span class="setting-label">Aqueous</span>
-                    <span class="setting-desc">Kitchen Station Manager v2.0</span>
+            <div class="version-card">
+                <div class="version-title">Kitchen Station Manager</div>
+                <div class="version-row">
+                    <span class="version-label">Version</span>
+                    <span class="version-value">${APP_VERSION}</span>
+                </div>
+                <div class="version-row">
+                    <span class="version-label">Build</span>
+                    <span class="version-value">${APP_BUILD}</span>
+                </div>
+                <div class="version-row">
+                    <span class="version-label">Last Sync</span>
+                    <span class="version-value" id="lastSyncDisplay">${lastSync || 'Never'}</span>
+                </div>
+                <div class="version-actions">
+                    <button class="btn btn-outline version-btn" onclick="handleClick(); syncNow()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
+                        Sync Now
+                    </button>
+                    <button class="btn btn-outline version-btn" onclick="handleClick(); checkForUpdates()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        Check for Updates
+                    </button>
                 </div>
             </div>
         </div>`;
@@ -2752,6 +2783,40 @@ function clearAllData() {
     if (!confirm('This will delete ALL your data. Are you sure?')) return;
     localStorage.clear();
     location.reload();
+}
+
+// ==================== SYNC & UPDATES ====================
+
+function syncNow() {
+    markAllPanelsDirty();
+    SWIPE_VIEW_ORDER.forEach(v => { panelDirty[v] = true; renderPanel(v); });
+    updateLastSync();
+    if (navigator.vibrate) navigator.vibrate(20);
+    showToast(`✓ Synced – ${lastSync}`);
+}
+
+function checkForUpdates() {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CHECK_UPDATE' });
+    }
+    // Also try to update SW registration
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then(reg => {
+            if (reg) {
+                reg.update().then(() => {
+                    if (reg.waiting) {
+                        showToast('🆕 New version available! Restart app to update.');
+                    } else {
+                        showToast(`✓ You're on the latest version (${APP_VERSION} Build ${APP_BUILD})`);
+                    }
+                }).catch(() => {
+                    showToast(`✓ You're on the latest version (${APP_VERSION} Build ${APP_BUILD})`);
+                });
+            }
+        });
+    } else {
+        showToast(`✓ Version ${APP_VERSION} Build ${APP_BUILD}`);
+    }
 }
 
 // ==================== UTILITIES ====================
@@ -3006,12 +3071,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Refresh current panel
                 panelDirty[currentView] = true;
                 renderPanel(currentView);
+                updateLastSync();
+                if (navigator.vibrate) navigator.vibrate(15);
                 // Snap back
                 appShell.style.transform = '';
                 ptrFixed.classList.remove('visible');
                 appShell.addEventListener('transitionend', function h() {
                     appShell.removeEventListener('transitionend', h);
                     appShell.classList.remove('snapping');
+                    showToast(`✓ Synced – ${lastSync}`);
                 });
             }, 300);
         } else {
