@@ -1,10 +1,12 @@
-const CACHE_NAME = 'aqueous-v70';
+const CACHE_NAME = 'aqueous-v71';
 const urlsToCache = [
   './index.html',
   './app.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png',
   './mascot.png',
   './badge-96.png',
   './notif-icon-96.png',
