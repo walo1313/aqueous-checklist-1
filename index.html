@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#dde1e7">
+    <meta name="theme-color" content="#ECEEF3">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Aqueous</title>
@@ -19,7 +19,7 @@
             position: fixed;
             inset: 0;
             z-index: 9999;
-            background: #dde1e7;
+            background: #ECEEF3;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -34,7 +34,7 @@
             width: 60vw;
             max-width: 280px;
             border-radius: 32px;
-            box-shadow: 8px 8px 16px #b8bec7, -8px -8px 16px #ffffff;
+            box-shadow: 8px 8px 16px rgba(163, 177, 198, 0.5), -8px -8px 16px rgba(255, 255, 255, 0.9);
             animation: splashBounce 0.8s ease;
         }
         .splash-title {
@@ -59,31 +59,38 @@
         }
 
         :root {
-            --bg: #dde1e7;
-            --bg-dark: #c8ccd2;
-            --surface: #dde1e7;
+            --bg: #ECEEF3;
+            --bg-dark: #D8DCE6;
+            --surface: #F4F6FA;
             --light: #ffffff;
-            --shadow: #b8bec7;
-            --shadow-dark: #a1a7ae;
-            --text: #2d3436;
-            --text-secondary: #636e72;
-            --text-muted: #95a5a6;
-            --accent: #00b894;
-            --accent-glow: rgba(0, 184, 148, 0.3);
-            --high: #e17055;
-            --high-glow: rgba(225, 112, 85, 0.3);
-            --medium: #fdcb6e;
-            --medium-dark: #e5b45a;
-            --low: #74b9ff;
-            --low-dark: #5a9fd4;
+            --shadow: #a3b1c6;
+            --shadow-dark: #8a97a8;
+            --text: #2A2E35;
+            --text-secondary: #6B7280;
+            --text-muted: #9CA3AF;
+            --accent: #FF6A1A;
+            --accent-glow: rgba(255, 106, 26, 0.35);
+            --accent-tint: rgba(255, 106, 26, 0.15);
+            --high: #D64545;
+            --high-glow: rgba(214, 69, 69, 0.3);
+            --high-tint: rgba(214, 69, 69, 0.15);
+            --medium: #D9A441;
+            --medium-dark: #c9932e;
+            --medium-tint: rgba(217, 164, 65, 0.15);
+            --low: #4A7BD9;
+            --low-dark: #3a68c2;
+            --low-tint: rgba(74, 123, 217, 0.15);
+            --success: #34A853;
+            --success-tint: rgba(52, 168, 83, 0.15);
             --glass: rgba(255, 255, 255, 0.25);
             --glass-border: rgba(255, 255, 255, 0.4);
+            --divider: #D8DCE6;
             --radius: 16px;
-            --radius-sm: 10px;
-            --neu-shadow: 6px 6px 12px var(--shadow), -6px -6px 12px var(--light);
-            --neu-shadow-sm: 3px 3px 6px var(--shadow), -3px -3px 6px var(--light);
-            --neu-inset: inset 3px 3px 6px var(--shadow), inset -3px -3px 6px var(--light);
-            --neu-inset-deep: inset 4px 4px 8px var(--shadow), inset -4px -4px 8px var(--light);
+            --radius-sm: 12px;
+            --neu-shadow: 6px 6px 14px rgba(163, 177, 198, 0.45), -6px -6px 14px rgba(255, 255, 255, 0.9);
+            --neu-shadow-sm: 3px 3px 7px rgba(163, 177, 198, 0.4), -3px -3px 7px rgba(255, 255, 255, 0.85);
+            --neu-inset: inset 3px 3px 6px rgba(163, 177, 198, 0.4), inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+            --neu-inset-deep: inset 4px 4px 8px rgba(163, 177, 198, 0.4), inset -4px -4px 8px rgba(255, 255, 255, 0.9);
         }
 
         body {
@@ -345,12 +352,32 @@
             margin-bottom: 10px;
             background: var(--surface);
             box-shadow: var(--neu-shadow-sm);
-            transition: background 0.25s, box-shadow 0.25s;
+            transition: all 0.2s ease-in-out;
+            border-left: 4px solid transparent;
+            position: relative;
         }
 
         .ingredient.low {
-            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-            box-shadow: 3px 3px 6px rgba(200, 160, 130, 0.4), -3px -3px 6px rgba(255, 255, 255, 0.8);
+            background: var(--surface);
+        }
+
+        .ingredient.has-priority::before {
+            content: '';
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+        }
+
+        .ingredient.expanded {
+            border-left-color: var(--accent);
+        }
+        .ingredient.expanded::before {
+            display: none;
         }
 
         .ingredient-header {
@@ -367,6 +394,13 @@
             font-size: 13px;
             font-weight: 600;
             pointer-events: none;
+        }
+
+        .ingredient.has-priority .ingredient-name {
+            margin-left: 16px;
+        }
+        .ingredient.expanded .ingredient-name {
+            margin-left: 0;
         }
 
         /* Custom Checkbox - Neumorphic */
@@ -428,7 +462,7 @@
             max-height: 0;
             overflow: hidden;
             opacity: 0;
-            transition: max-height 0.3s ease, opacity 0.2s ease, margin-top 0.3s ease, padding-top 0.3s ease;
+            transition: max-height 0.2s ease-in-out, opacity 0.15s ease-in-out, margin-top 0.2s ease-in-out, padding-top 0.2s ease-in-out;
             margin-top: 0;
             padding-top: 0;
         }
@@ -438,11 +472,11 @@
             opacity: 1;
             margin-top: 12px;
             padding-top: 12px;
-            border-top: 1px solid rgba(0,0,0,0.06);
+            border-top: 1px solid var(--divider);
         }
 
         .priority-pill {
-            padding: 5px 16px;
+            padding: 5px 14px;
             border: none;
             border-radius: 20px;
             font-size: 11px;
@@ -455,23 +489,24 @@
             color: var(--text-muted);
         }
         .priority-pill:active {
-            transform: scale(0.92);
+            transform: scale(0.95);
+            box-shadow: var(--neu-inset);
             transition: all 0.08s;
         }
         .priority-pill.high {
-            background: #fee2e2;
-            color: #dc2626;
-            box-shadow: var(--neu-inset);
+            background: var(--high-tint);
+            color: var(--high);
+            box-shadow: var(--neu-shadow-sm);
         }
         .priority-pill.medium {
-            background: #fef3c7;
-            color: #d97706;
-            box-shadow: var(--neu-inset);
+            background: var(--medium-tint);
+            color: var(--medium);
+            box-shadow: var(--neu-shadow-sm);
         }
         .priority-pill.low {
-            background: var(--surface);
-            color: var(--text-secondary);
-            box-shadow: var(--neu-inset);
+            background: var(--low-tint);
+            color: var(--low);
+            box-shadow: var(--neu-shadow-sm);
         }
 
         .smart-qty-row {
@@ -497,7 +532,7 @@
         }
         .smart-qty-input::-webkit-inner-spin-button,
         .smart-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        .smart-qty-input:focus { outline: none; box-shadow: var(--neu-inset-deep); }
+        .smart-qty-input:focus { outline: none; box-shadow: var(--neu-inset-deep), 0 0 0 2px var(--accent-tint); }
 
         .smart-unit-select {
             flex: 1;
@@ -538,6 +573,7 @@
         }
         .depth-chip.active {
             color: var(--accent);
+            background: var(--accent-tint);
             box-shadow: var(--neu-inset);
         }
         .depth-chip:active {
@@ -712,8 +748,8 @@
             margin-bottom: 10px;
         }
 
-        .progress-text { font-size: 13px; font-weight: 700; }
-        .progress-percent { font-size: 13px; font-weight: 800; color: var(--accent); }
+        .progress-text { font-size: 13px; font-weight: 700; color: var(--text); }
+        .progress-percent { font-size: 13px; font-weight: 800; color: var(--text-secondary); }
 
         /* Neumorphic Progress Bar (Slider Cavity) */
         .progress-bar-container {
@@ -727,10 +763,13 @@
 
         .progress-bar {
             height: 100%;
-            background: linear-gradient(90deg, var(--accent), #55efc4);
+            background: var(--divider);
             border-radius: 4px;
             transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 0 8px var(--accent-glow);
+        }
+        .progress-bar.complete {
+            background: var(--success);
+            box-shadow: 0 0 8px rgba(52, 168, 83, 0.3);
         }
 
         .summary-group {
@@ -739,7 +778,7 @@
             padding: 18px;
             margin-bottom: 14px;
             box-shadow: var(--neu-shadow);
-            border-left: 4px solid var(--shadow);
+            border-left: 4px solid var(--divider);
         }
 
         .summary-high { border-left-color: var(--high); }
@@ -1155,6 +1194,7 @@
             box-shadow: var(--neu-inset);
             color: var(--accent);
             font-weight: 700;
+            background: var(--accent-tint);
         }
         .history-day-status {
             text-align: center;
@@ -1164,16 +1204,15 @@
             background: var(--surface);
             box-shadow: var(--neu-shadow);
         }
-        .history-day-icon { font-size: 36px; margin-bottom: 6px; }
         .history-day-label {
-            font-size: 16px;
-            font-weight: 800;
+            font-size: 15px;
+            font-weight: 700;
             color: var(--text);
         }
         .history-day-sub {
             font-size: 12px;
             color: var(--text-secondary);
-            margin-top: 4px;
+            margin-top: 8px;
         }
         .history-block-card {
             background: var(--surface);
@@ -1205,9 +1244,9 @@
             font-weight: 700;
             white-space: nowrap;
         }
-        .history-block-badge.behind { background: rgba(229,62,62,0.15); color: #e53e3e; }
-        .history-block-badge.ontime { background: rgba(0,184,148,0.15); color: #00b894; }
-        .history-block-badge.ahead { background: rgba(253,203,110,0.2); color: #e5a100; }
+        .history-block-badge.behind { background: var(--high-tint); color: var(--high); }
+        .history-block-badge.ontime { background: var(--success-tint); color: var(--success); }
+        .history-block-badge.ahead { background: var(--low-tint); color: var(--low); }
 
         /* ===== BUTTONS ===== */
         .btn {
@@ -1424,15 +1463,28 @@
             cursor: pointer;
             border: none;
             background: none;
-            color: var(--text-muted);
+            color: #9CA3AF;
             font-size: 10px;
             font-weight: 600;
             transition: all 0.2s;
             font-family: 'Inter', sans-serif;
+            position: relative;
         }
 
         .nav-item.active {
             color: var(--accent);
+        }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            background: var(--accent-tint);
+            z-index: -1;
         }
 
         .nav-item svg { width: 22px; height: 22px; }

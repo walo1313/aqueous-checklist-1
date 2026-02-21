@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 82;
+const APP_BUILD = 83;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -692,7 +692,7 @@ function renderIngredients(station) {
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
         html += `
-        <div class="ingredient ${st.low ? 'low' : ''}" id="ing-${station.id}-${ing.id}">
+        <div class="ingredient ${st.low ? 'low' : ''} ${st.priority ? 'has-priority' : ''} ${expandedIngs.has(`${station.id}-${ing.id}`) ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
             <div class="ingredient-header"
                  onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
@@ -952,7 +952,9 @@ function toggleIngExpand(stationId, ingredientId) {
     const ctrl = document.getElementById(`ing-ctrl-${key}`);
     if (!ctrl) return;
 
+    const card = document.getElementById(`ing-${key}`);
     const isOpen = ctrl.classList.toggle('open');
+    if (card) card.classList.toggle('expanded', isOpen);
     if (isOpen) {
         expandedIngs.add(key);
         // Auto-fill defaults on first expand
@@ -1187,8 +1189,7 @@ function renderSummary(container) {
     if (allTasks.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
-                <div class="empty-state-icon">✅</div>
-                <p>All clear!</p>
+                <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">All clear</p>
                 <p class="empty-sub">No items need attention right now</p>
             </div>`;
         return;
@@ -1209,14 +1210,14 @@ function renderSummary(container) {
     let html = `
         <div class="summary-header-card">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                <span style="font-size:13px;font-weight:700;color:var(--text);">📅 ${summaryDateStr}</span>
+                <span style="font-size:13px;font-weight:700;color:var(--text);">${summaryDateStr}</span>
             </div>
             <div class="progress-info">
                 <span class="progress-text">${completedCount}/${totalCount} tasks done</span>
                 <span class="progress-percent">${progress}%</span>
             </div>
             <div class="progress-bar-container">
-                <div class="progress-bar" style="width: ${progress}%"></div>
+                <div class="progress-bar ${progress >= 100 ? 'complete' : ''}" style="width: ${progress}%"></div>
             </div>
         </div>`;
 
@@ -1291,7 +1292,7 @@ function renderSummaryGroup(title, level, tasks) {
         // Per-ingredient time goal
         const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit, task.status.parDepth);
         const goalInfo = est
-            ? `<span style="font-size:9px;color:var(--accent);">🏆 Best: ${formatEstimate(est.bestPerDisplayUnit)} per ${task.status.parUnit}</span>`
+            ? `<span style="font-size:9px;color:var(--text-muted);">Best: ${formatEstimate(est.bestPerDisplayUnit)} per ${task.status.parUnit}</span>`
             : '';
 
         // Par display
@@ -2541,7 +2542,6 @@ function renderHistoryTab(container) {
 
     if (entries.length === 0) {
         html += `<div class="history-day-status">
-            <div class="history-day-icon">📋</div>
             <div class="history-day-label">No Data</div>
             <div class="history-day-sub">No block timers completed this day</div>
         </div>`;
@@ -2557,18 +2557,19 @@ function renderHistoryTab(container) {
         totalActual += (d.goal || 0) - (d.seconds || 0);
     });
     const dayDiff = totalGoal - totalActual;
-    let dayIcon, dayLabel, daySub;
-    if (dayDiff < -15) { dayIcon = '\u23F0'; dayLabel = 'Behind'; }
-    else if (dayDiff > 15) { dayIcon = '\uD83C\uDFC6'; dayLabel = 'Ahead!'; }
-    else { dayIcon = '\u2705'; dayLabel = 'On Time'; }
+    let dayLabel, dayStatusClass;
+    if (dayDiff < -15) { dayLabel = 'Behind'; dayStatusClass = 'behind'; }
+    else if (dayDiff > 15) { dayLabel = 'Ahead'; dayStatusClass = 'ahead'; }
+    else { dayLabel = 'On Time'; dayStatusClass = 'ontime'; }
     const totalGoalStr = formatTime(Math.abs(totalGoal));
     const totalActualStr = formatTime(Math.abs(totalActual));
-    daySub = `${entries.length} block${entries.length !== 1 ? 's' : ''} \u2022 Goal: ${totalGoalStr} \u2022 Actual: ${totalActualStr}`;
 
     html += `<div class="history-day-status">
-        <div class="history-day-icon">${dayIcon}</div>
-        <div class="history-day-label">${dayLabel}</div>
-        <div class="history-day-sub">${daySub}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="history-day-label">${stations.length > 0 ? stations[0].name : 'Station'}</div>
+            <span class="history-block-badge ${dayStatusClass}">${dayLabel}</span>
+        </div>
+        <div class="history-day-sub">Goal: ${totalGoalStr} &bull; Actual: ${totalActualStr}</div>
     </div>`;
 
     entries.forEach(e => {
@@ -2583,7 +2584,7 @@ function renderHistoryTab(container) {
         html += `<div class="history-block-card">
             <div class="history-block-info">
                 <div class="history-block-name">${d.label || d.level || 'Block'}</div>
-                <div class="history-block-time">Goal: ${goalStr} &nbsp; Actual: ${actualStr}</div>
+                <div class="history-block-time">Goal: ${goalStr} &bull; Actual: ${actualStr}</div>
             </div>
             <span class="history-block-badge ${statusClass}">${statusLabels[statusClass] || 'On Time'}</span>
         </div>`;
