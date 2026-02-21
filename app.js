@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 92;
+const APP_BUILD = 93;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2977,10 +2977,9 @@ function editLogEntry(index) {
     if (!entry) return;
     const d = entry.data;
 
-    const activeMins = Math.floor((d.activeSeconds || 0) / 60);
-    const activeSecs = (d.activeSeconds || 0) % 60;
-    const passiveMins = Math.floor((d.passiveSeconds || 0) / 60);
-    const passiveSecs = (d.passiveSeconds || 0) % 60;
+    const totalSec = d.elapsedSeconds || d.seconds || ((d.activeSeconds || 0) + (d.passiveSeconds || 0)) || 0;
+    const initActive = d.activeSeconds != null ? d.activeSeconds : totalSec;
+    const unitLabel = d.unit || 'each';
 
     const existing = document.getElementById('modalEditLog');
     if (existing) existing.remove();
@@ -2991,47 +2990,60 @@ function editLogEntry(index) {
     modal.innerHTML = `
         <div class="modal-content" style="text-align:center;">
             <div class="modal-header">Edit Log</div>
-            <p style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">${d.ingredient}</p>
-            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;">
-                <span style="font-size:11px;font-weight:600;color:var(--accent);width:60px;text-align:right;">Active:</span>
-                <input type="number" id="editActiveMins" class="form-control" value="${activeMins}" min="0" style="width:50px;text-align:center;font-size:14px;">
-                <span style="font-size:11px;color:var(--text-muted);">m</span>
-                <input type="number" id="editActiveSecs" class="form-control" value="${activeSecs}" min="0" max="59" style="width:50px;text-align:center;font-size:14px;">
-                <span style="font-size:11px;color:var(--text-muted);">s</span>
+            <p style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;">${d.ingredient}</p>
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">Total: ${formatTime(totalSec)}</p>
+
+            <div class="split-slider-labels">
+                <span class="split-label passive">Passive<br><strong id="editPassiveDisplay">${formatTime(totalSec - initActive)}</strong></span>
+                <span class="split-label active">Active<br><strong id="editActiveDisplay">${formatTime(initActive)}</strong></span>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;">
-                <span style="font-size:11px;font-weight:600;color:var(--low);width:60px;text-align:right;">Passive:</span>
-                <input type="number" id="editPassiveMins" class="form-control" value="${passiveMins}" min="0" style="width:50px;text-align:center;font-size:14px;">
-                <span style="font-size:11px;color:var(--text-muted);">m</span>
-                <input type="number" id="editPassiveSecs" class="form-control" value="${passiveSecs}" min="0" max="59" style="width:50px;text-align:center;font-size:14px;">
-                <span style="font-size:11px;color:var(--text-muted);">s</span>
+            <div class="split-slider-track" id="splitTrack" style="--thumb-pct:${totalSec > 0 ? ((totalSec - initActive) / totalSec * 100) : 0}%">
+                <div class="split-slider-fill-passive" id="splitFillPassive" style="width:${totalSec > 0 ? ((totalSec - initActive) / totalSec * 100) : 0}%"></div>
+                <div class="split-slider-fill-active" id="splitFillActive" style="width:${totalSec > 0 ? (initActive / totalSec * 100) : 100}%"></div>
+                <input type="range" class="split-slider-input" id="editSplitSlider"
+                    min="0" max="${totalSec}" value="${initActive}" step="1"
+                    oninput="updateSplitSlider(this.value, ${totalSec})">
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:16px;">
-                <span style="font-size:11px;font-weight:600;color:var(--text-secondary);width:60px;text-align:right;">Qty:</span>
-                <input type="number" id="editLogQty" class="form-control" value="${d.quantity || 1}" min="0.1" step="0.5" style="width:80px;text-align:center;font-size:14px;">
+
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;margin-bottom:16px;">
+                <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">Qty</span>
+                <input type="number" id="editLogQty" class="form-control" value="${d.quantity || 1}" min="0.1" step="0.5" style="width:64px;text-align:center;font-size:14px;">
+                <span class="edit-log-unit-pill">${unitLabel}</span>
             </div>
+
             <div class="btn-group">
                 <button class="btn btn-secondary squishy" onclick="document.getElementById('modalEditLog').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); saveLogEdit(${index})">Save</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveLogEdit(${index}, ${totalSec})">Save</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
 }
 
-function saveLogEdit(index) {
+function updateSplitSlider(activeVal, totalSec) {
+    const active = parseInt(activeVal) || 0;
+    const passive = totalSec - active;
+    document.getElementById('editActiveDisplay').textContent = formatTime(active);
+    document.getElementById('editPassiveDisplay').textContent = formatTime(passive);
+    const pct = totalSec > 0 ? (active / totalSec * 100) : 100;
+    document.getElementById('splitFillActive').style.width = pct + '%';
+    document.getElementById('splitFillPassive').style.width = (100 - pct) + '%';
+    const passivePct = 100 - pct;
+    document.getElementById('splitTrack').style.setProperty('--thumb-pct', passivePct + '%');
+}
+
+function saveLogEdit(index, totalSec) {
     const entry = activityLog[index];
     if (!entry) return;
 
-    const aMins = parseInt(document.getElementById('editActiveMins').value) || 0;
-    const aSecs = parseInt(document.getElementById('editActiveSecs').value) || 0;
-    const pMins = parseInt(document.getElementById('editPassiveMins').value) || 0;
-    const pSecs = parseInt(document.getElementById('editPassiveSecs').value) || 0;
+    const activeSeconds = parseInt(document.getElementById('editSplitSlider').value) || 0;
+    const passiveSeconds = totalSec - activeSeconds;
     const qty = parseFloat(document.getElementById('editLogQty').value) || 1;
 
-    entry.data.activeSeconds = aMins * 60 + aSecs;
-    entry.data.passiveSeconds = pMins * 60 + pSecs;
-    entry.data.seconds = entry.data.activeSeconds + entry.data.passiveSeconds;
+    entry.data.activeSeconds = activeSeconds;
+    entry.data.passiveSeconds = passiveSeconds;
+    entry.data.seconds = totalSec;
+    entry.data.elapsedSeconds = totalSec;
     entry.data.quantity = qty;
 
     localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));

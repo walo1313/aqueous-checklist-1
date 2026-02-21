@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v92';
+const CACHE_NAME = 'aqueous-v93';
 const urlsToCache = [
   './index.html',
   './app.js',
