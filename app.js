@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 94;
+const APP_BUILD = 95;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1281,13 +1281,11 @@ function confirmRenameStation(stationId) {
 function toggleIngExpand(stationId, ingredientId) {
     handleClick();
     const key = `${stationId}-${ingredientId}`;
-    const ctrl = document.getElementById(`ing-ctrl-${key}`);
-    if (!ctrl) return;
+    const wasOpen = expandedIngs.has(key);
 
-    const card = document.getElementById(`ing-${key}`);
-    const isOpen = ctrl.classList.toggle('open');
-    if (card) card.classList.toggle('expanded', isOpen);
-    if (isOpen) {
+    if (wasOpen) {
+        expandedIngs.delete(key);
+    } else {
         expandedIngs.add(key);
         // Auto-fill defaults on first expand
         const station = stations.find(s => s.id === stationId);
@@ -1302,14 +1300,12 @@ function toggleIngExpand(stationId, ingredientId) {
                         if (defaults.unit) st.parUnit = defaults.unit;
                         if (defaults.depth) st.parDepth = defaults.depth;
                         updateParLevel(station, ingredientId);
-                        rerenderStationBody(stationId);
                     }
                 }
             }
         }
-    } else {
-        expandedIngs.delete(key);
     }
+    rerenderStationBody(stationId);
 }
 
 const PRIORITY_CYCLE = [null, 'high', 'medium', 'low'];
