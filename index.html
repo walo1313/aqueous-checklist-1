@@ -549,6 +549,31 @@
             border-top: 1px solid var(--divider);
         }
 
+        /* Phase Pills (Active/Passive) */
+        .phase-pill {
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+        }
+        .phase-pill.phase-active {
+            background: var(--accent-tint);
+            color: var(--accent);
+        }
+        .phase-pill.phase-passive {
+            background: var(--low-tint);
+            color: var(--low);
+        }
+        .inline-timer-btn.next {
+            background: var(--accent-tint);
+            color: var(--accent);
+            font-weight: 700;
+            font-size: 11px;
+        }
+
         .smart-qty-row {
             display: flex;
             align-items: center;

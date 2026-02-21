@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 87;
+const APP_BUILD = 88;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1659,10 +1659,18 @@ function renderSummaryGroup(title, level, tasks) {
 
         // Inline timer row (shown when timer is active or paused)
         if (hasTimer && !task.status.completed) {
+            const phaseLabel = timer.phase === 'active' ? 'Active'
+                             : timer.phase === 'passive' ? 'Passive' : '';
+            const phaseClass = timer.phase === 'active' ? 'phase-active'
+                             : timer.phase === 'passive' ? 'phase-passive' : '';
             html += `
                 <div class="inline-timer-row" id="timer_${timerKey}">
+                    ${phaseLabel ? `<span class="phase-pill ${phaseClass}">${phaseLabel}</span>` : ''}
                     <span class="inline-timer-clock" id="clock_${timerKey}">${formatTime(getTimerSeconds(timer))}</span>
                     <div class="inline-timer-controls">
+                        ${timer.phase === 'active' && timer.hasPassivePhase ? `
+                            <button class="inline-timer-btn next" onclick="handleClick(); nextTimerPhase('${timerKey}')">Next</button>
+                        ` : ''}
                         ${isRunning ? `
                             <button class="inline-timer-btn pause" onclick="handleClick(); pauseTaskTimer('${timerKey}')">⏸</button>
                         ` : `
@@ -1871,12 +1879,23 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
     // Request notification permission on first timer
     requestNotificationPermission();
 
+    // Check if template exists for active/passive phases
+    const key = ingName.toLowerCase();
+    const tmpl = taskTemplates[key];
+    const hasTemplate = tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0);
+    const hasPassive = hasTemplate && tmpl.passiveSecondsPerUnit > 0;
+
     // Start new timer
     taskTimers[timerKey] = {
         stationId, ingredientId, ingName,
         running: true,
         startedAt: Date.now(),
         pausedElapsed: 0,
+        phase: hasTemplate ? 'active' : 'legacy',
+        activeSeconds: 0,
+        passiveSeconds: 0,
+        wallStartedAt: Date.now(),
+        hasPassivePhase: hasPassive,
         interval: setInterval(() => {
             const clock = document.getElementById(`clock_${timerKey}`);
             if (clock) clock.textContent = formatTime(getTimerSeconds(taskTimers[timerKey]));
@@ -1887,7 +1906,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
     forceUpdateTimerNotification();
 
     checkAndManageWakeLock();
-    showToast(`⏱ Timing: ${ingName}`);
+    showToast(hasTemplate ? `⏱ Active: ${ingName}` : `⏱ Timing: ${ingName}`);
     refreshSummaryPanel();
 }
 
@@ -1928,6 +1947,31 @@ function resetTaskTimer(timerKey) {
 
     checkAndManageWakeLock();
     refreshSummaryPanel();
+}
+
+function nextTimerPhase(timerKey) {
+    const t = taskTimers[timerKey];
+    if (!t || t.phase !== 'active') return;
+
+    // Snapshot active time
+    t.activeSeconds += getTimerSeconds(t);
+
+    // Switch to passive
+    t.phase = 'passive';
+    t.pausedElapsed = 0;
+    t.startedAt = Date.now();
+
+    // Restart interval for passive display
+    if (t.interval) clearInterval(t.interval);
+    t.interval = setInterval(() => {
+        const clock = document.getElementById(`clock_${timerKey}`);
+        if (clock) clock.textContent = formatTime(getTimerSeconds(t));
+        updateTimerNotification();
+    }, 1000);
+
+    forceUpdateTimerNotification();
+    refreshSummaryPanel();
+    showToast('Passive phase started');
 }
 
 // ── Block Timers (countdown from estimated total) ──
@@ -2104,15 +2148,31 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
 
     const unitLabel = defaultUnit ? `<span style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-left:6px;">${PAN_UNITS.includes(defaultUnit) ? `${st.parDepth || 4}" ${defaultUnit}` : defaultUnit}</span>` : '';
 
+    // Calculate active/passive breakdown for display
+    const hasPhases = t && t.phase && t.phase !== 'legacy';
+    const activeTotal = hasPhases ? ((t.activeSeconds || 0) + (t.phase === 'active' ? getTimerSeconds(t) : 0)) : 0;
+    const passiveTotal = hasPhases ? ((t.passiveSeconds || 0) + (t.phase === 'passive' ? getTimerSeconds(t) : 0)) : 0;
+    const elapsedTotal = t && t.wallStartedAt ? Math.floor((Date.now() - t.wallStartedAt) / 1000) : 0;
+
+    const phaseBreakdown = hasPhases ? `
+        <div style="display:flex;justify-content:center;gap:16px;margin-bottom:12px;font-size:12px;">
+            <span style="color:var(--accent);font-weight:700;">Active: ${formatTime(activeTotal)}</span>
+            ${passiveTotal > 0 ? `<span style="color:var(--low);font-weight:700;">Passive: ${formatTime(passiveTotal)}</span>` : ''}
+        </div>
+        <p style="font-size:10px;color:var(--text-muted);margin-bottom:12px;">Elapsed: ${formatTime(elapsedTotal)}</p>
+    ` : `
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">You took</p>
+        <p style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:12px;">${timeStr}</p>
+    `;
+
     const modal = document.createElement('div');
     modal.id = 'modalTaskComplete';
     modal.className = 'modal show';
     modal.innerHTML = `
         <div class="modal-content" style="text-align:center;">
-            <div class="modal-header">✅ Task Done!</div>
+            <div class="modal-header">Task Done</div>
             <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:8px;">${ingName}</p>
-            <p style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">You took</p>
-            <p style="font-size:28px;font-weight:800;color:var(--accent);margin-bottom:12px;">${timeStr}</p>
+            ${phaseBreakdown}
             <div class="form-group" style="margin-bottom:16px;">
                 <label style="font-size:11px;font-weight:600;color:var(--text-secondary);">Quantity prepped</label>
                 <div style="display:flex;align-items:center;justify-content:center;gap:6px;">
@@ -2122,7 +2182,7 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
             </div>
             <div class="btn-group">
                 <button class="btn btn-secondary squishy" onclick="handleClick(); cancelTaskComplete(${stationId}, ${ingredientId})">Continue</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); confirmTaskComplete(${stationId}, ${ingredientId})">Done ✅</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); confirmTaskComplete(${stationId}, ${ingredientId})">Done</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
@@ -2144,8 +2204,16 @@ function confirmTaskComplete(stationId, ingredientId) {
         const st = station.status[ingredientId];
         const unit = st.parUnit || 'unit';
         const baseQty = convertToBase(qty, unit, st.parDepth);
-        const secPerBaseUnit = baseQty > 0 ? tSec / baseQty : tSec;
         const baseUnit = getBaseUnit(unit);
+
+        // Calculate active/passive breakdown
+        const activeTotal = (t.activeSeconds || 0) + (t.phase === 'active' ? getTimerSeconds(t) : 0);
+        const passiveTotal = (t.passiveSeconds || 0) + (t.phase === 'passive' ? getTimerSeconds(t) : 0);
+        const elapsedTotal = t.wallStartedAt ? Math.floor((Date.now() - t.wallStartedAt) / 1000) : tSec;
+
+        // For prepTimes, use active time only (exclude passive)
+        const activeForRate = activeTotal > 0 ? activeTotal : tSec;
+        const secPerBaseUnit = baseQty > 0 ? activeForRate / baseQty : activeForRate;
 
         if (!prepTimes[key]) {
             prepTimes[key] = { avgSecPerUnit: secPerBaseUnit, bestSecPerUnit: secPerBaseUnit, count: 1, baseUnit };
@@ -2158,6 +2226,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         }
         savePrepTimes();
 
+        const tmpl = taskTemplates[key];
         logActivity('task_complete', {
             ingredient: ing.name,
             station: station.name,
@@ -2166,7 +2235,11 @@ function confirmTaskComplete(stationId, ingredientId) {
             unit,
             depth: st.parDepth || null,
             baseUnit,
-            secPerUnit: Math.round(secPerBaseUnit)
+            secPerUnit: Math.round(secPerBaseUnit),
+            activeSeconds: activeTotal,
+            passiveSeconds: passiveTotal,
+            elapsedSeconds: elapsedTotal,
+            templateVersion: tmpl ? tmpl.templateVersion : null
         });
     } else if (ing) {
         logActivity('task_complete', {
@@ -2175,7 +2248,11 @@ function confirmTaskComplete(stationId, ingredientId) {
             seconds: 0,
             quantity: 0,
             unit: '',
-            secPerUnit: 0
+            secPerUnit: 0,
+            activeSeconds: 0,
+            passiveSeconds: 0,
+            elapsedSeconds: 0,
+            templateVersion: null
         });
     }
 
