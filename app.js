@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 80;
+const APP_BUILD = 81;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -701,13 +701,8 @@ function renderIngredients(station) {
                 <span class="ingredient-name">${ing.name}</span>
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
-                <div class="priority-row">
-                    <button class="priority-btn ${st.priority === 'high' ? 'high' : ''}"
-                        onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'high')">High</button>
-                    <button class="priority-btn ${st.priority === 'medium' ? 'medium' : ''}"
-                        onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'medium')">Medium</button>
-                    <button class="priority-btn ${st.priority === 'low' ? 'low' : ''}"
-                        onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
+                <div class="smart-qty-row" style="margin-bottom:8px;">
+                    <button class="priority-pill ${st.priority || 'none'}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${st.priority ? st.priority.charAt(0).toUpperCase() + st.priority.slice(1) : 'Priority'}</button>
                 </div>
                 <div class="smart-qty-row">
                     <input type="number" class="smart-qty-input"
@@ -983,9 +978,27 @@ function toggleIngExpand(stationId, ingredientId) {
     }
 }
 
-function setPriority(stationId, ingredientId, priority) {
+const PRIORITY_CYCLE = [null, 'high', 'medium', 'low'];
+
+function cyclePriority(stationId, ingredientId) {
     handleClick();
     animateMascot();
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
+
+    const idx = PRIORITY_CYCLE.indexOf(st.priority);
+    st.priority = PRIORITY_CYCLE[(idx + 1) % PRIORITY_CYCLE.length];
+    st.low = !!st.priority;
+
+    if (!st.low) st.completed = false;
+
+    saveData(true);
+    rerenderStationBody(stationId);
+}
+
+function setPriority(stationId, ingredientId, priority) {
+    handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
     const st = station.status[ingredientId];
@@ -993,9 +1006,7 @@ function setPriority(stationId, ingredientId, priority) {
     st.priority = st.priority === priority ? null : priority;
     st.low = !!st.priority;
 
-    if (!st.low) {
-        st.completed = false;
-    }
+    if (!st.low) st.completed = false;
 
     saveData(true);
     rerenderStationBody(stationId);

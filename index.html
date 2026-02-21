@@ -441,53 +441,37 @@
             border-top: 1px solid rgba(0,0,0,0.06);
         }
 
-        .priority-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        /* Neumorphic Priority Buttons */
-        .priority-btn {
-            flex: 1;
-            padding: 8px 4px;
+        .priority-pill {
+            padding: 5px 16px;
             border: none;
-            background: var(--surface);
-            border-radius: var(--radius-sm);
-            cursor: pointer;
+            border-radius: 20px;
             font-size: 11px;
             font-weight: 700;
-            box-shadow: var(--neu-shadow-sm);
+            cursor: pointer;
             transition: all 0.15s;
-            color: var(--text-secondary);
+            -webkit-tap-highlight-color: transparent;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text-muted);
         }
-
-        .priority-btn:active {
-            box-shadow: var(--neu-inset);
+        .priority-pill:active {
             transform: scale(0.92);
-            transition: all 0.08s ease;
+            transition: all 0.08s;
         }
-
-        .priority-btn.high {
-            background: var(--surface);
-            color: var(--high);
+        .priority-pill.high {
+            background: #fee2e2;
+            color: #dc2626;
             box-shadow: var(--neu-inset);
-            border-bottom: 3px solid var(--high);
-            transform: translateY(1px);
         }
-        .priority-btn.medium {
-            background: var(--surface);
-            color: var(--medium-dark);
+        .priority-pill.medium {
+            background: #fef3c7;
+            color: #d97706;
             box-shadow: var(--neu-inset);
-            border-bottom: 3px solid var(--medium);
-            transform: translateY(1px);
         }
-        .priority-btn.low {
+        .priority-pill.low {
             background: var(--surface);
-            color: var(--low-dark);
+            color: var(--text-secondary);
             box-shadow: var(--neu-inset);
-            border-bottom: 3px solid var(--low);
-            transform: translateY(1px);
         }
 
         .smart-qty-row {
