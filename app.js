@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 83;
+const APP_BUILD = 84;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -692,18 +692,15 @@ function renderIngredients(station) {
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
         html += `
-        <div class="ingredient ${st.low ? 'low' : ''} ${st.priority ? 'has-priority' : ''} ${expandedIngs.has(`${station.id}-${ing.id}`) ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
+        <div class="ingredient ${st.low ? 'low' : ''} ${st.priority && !st.completed ? 'has-priority priority-' + st.priority : ''} ${expandedIngs.has(`${station.id}-${ing.id}`) ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
             <div class="ingredient-header"
-                 onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
                  oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
-                <span class="ingredient-name">${ing.name}</span>
+                <button class="priority-dot ${st.priority && !st.completed ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})"></button>
+                <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
-                <div class="smart-qty-row" style="margin-bottom:8px;">
-                    <button class="priority-pill ${st.priority || 'none'}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${st.priority ? st.priority.charAt(0).toUpperCase() + st.priority.slice(1) : 'Priority'}</button>
-                </div>
                 <div class="smart-qty-row">
                     <input type="number" class="smart-qty-input"
                         value="${st.parQty || ''}"
@@ -1156,6 +1153,10 @@ function rerenderStationBody(stationId) {
     updateStationCount(stationId);
 }
 
+function rerenderHomePanel() {
+    stations.forEach(s => rerenderStationBody(s.id));
+}
+
 function updateStationCount(stationId) {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
@@ -1354,24 +1355,25 @@ function toggleCompleted(stationId, ingredientId) {
         const timerKey = `${stationId}_${ingredientId}`;
         const t = taskTimers[timerKey];
         if (t && getTimerSeconds(t) > 0) {
-            // Timer was running — show confirmation with time
             showTaskCompleteConfirm(stationId, ingredientId);
         } else {
-            // No timer — just complete directly, no popup
             if (t) { if (t.interval) clearInterval(t.interval); delete taskTimers[timerKey]; }
-            station.status[ingredientId].completed = true;
-            saveData(true);
-            animateMascot();
+            const pLevel = station.status[ingredientId].priority || 'none';
             logActivity('task_complete', {
                 ingredient: station.ingredients.find(i => i.id === ingredientId)?.name || '',
                 station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
             });
-            const pLevel = station.status[ingredientId].priority || 'none';
+            // Auto-clean: reset priority and low so dot disappears from Home
+            station.status[ingredientId].completed = false;
+            station.status[ingredientId].priority = null;
+            station.status[ingredientId].low = false;
+            saveData(true);
+            animateMascot();
             checkBlockCompletion(pLevel);
             refreshSummaryPanel();
+            rerenderHomePanel();
         }
     } else {
-        // Unchecking — just toggle directly
         station.status[ingredientId].completed = false;
         saveData(true);
         refreshSummaryPanel();
@@ -1850,19 +1852,22 @@ function confirmTaskComplete(stationId, ingredientId) {
     }
     forceUpdateTimerNotification();
 
-    // Mark completed
-    if (station) station.status[ingredientId].completed = true;
-    saveData(true);
-
-    const modal = document.getElementById('modalTaskComplete');
-    if (modal) modal.remove();
-
-    animateMascot();
+    // Auto-clean: reset priority and low so dot disappears from Home
     if (station && station.status[ingredientId]) {
         const pLevel = station.status[ingredientId].priority || 'none';
+        station.status[ingredientId].completed = false;
+        station.status[ingredientId].priority = null;
+        station.status[ingredientId].low = false;
+        saveData(true);
+
+        const modal = document.getElementById('modalTaskComplete');
+        if (modal) modal.remove();
+
+        animateMascot();
         checkBlockCompletion(pLevel);
+        refreshSummaryPanel();
+        rerenderHomePanel();
     }
-    refreshSummaryPanel();
 }
 
 function cancelTaskComplete(stationId, ingredientId) {
