@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 71;
+const APP_BUILD = 72;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -54,20 +54,33 @@ function debounce(key, fn, delay) {
 
 // ==================== UNIT CONVERSIONS ====================
 
-const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1, '1/9pan': 38, '1/6pan': 58, '1/3pan': 128, '1/2pan': 214, 'fullpan': 448 };
+const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1 };
+const PAN_UNITS = ['1/9pan', '1/6pan', '1/3pan', '1/2pan', 'fullpan'];
+const PAN_OZ = {
+    '1/9pan': { 2: 16, 4: 38, 6: 58 },
+    '1/6pan': { 2: 26, 4: 58, 6: 92 },
+    '1/3pan': { 2: 58, 4: 128, 6: 194 },
+    '1/2pan': { 2: 100, 4: 214, 6: 326 },
+    'fullpan': { 2: 212, 4: 448, 6: 660 }
+};
 const UNIT_TO_G = { kg: 1000, lb: 453.592, g: 1 };
-const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz', '1/9pan', '1/6pan', '1/3pan', '1/2pan', 'fullpan'];
+const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz'];
 const WEIGHT_UNITS = ['kg', 'lb', 'g'];
 const COUNT_UNITS = ['each', 'recipe'];
 
 function getBaseUnit(unit) {
-    if (VOLUME_UNITS.includes(unit)) return 'oz';
+    if (VOLUME_UNITS.includes(unit) || PAN_UNITS.includes(unit)) return 'oz';
     if (WEIGHT_UNITS.includes(unit)) return 'g';
     if (COUNT_UNITS.includes(unit)) return unit;
     return 'unit';
 }
 
-function convertToBase(qty, unit) {
+function convertToBase(qty, unit, depth) {
+    if (PAN_UNITS.includes(unit)) {
+        const d = depth || 4;
+        const oz = (PAN_OZ[unit] && PAN_OZ[unit][d]) || PAN_OZ[unit][4] || 1;
+        return oz;
+    }
     if (VOLUME_UNITS.includes(unit)) return qty * (UNIT_TO_OZ[unit] || 1);
     if (WEIGHT_UNITS.includes(unit)) return qty * (UNIT_TO_G[unit] || 1);
     return qty;
@@ -94,15 +107,17 @@ function getBlockRemainingSeconds(bt) {
     return bt.goalSeconds - elapsed;
 }
 
-function getIngredientEstimate(ingName, parQty, parUnit) {
+function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
     const key = ingName.toLowerCase();
     const pt = prepTimes[key];
     if (!pt || !pt.bestSecPerUnit || !parQty || !parUnit) return null;
     const baseUnit = getBaseUnit(parUnit);
     if (pt.baseUnit && pt.baseUnit !== 'unit' && pt.baseUnit !== baseUnit) return null;
-    const baseQty = convertToBase(parQty, parUnit);
+    const baseQty = convertToBase(parQty, parUnit, parDepth);
     const estSeconds = Math.round(pt.bestSecPerUnit * baseQty);
-    const convFactor = UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1;
+    const convFactor = PAN_UNITS.includes(parUnit)
+        ? ((PAN_OZ[parUnit] && PAN_OZ[parUnit][parDepth || 4]) || 1)
+        : (UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1);
     const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * convFactor);
     return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit };
 }
@@ -709,6 +724,13 @@ function renderIngredients(station) {
                         onclick="setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
                 </div>
                 <div class="par-row">
+                    ${PAN_UNITS.includes(st.parUnit) ? `
+                    <select class="par-select" onchange="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, this.value)" style="width:60px;">
+                        <option value="2" ${st.parDepth == 2 ? 'selected' : ''}>2"</option>
+                        <option value="4" ${st.parDepth == 4 || !st.parDepth ? 'selected' : ''}>4"</option>
+                        <option value="6" ${st.parDepth == 6 ? 'selected' : ''}>6"</option>
+                    </select>
+                    ` : `
                     <div class="par-stepper">
                         <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5})">−</button>
                         <input type="number" class="par-qty-input"
@@ -719,6 +741,7 @@ function renderIngredients(station) {
                             onclick="event.stopPropagation()">
                         <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, ${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5})">+</button>
                     </div>
+                    `}
                     <select class="par-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
                         <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
                         ${unitOptions.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
@@ -992,10 +1015,28 @@ function setParUnit(stationId, ingredientId, value) {
     handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
-    station.status[ingredientId].parUnit = value;
-    if (value && !station.status[ingredientId].parQty) {
-        station.status[ingredientId].parQty = 1;
+    const st = station.status[ingredientId];
+    st.parUnit = value;
+    if (PAN_UNITS.includes(value)) {
+        st.parQty = st.parDepth || 4;
+        if (!st.parDepth) st.parDepth = 4;
+    } else {
+        st.parDepth = null;
+        if (value && !st.parQty) st.parQty = 1;
     }
+    updateParLevel(station, ingredientId);
+    saveIngredientDefault(station, ingredientId);
+    saveData(true);
+    rerenderStationBody(stationId);
+}
+
+function setParDepth(stationId, ingredientId, value) {
+    handleClick();
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const d = parseInt(value) || 4;
+    station.status[ingredientId].parDepth = d;
+    station.status[ingredientId].parQty = d;
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
@@ -1227,7 +1268,7 @@ function renderSummaryGroup(title, level, tasks) {
         const escapedName = task.ingredient.name.replace(/'/g, "\\'");
 
         // Per-ingredient time goal
-        const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit);
+        const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit, task.status.parDepth);
         const goalInfo = est
             ? `<span style="font-size:9px;color:var(--accent);">🏆 Best: ${formatEstimate(est.bestPerDisplayUnit)} per ${task.status.parUnit}</span>`
             : '';
@@ -1541,7 +1582,7 @@ function getBlockEstimateSeconds(level) {
             const st = station.status[ing.id];
             if (!st || st.completed) return;
             if ((st.priority || 'none') !== level) return;
-            const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit);
+            const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit, st.parDepth);
             if (est) totalEst += est.totalSeconds;
         });
     });
@@ -1744,7 +1785,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         const key = ing.name.toLowerCase();
         const st = station.status[ingredientId];
         const unit = st.parUnit || 'unit';
-        const baseQty = convertToBase(qty, unit);
+        const baseQty = convertToBase(qty, unit, st.parDepth);
         const secPerBaseUnit = baseQty > 0 ? tSec / baseQty : tSec;
         const baseUnit = getBaseUnit(unit);
 
@@ -2424,7 +2465,7 @@ function calculateBlockGoals() {
             result[p].items++;
 
             const key = ing.name.toLowerCase();
-            const est = getIngredientEstimate(ing.name, st.parQty || 1, st.parUnit || 'unit');
+            const est = getIngredientEstimate(ing.name, st.parQty || 1, st.parUnit || 'unit', st.parDepth);
             if (est) {
                 if (!result[p].estSeconds) result[p].estSeconds = 0;
                 result[p].estSeconds += est.totalSeconds;
