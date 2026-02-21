@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 88;
+const APP_BUILD = 89;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2794,10 +2794,11 @@ function renderLogDetail(container) {
         e.type === 'task_complete' && e.data && e.data.ingredient === logDetailIngredient && e.data.seconds > 0
     ).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-    // Find best (shortest) total time
+    // Find best (shortest) active time (or total for legacy)
     let bestSeconds = Infinity;
     entries.forEach(e => {
-        if (e.data.seconds > 0 && e.data.seconds < bestSeconds) bestSeconds = e.data.seconds;
+        const activeTime = e.data.activeSeconds > 0 ? e.data.activeSeconds : e.data.seconds;
+        if (activeTime > 0 && activeTime < bestSeconds) bestSeconds = activeTime;
     });
 
     const bestStr = bestSeconds < Infinity ? formatTime(bestSeconds) : '—';
@@ -2821,7 +2822,7 @@ function renderLogDetail(container) {
             <div class="log-detail-stats">
                 <div class="log-stat">
                     <span class="log-stat-value"><img src="./badge-96.png" style="width:14px;height:14px;vertical-align:middle;margin-right:2px;">${bestStr}</span>
-                    <span class="log-stat-label">Best</span>
+                    <span class="log-stat-label">${entries.some(e => e.data.activeSeconds > 0) ? 'Best Active' : 'Best'}</span>
                 </div>
                 <div class="log-stat">
                     <span class="log-stat-value">${totalSessions}</span>
@@ -2844,24 +2845,37 @@ function renderLogDetail(container) {
 
         dayEntries.forEach(entry => {
             const d = entry.data;
-            const isBest = bestSeconds < Infinity && d.seconds > 0 && d.seconds <= bestSeconds;
+            const hasPhaseData = d.activeSeconds > 0 || d.passiveSeconds > 0;
+            const activeTime = hasPhaseData ? d.activeSeconds : d.seconds;
+            const isBest = bestSeconds < Infinity && activeTime > 0 && activeTime <= bestSeconds;
             const time = new Date(entry.timestamp);
             const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            const logIndex = activityLog.indexOf(entry);
 
             html += `
             <div class="log-entry ${isBest ? 'log-best' : ''}">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="font-size:18px;font-weight:800;color:var(--accent);">${formatTime(d.seconds)}</span>
+                        <span style="font-size:18px;font-weight:800;color:var(--accent);">${formatTime(activeTime)}</span>
                         ${isBest ? '<span style="font-size:10px;color:var(--accent);display:flex;align-items:center;gap:2px;"><img src="./badge-96.png" style="width:12px;height:12px;">Best</span>' : ''}
                     </div>
                     <span style="font-size:10px;color:var(--text-muted);">${timeStr}</span>
                 </div>
+                ${hasPhaseData ? `
+                <div style="display:flex;gap:12px;margin-top:4px;font-size:10px;">
+                    <span style="color:var(--accent);font-weight:600;">Active: ${formatTime(d.activeSeconds)}</span>
+                    ${d.passiveSeconds > 0 ? `<span style="color:var(--low);font-weight:600;">Passive: ${formatTime(d.passiveSeconds)}</span>` : ''}
+                    ${d.elapsedSeconds > 0 ? `<span style="color:var(--text-muted);">Elapsed: ${formatTime(d.elapsedSeconds)}</span>` : ''}
+                </div>` : ''}
                 <div style="display:flex;gap:14px;margin-top:4px;font-size:11px;color:var(--text-secondary);">
                     <span>${PAN_UNITS.includes(d.unit) ? formatParDisplay(d.quantity, d.unit, d.depth) : `${d.quantity} ${d.unit || 'units'}`}</span>
                     <span>${d.station || ''}</span>
                 </div>
                 ${entry.cook ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${entry.cook}</div>` : ''}
+                <div style="display:flex;gap:8px;margin-top:6px;">
+                    <button class="log-action-btn" onclick="handleClick(); editLogEntry(${logIndex})">Edit</button>
+                    ${hasPhaseData ? `<button class="log-action-btn" onclick="handleClick(); updateTemplateFromLog(${logIndex})">Update Template</button>` : ''}
+                </div>
             </div>`;
         });
 
@@ -2869,6 +2883,104 @@ function renderLogDetail(container) {
     });
 
     container.innerHTML = html;
+}
+
+function editLogEntry(index) {
+    const entry = activityLog[index];
+    if (!entry) return;
+    const d = entry.data;
+
+    const activeMins = Math.floor((d.activeSeconds || 0) / 60);
+    const activeSecs = (d.activeSeconds || 0) % 60;
+    const passiveMins = Math.floor((d.passiveSeconds || 0) / 60);
+    const passiveSecs = (d.passiveSeconds || 0) % 60;
+
+    const existing = document.getElementById('modalEditLog');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalEditLog';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Edit Log</div>
+            <p style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:12px;">${d.ingredient}</p>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;">
+                <span style="font-size:11px;font-weight:600;color:var(--accent);width:60px;text-align:right;">Active:</span>
+                <input type="number" id="editActiveMins" class="form-control" value="${activeMins}" min="0" style="width:50px;text-align:center;font-size:14px;">
+                <span style="font-size:11px;color:var(--text-muted);">m</span>
+                <input type="number" id="editActiveSecs" class="form-control" value="${activeSecs}" min="0" max="59" style="width:50px;text-align:center;font-size:14px;">
+                <span style="font-size:11px;color:var(--text-muted);">s</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:10px;">
+                <span style="font-size:11px;font-weight:600;color:var(--low);width:60px;text-align:right;">Passive:</span>
+                <input type="number" id="editPassiveMins" class="form-control" value="${passiveMins}" min="0" style="width:50px;text-align:center;font-size:14px;">
+                <span style="font-size:11px;color:var(--text-muted);">m</span>
+                <input type="number" id="editPassiveSecs" class="form-control" value="${passiveSecs}" min="0" max="59" style="width:50px;text-align:center;font-size:14px;">
+                <span style="font-size:11px;color:var(--text-muted);">s</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:16px;">
+                <span style="font-size:11px;font-weight:600;color:var(--text-secondary);width:60px;text-align:right;">Qty:</span>
+                <input type="number" id="editLogQty" class="form-control" value="${d.quantity || 1}" min="0.1" step="0.5" style="width:80px;text-align:center;font-size:14px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalEditLog').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveLogEdit(${index})">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function saveLogEdit(index) {
+    const entry = activityLog[index];
+    if (!entry) return;
+
+    const aMins = parseInt(document.getElementById('editActiveMins').value) || 0;
+    const aSecs = parseInt(document.getElementById('editActiveSecs').value) || 0;
+    const pMins = parseInt(document.getElementById('editPassiveMins').value) || 0;
+    const pSecs = parseInt(document.getElementById('editPassiveSecs').value) || 0;
+    const qty = parseFloat(document.getElementById('editLogQty').value) || 1;
+
+    entry.data.activeSeconds = aMins * 60 + aSecs;
+    entry.data.passiveSeconds = pMins * 60 + pSecs;
+    entry.data.seconds = entry.data.activeSeconds + entry.data.passiveSeconds;
+    entry.data.quantity = qty;
+
+    localStorage.setItem('aqueous_activityLog', JSON.stringify(activityLog));
+
+    const modal = document.getElementById('modalEditLog');
+    if (modal) modal.remove();
+
+    showToast('Log updated');
+    renderLogDetail(document.getElementById('panelOverlay'));
+}
+
+function updateTemplateFromLog(index) {
+    const entry = activityLog[index];
+    if (!entry) return;
+    const d = entry.data;
+    if (!d.activeSeconds && !d.passiveSeconds) {
+        showToast('No active/passive data');
+        return;
+    }
+
+    const key = d.ingredient.toLowerCase();
+    const baseQty = convertToBase(d.quantity || 1, d.unit || 'each', d.depth);
+    const activePerUnit = baseQty > 0 ? d.activeSeconds / baseQty : d.activeSeconds;
+    const passivePerUnit = baseQty > 0 ? (d.passiveSeconds || 0) / baseQty : (d.passiveSeconds || 0);
+
+    taskTemplates[key] = {
+        activeFixedSeconds: 0,
+        activeSecondsPerUnit: activePerUnit,
+        passiveFixedSeconds: 0,
+        passiveSecondsPerUnit: passivePerUnit,
+        lastUpdatedAt: new Date().toISOString(),
+        calibratedBy: settings.cookName || 'Chef',
+        templateVersion: (taskTemplates[key]?.templateVersion || 0) + 1
+    };
+    saveTaskTemplates();
+    showToast('Template updated from log');
 }
 
 function formatTime(totalSec) {
