@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 96;
+const APP_BUILD = 97;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1653,46 +1653,10 @@ function renderSummary(container) {
 function renderSummaryGroup(title, level, tasks) {
     const colorClass = level === 'none' ? '' : `summary-${level}`;
 
-    // Block timer: only show if there's timing data for ingredients in this block
-    const incompleteTasks = tasks.filter(t => !t.status.completed);
-    const hasTimingData = blockHasTimingData(level);
-    const blockEst = getBlockEstimateSeconds(level);
-    const totalEstSeconds = blockEst.total;
-
-    // Block timer state
-    const bt = blockTimers[level];
-    const btRunning = bt && bt.running;
-    const btPaused = bt && !bt.running;
-    const btActive = btRunning || btPaused;
-    const btRemaining = bt ? getBlockRemainingSeconds(bt) : 0;
-    const btAbsTime = bt ? formatTime(Math.abs(btRemaining)) : '00:00';
-    const btOvertime = bt && btRemaining < 0;
-
-    // Block timer controls for header
-    let blockTimerHTML = '';
-    if (incompleteTasks.length > 0 && btActive) {
-        blockTimerHTML = `
-            <div class="block-timer-row">
-                <span class="block-timer-clock ${btOvertime ? 'overtime' : ''}" id="blockClock_${level}">${btOvertime ? '-' : ''}${btAbsTime}</span>
-                ${btRunning ? `
-                    <button class="block-timer-ctrl pause" onclick="event.stopPropagation(); pauseBlockTimer('${level}')">⏸</button>
-                ` : `
-                    <button class="block-timer-ctrl resume" onclick="event.stopPropagation(); resumeBlockTimer('${level}')">▶</button>
-                `}
-                <button class="block-timer-ctrl reset" onclick="event.stopPropagation(); resetBlockTimer('${level}')">✕</button>
-            </div>`;
-    } else if (incompleteTasks.length > 0 && hasTimingData) {
-        blockTimerHTML = `
-            <button class="block-timer-start" onclick="event.stopPropagation(); toggleBlockTimer('${level}')">
-                ⏱ ${formatTime(totalEstSeconds)}
-            </button>`;
-    }
-
     let html = `
         <div class="summary-group ${colorClass}">
             <div class="summary-group-title">
                 <span>${title}</span>
-                ${blockTimerHTML}
             </div>`;
 
     tasks.forEach(task => {
@@ -1703,21 +1667,21 @@ function renderSummaryGroup(title, level, tasks) {
         const hasTimer = isRunning || isPaused;
         const escapedName = task.ingredient.name.replace(/'/g, "\\'");
 
-        // Best time from completed logs
+        // Best time from completed logs (target display only)
         const bestTime = getIngredientBestTime(task.ingredient.name);
+        const bestBadge = bestTime ? `<span class="best-time-badge">${formatTime(bestTime)}</span>` : '';
 
         // Par display
         const parTag = task.status.parQty && task.status.parUnit
             ? `<span class="par-tag">${formatParDisplay(task.status.parQty, task.status.parUnit, task.status.parDepth)}</span>`
             : (task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : '');
 
-        // Timer button: only render if bestTime exists from logs
-        let timerBtnHTML = '';
-        if (!task.status.completed && bestTime) {
-            timerBtnHTML = `
-                <button class="best-time-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
-                    <span class="best-time-icon">⏱</span>
-                    <span class="best-time-value">${formatTime(bestTime)}</span>
+        // Stopwatch button: always visible for incomplete tasks (record timing)
+        let stopwatchHTML = '';
+        if (!task.status.completed) {
+            stopwatchHTML = `
+                <button class="task-timer-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
+                    ⏱
                 </button>`;
         }
 
@@ -1734,7 +1698,8 @@ function renderSummaryGroup(title, level, tasks) {
                 </label>
                 <div class="summary-item-actions">
                     ${parTag}
-                    ${timerBtnHTML}
+                    ${bestBadge}
+                    ${stopwatchHTML}
                 </div>
             </div>`;
 
