@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 90;
+const APP_BUILD = 91;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -733,6 +733,7 @@ function renderIngredients(station) {
                 ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
                 ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
                 <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
+                ${!isExpanded && taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
                 <div class="smart-qty-row">
@@ -1647,7 +1648,8 @@ function renderSummaryGroup(title, level, tasks) {
     // Block timer: only show if there's timing data for ingredients in this block
     const incompleteTasks = tasks.filter(t => !t.status.completed);
     const hasTimingData = blockHasTimingData(level);
-    const totalEstSeconds = getBlockEstimateSeconds(level);
+    const blockEst = getBlockEstimateSeconds(level);
+    const totalEstSeconds = blockEst.total;
 
     // Block timer state
     const bt = blockTimers[level];
@@ -1672,9 +1674,12 @@ function renderSummaryGroup(title, level, tasks) {
                 <button class="block-timer-ctrl reset" onclick="event.stopPropagation(); resetBlockTimer('${level}')">✕</button>
             </div>`;
     } else if (incompleteTasks.length > 0 && hasTimingData) {
+        const estLabel = blockEst.hasTemplateData && blockEst.passive > 0
+            ? `~${formatEstimate(blockEst.active)} active + ~${formatEstimate(blockEst.passive)} passive`
+            : `~${formatEstimate(totalEstSeconds)}`;
         blockTimerHTML = `
             <button class="block-timer-start" onclick="event.stopPropagation(); toggleBlockTimer('${level}')">
-                ⏱ ~${formatEstimate(totalEstSeconds)}
+                ⏱ ${estLabel}
             </button>`;
     }
 
@@ -2046,22 +2051,33 @@ function nextTimerPhase(timerKey) {
 // ── Block Timers (countdown from estimated total) ──
 function getBlockEstimateSeconds(level) {
     // Calculate total estimated seconds for incomplete tasks in this block
-    const levelMap = { high: 'Before Service', medium: 'Necessary', low: 'Backup', none: 'No Priority' };
     let totalEst = 0;
+    let totalActive = 0;
+    let totalPassive = 0;
+    let hasTemplateData = false;
     stations.forEach(station => {
         station.ingredients.forEach(ing => {
             const st = station.status[ing.id];
             if (!st || st.completed) return;
             if ((st.priority || 'none') !== level) return;
             const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit, st.parDepth);
-            if (est) totalEst += est.totalSeconds;
+            if (est) {
+                totalEst += est.totalSeconds;
+                if (est.hasTemplate) {
+                    totalActive += est.activeSeconds || 0;
+                    totalPassive += est.passiveSeconds || 0;
+                    hasTemplateData = true;
+                } else {
+                    totalActive += est.totalSeconds;
+                }
+            }
         });
     });
-    return totalEst;
+    return { total: totalEst, active: totalActive, passive: totalPassive, hasTemplateData };
 }
 
 function blockHasTimingData(level) {
-    // Check if ANY incomplete ingredient in this block has prepTimes data
+    // Check if ANY incomplete ingredient in this block has prepTimes or template data
     let has = false;
     stations.forEach(station => {
         station.ingredients.forEach(ing => {
@@ -2070,6 +2086,8 @@ function blockHasTimingData(level) {
             if ((st.priority || 'none') !== level) return;
             const key = ing.name.toLowerCase();
             if (prepTimes[key] && prepTimes[key].bestSecPerUnit) has = true;
+            const tmpl = taskTemplates[key];
+            if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) has = true;
         });
     });
     return has;
@@ -2086,9 +2104,9 @@ function toggleBlockTimer(level) {
         return;
     }
     requestNotificationPermission();
-    const estSeconds = getBlockEstimateSeconds(level);
+    const blockEst = getBlockEstimateSeconds(level);
     blockTimers[level] = {
-        goalSeconds: estSeconds,
+        goalSeconds: blockEst.total,
         running: true,
         countdown: true,
         startedAt: Date.now(),
@@ -3155,9 +3173,9 @@ function renderHistoryTab(container) {
     });
     const dayDiff = totalGoal - totalActual;
     let dayLabel, dayStatusClass;
-    if (dayDiff < -15) { dayLabel = 'Behind'; dayStatusClass = 'behind'; }
-    else if (dayDiff > 15) { dayLabel = 'Ahead'; dayStatusClass = 'ahead'; }
-    else { dayLabel = 'On Time'; dayStatusClass = 'ontime'; }
+    if (dayDiff < -15) { dayLabel = 'In the Weeds'; dayStatusClass = 'behind'; }
+    else if (dayDiff > 15) { dayLabel = 'In the Pocket'; dayStatusClass = 'ahead'; }
+    else { dayLabel = 'On Pace'; dayStatusClass = 'ontime'; }
     const totalGoalStr = formatTime(Math.abs(totalGoal));
     const totalActualStr = formatTime(Math.abs(totalActual));
 
@@ -3171,7 +3189,7 @@ function renderHistoryTab(container) {
 
     entries.forEach(e => {
         const d = e.data || {};
-        const statusLabels = { behind: 'Behind', ontime: 'On Time', ahead: 'Ahead' };
+        const statusLabels = { behind: 'In the Weeds', ontime: 'On Pace', ahead: 'In the Pocket' };
         const statusClass = d.status || 'ontime';
         const goalSec = d.goal || 0;
         const actualSec = goalSec - (d.seconds || 0);
