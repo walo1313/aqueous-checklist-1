@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 61;
+const APP_BUILD = 62;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -78,6 +78,20 @@ function formatEstimate(seconds) {
     const m = Math.floor(seconds / 60);
     const s = Math.round(seconds % 60);
     return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function getTimerSeconds(t) {
+    if (!t) return 0;
+    if (t.running) return t.pausedElapsed + Math.floor((Date.now() - t.startedAt) / 1000);
+    return t.pausedElapsed;
+}
+
+function getBlockRemainingSeconds(bt) {
+    if (!bt) return 0;
+    const elapsed = bt.running
+        ? bt.pausedElapsed + Math.floor((Date.now() - bt.startedAt) / 1000)
+        : bt.pausedElapsed;
+    return bt.goalSeconds - elapsed;
 }
 
 function getIngredientEstimate(ingName, parQty, parUnit) {
@@ -1173,8 +1187,9 @@ function renderSummaryGroup(title, level, tasks) {
     const btRunning = bt && bt.running;
     const btPaused = bt && !bt.running;
     const btActive = btRunning || btPaused;
-    const btAbsTime = bt ? formatTime(Math.abs(bt.seconds)) : '00:00';
-    const btOvertime = bt && bt.seconds < 0;
+    const btRemaining = bt ? getBlockRemainingSeconds(bt) : 0;
+    const btAbsTime = bt ? formatTime(Math.abs(btRemaining)) : '00:00';
+    const btOvertime = bt && btRemaining < 0;
 
     // Block timer controls for header
     let blockTimerHTML = '';
@@ -1207,7 +1222,7 @@ function renderSummaryGroup(title, level, tasks) {
         const timerKey = `${task.stationId}_${task.ingredient.id}`;
         const timer = taskTimers[timerKey];
         const isRunning = timer && timer.running;
-        const isPaused = timer && !timer.running && timer.seconds > 0;
+        const isPaused = timer && !timer.running && getTimerSeconds(timer) > 0;
         const hasTimer = isRunning || isPaused;
         const escapedName = task.ingredient.name.replace(/'/g, "\\'");
 
@@ -1248,7 +1263,7 @@ function renderSummaryGroup(title, level, tasks) {
         if (hasTimer && !task.status.completed) {
             html += `
                 <div class="inline-timer-row" id="timer_${timerKey}">
-                    <span class="inline-timer-clock" id="clock_${timerKey}">${formatTime(timer.seconds)}</span>
+                    <span class="inline-timer-clock" id="clock_${timerKey}">${formatTime(getTimerSeconds(timer))}</span>
                     <div class="inline-timer-controls">
                         ${isRunning ? `
                             <button class="inline-timer-btn pause" onclick="handleClick(); pauseTaskTimer('${timerKey}')">⏸</button>
@@ -1275,7 +1290,7 @@ function toggleCompleted(stationId, ingredientId) {
     if (isCompleting) {
         const timerKey = `${stationId}_${ingredientId}`;
         const t = taskTimers[timerKey];
-        if (t && t.seconds > 0) {
+        if (t && getTimerSeconds(t) > 0) {
             // Timer was running — show confirmation with time
             showTaskCompleteConfirm(stationId, ingredientId);
         } else {
@@ -1319,10 +1334,21 @@ function releaseWakeLock() {
     }
 }
 
-// Re-acquire wake lock when page becomes visible again (phone unlocked)
+// Re-acquire wake lock and recalculate timers when page becomes visible (phone unlocked)
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && Object.values(taskTimers).some(t => t.running)) {
-        requestWakeLock();
+    if (document.visibilityState === 'visible') {
+        Object.entries(taskTimers).forEach(([key, t]) => {
+            const clock = document.getElementById(`clock_${key}`);
+            if (clock) clock.textContent = formatTime(getTimerSeconds(t));
+        });
+        Object.entries(blockTimers).forEach(([level, bt]) => {
+            const clock = document.getElementById(`blockClock_${level}`);
+            if (clock) clock.textContent = formatTime(Math.abs(getBlockRemainingSeconds(bt)));
+        });
+        if (Object.values(taskTimers).some(t => t.running) || Object.values(blockTimers).some(t => t.running)) {
+            requestWakeLock();
+            forceUpdateTimerNotification();
+        }
     }
 });
 
@@ -1352,11 +1378,10 @@ function sendSWMessage(msg) {
     }
 }
 
-// Throttle notification updates: max 1 per second regardless of timer count
 let _lastNotifSignature = '';
 
 function updateTimerNotification() {
-    // no-op for interval ticks — static notification doesn't need per-second updates
+    forceUpdateTimerNotification();
 }
 
 function forceUpdateTimerNotification() {
@@ -1364,45 +1389,44 @@ function forceUpdateTimerNotification() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;
 
-    const blockLabels = { high: 'High Priority Block', medium: 'Medium Priority Block', low: 'Low Priority Block', none: 'Block' };
-    const lines = [];
+    const timers = [];
 
     Object.entries(taskTimers).forEach(([key, t]) => {
-        lines.push(t.ingName);
-    });
-
-    Object.entries(blockTimers).forEach(([key, v]) => {
-        if (v.synced) return;
-        const blockName = blockLabels[key] || key;
-        const ings = [];
-        stations.forEach(station => {
-            station.ingredients.forEach(ing => {
-                const st = station.status[ing.id];
-                if (!st || st.completed) return;
-                if ((st.priority || 'none') !== key) return;
-                ings.push(ing.name);
-            });
+        timers.push({
+            id: key,
+            type: 'task',
+            label: t.ingName,
+            seconds: getTimerSeconds(t),
+            running: t.running
         });
-        if (ings.length > 0) lines.push(`${blockName}: ${ings.join(', ')}`);
-        else lines.push(blockName);
     });
 
-    if (lines.length === 0) {
+    Object.entries(blockTimers).forEach(([level, bt]) => {
+        const labels = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority', none: 'No Priority' };
+        const remaining = getBlockRemainingSeconds(bt);
+        timers.push({
+            id: `block_${level}`,
+            type: 'block',
+            level,
+            label: labels[level] || level,
+            seconds: remaining,
+            running: bt.running,
+            overtime: remaining < 0
+        });
+    });
+
+    if (timers.length === 0) {
         _lastNotifSignature = '';
         sendSWMessage({ type: 'TIMER_CLEAR_ALL' });
         return;
     }
 
-    const sig = lines.join('|');
+    const sig = timers.map(t => `${t.id}:${t.running}:${formatTime(Math.abs(t.seconds))}`).join('|');
     if (sig === _lastNotifSignature) return;
     const wasEmpty = _lastNotifSignature === '';
     _lastNotifSignature = sig;
 
-    sendSWMessage({
-        type: 'TIMER_STATUS',
-        body: lines.join('\n'),
-        isNew: wasEmpty
-    });
+    sendSWMessage({ type: 'TIMER_SYNC', timers, isNew: wasEmpty });
 }
 
 // Listen for messages from Service Worker
@@ -1411,6 +1435,24 @@ if (navigator.serviceWorker) {
         if (!event.data) return;
         if (event.data.type === 'OPEN_SUMMARY') {
             switchView('summary');
+        }
+        if (event.data.type === 'TIMER_ACTION') {
+            const { timerId, action } = event.data;
+            if (timerId.startsWith('block_')) {
+                const level = timerId.replace('block_', '');
+                if (action === 'pause') pauseBlockTimer(level);
+                else if (action === 'resume') resumeBlockTimer(level);
+                else if (action === 'done') resetBlockTimer(level);
+            } else {
+                if (action === 'pause') pauseTaskTimer(timerId);
+                else if (action === 'resume') resumeTaskTimer(timerId);
+                else if (action === 'done') {
+                    const parts = timerId.split('_');
+                    const stationId = parseInt(parts[0]);
+                    const ingredientId = parseInt(parts[1]);
+                    confirmTaskComplete(stationId, ingredientId);
+                }
+            }
         }
     });
 }
@@ -1434,13 +1476,12 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
     // Start new timer
     taskTimers[timerKey] = {
         stationId, ingredientId, ingName,
-        seconds: 0,
         running: true,
         startedAt: Date.now(),
+        pausedElapsed: 0,
         interval: setInterval(() => {
-            taskTimers[timerKey].seconds++;
             const clock = document.getElementById(`clock_${timerKey}`);
-            if (clock) clock.textContent = formatTime(taskTimers[timerKey].seconds);
+            if (clock) clock.textContent = formatTime(getTimerSeconds(taskTimers[timerKey]));
             updateTimerNotification();
         }, 1000)
     };
@@ -1454,12 +1495,13 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
 
 function pauseTaskTimer(timerKey) {
     const t = taskTimers[timerKey];
-    if (!t) return;
+    if (!t || !t.running) return;
+    t.pausedElapsed = getTimerSeconds(t);
+    t.running = false;
+    t.startedAt = null;
     if (t.interval) clearInterval(t.interval);
     t.interval = null;
-    t.running = false;
     forceUpdateTimerNotification();
-
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1468,13 +1510,13 @@ function resumeTaskTimer(timerKey) {
     const t = taskTimers[timerKey];
     if (!t || t.running) return;
     t.running = true;
+    t.startedAt = Date.now();
     t.interval = setInterval(() => {
-        t.seconds++;
         const clock = document.getElementById(`clock_${timerKey}`);
-        if (clock) clock.textContent = formatTime(t.seconds);
+        if (clock) clock.textContent = formatTime(getTimerSeconds(t));
         updateTimerNotification();
     }, 1000);
-
+    forceUpdateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1535,16 +1577,18 @@ function toggleBlockTimer(level) {
     requestNotificationPermission();
     const estSeconds = getBlockEstimateSeconds(level);
     blockTimers[level] = {
-        seconds: estSeconds,
         goalSeconds: estSeconds,
         running: true,
         countdown: true,
+        startedAt: Date.now(),
+        pausedElapsed: 0,
+        _alertedZero: false,
         interval: setInterval(() => {
-            blockTimers[level].seconds--;
+            const remaining = getBlockRemainingSeconds(blockTimers[level]);
             const clock = document.getElementById(`blockClock_${level}`);
-            if (clock) clock.textContent = formatTime(Math.abs(blockTimers[level].seconds));
-            // At zero: vibrate to signal time is up, keep counting negative
-            if (blockTimers[level].seconds === 0) {
+            if (clock) clock.textContent = formatTime(Math.abs(remaining));
+            if (!blockTimers[level]._alertedZero && remaining <= 0) {
+                blockTimers[level]._alertedZero = true;
                 if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
                 showToast('Block time reached!');
             }
@@ -1558,10 +1602,12 @@ function toggleBlockTimer(level) {
 
 function pauseBlockTimer(level) {
     const bt = blockTimers[level];
-    if (!bt) return;
+    if (!bt || !bt.running) return;
+    bt.pausedElapsed = bt.pausedElapsed + Math.floor((Date.now() - bt.startedAt) / 1000);
+    bt.running = false;
+    bt.startedAt = null;
     if (bt.interval) clearInterval(bt.interval);
     bt.interval = null;
-    bt.running = false;
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
@@ -1571,16 +1617,19 @@ function resumeBlockTimer(level) {
     const bt = blockTimers[level];
     if (!bt || bt.running) return;
     bt.running = true;
+    bt.startedAt = Date.now();
     bt.interval = setInterval(() => {
-        bt.seconds--;
+        const remaining = getBlockRemainingSeconds(bt);
         const clock = document.getElementById(`blockClock_${level}`);
-        if (clock) clock.textContent = formatTime(Math.abs(bt.seconds));
-        if (bt.seconds === 0) {
+        if (clock) clock.textContent = formatTime(Math.abs(remaining));
+        if (!bt._alertedZero && remaining <= 0) {
+            bt._alertedZero = true;
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
             showToast('Block time reached!');
         }
         updateTimerNotification();
     }, 1000);
+    forceUpdateTimerNotification();
     checkAndManageWakeLock();
     refreshSummaryPanel();
 }
@@ -1611,7 +1660,7 @@ function checkBlockCompletion(level) {
     });
     if (!allDone || taskCount === 0) return;
 
-    const seconds = bt.seconds;
+    const seconds = getBlockRemainingSeconds(bt);
     const goal = bt.goalSeconds || 0;
     let status;
     if (seconds < -15) status = 'behind';
@@ -1643,15 +1692,13 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
 
     const ingName = ing.name;
     const st = station.status[ingredientId];
-    const timeStr = t ? formatTime(t.seconds) : '0:00';
+    const timeStr = t ? formatTime(getTimerSeconds(t)) : '0:00';
     const defaultQty = st.parQty || 1;
     const defaultUnit = st.parUnit || '';
 
     // Pause timer if running
     if (t && t.running) {
-        clearInterval(t.interval);
-        t.interval = null;
-        t.running = false;
+        pauseTaskTimer(timerKey);
     }
 
     const existing = document.getElementById('modalTaskComplete');
@@ -1691,14 +1738,15 @@ function confirmTaskComplete(stationId, ingredientId) {
     const ing = station ? station.ingredients.find(i => i.id === ingredientId) : null;
 
     // Log time to prepTimes database if timer was running
-    if (t && t.seconds > 0 && ing) {
+    const tSec = getTimerSeconds(t);
+    if (t && tSec > 0 && ing) {
         const qtyEl = document.getElementById('completeQty');
         const qty = parseFloat(qtyEl ? qtyEl.value : 1) || 1;
         const key = ing.name.toLowerCase();
         const st = station.status[ingredientId];
         const unit = st.parUnit || 'unit';
         const baseQty = convertToBase(qty, unit);
-        const secPerBaseUnit = baseQty > 0 ? t.seconds / baseQty : t.seconds;
+        const secPerBaseUnit = baseQty > 0 ? tSec / baseQty : tSec;
         const baseUnit = getBaseUnit(unit);
 
         if (!prepTimes[key]) {
@@ -1715,7 +1763,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         logActivity('task_complete', {
             ingredient: ing.name,
             station: station.name,
-            seconds: t.seconds,
+            seconds: tSec,
             quantity: qty,
             unit,
             baseUnit,
