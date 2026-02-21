@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 73;
+const APP_BUILD = 74;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2326,7 +2326,6 @@ function renderLogs(container) {
         <div style="font-size:11px;color:var(--text-muted);font-weight:600;padding:0 4px 10px;letter-spacing:0.3px;">${ingredients.length} ingredient${ingredients.length !== 1 ? 's' : ''} tracked</div>`;
 
     ingredients.forEach(ing => {
-        const bestStr = ing.bestSecPerUnit < Infinity ? formatEstimate(ing.bestSecPerUnit) + '/unit' : '—';
         const escapedName = ing.name.replace(/'/g, "\\'");
         html += `
         <button class="log-ingredient-card" onclick="handleClick(); openLogDetail('${escapedName}')">
@@ -2335,7 +2334,6 @@ function renderLogs(container) {
                 <span class="log-ing-count">${ing.count} log${ing.count !== 1 ? 's' : ''}</span>
             </div>
             <div class="log-ing-bottom">
-                <span class="log-ing-best">🏆 ${bestStr}</span>
                 <span class="log-ing-station">${ing.station}</span>
             </div>
             <svg class="log-ing-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
@@ -2357,15 +2355,14 @@ function renderLogDetail(container) {
         e.type === 'task_complete' && e.data && e.data.ingredient === logDetailIngredient && e.data.seconds > 0
     ).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-    // Find best time
-    let bestSecPerUnit = Infinity;
+    // Find best (shortest) total time
+    let bestSeconds = Infinity;
     entries.forEach(e => {
-        if (e.data.secPerUnit > 0 && e.data.secPerUnit < bestSecPerUnit) bestSecPerUnit = e.data.secPerUnit;
+        if (e.data.seconds > 0 && e.data.seconds < bestSeconds) bestSeconds = e.data.seconds;
     });
 
-    const bestStr = bestSecPerUnit < Infinity ? formatEstimate(bestSecPerUnit) + '/unit' : '—';
+    const bestStr = bestSeconds < Infinity ? formatTime(bestSeconds) : '—';
     const totalSessions = entries.length;
-    const totalSeconds = entries.reduce((sum, e) => sum + (e.data.seconds || 0), 0);
 
     // Group entries by day
     const grouped = {};
@@ -2384,16 +2381,12 @@ function renderLogDetail(container) {
             <div class="log-detail-name">${logDetailIngredient}</div>
             <div class="log-detail-stats">
                 <div class="log-stat">
-                    <span class="log-stat-value">🏆 ${bestStr}</span>
-                    <span class="log-stat-label">Best Time</span>
+                    <span class="log-stat-value">${bestStr}</span>
+                    <span class="log-stat-label">Best</span>
                 </div>
                 <div class="log-stat">
                     <span class="log-stat-value">${totalSessions}</span>
                     <span class="log-stat-label">Sessions</span>
-                </div>
-                <div class="log-stat">
-                    <span class="log-stat-value">${formatTime(totalSeconds)}</span>
-                    <span class="log-stat-label">Total</span>
                 </div>
             </div>
         </div>`;
@@ -2412,7 +2405,7 @@ function renderLogDetail(container) {
 
         dayEntries.forEach(entry => {
             const d = entry.data;
-            const isBest = bestSecPerUnit < Infinity && d.secPerUnit > 0 && d.secPerUnit <= bestSecPerUnit;
+            const isBest = bestSeconds < Infinity && d.seconds > 0 && d.seconds <= bestSeconds;
             const time = new Date(entry.timestamp);
             const timeStr = time.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -2420,17 +2413,16 @@ function renderLogDetail(container) {
             <div class="log-entry ${isBest ? 'log-best' : ''}">
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="font-size:18px;font-weight:800;color:var(--accent);">⏱ ${formatTime(d.seconds)}</span>
-                        ${isBest ? '<span style="font-size:10px;color:var(--accent);">🏆 Best</span>' : ''}
+                        <span style="font-size:18px;font-weight:800;color:var(--accent);">${formatTime(d.seconds)}</span>
+                        ${isBest ? '<span style="font-size:10px;color:var(--accent);">Best</span>' : ''}
                     </div>
                     <span style="font-size:10px;color:var(--text-muted);">${timeStr}</span>
                 </div>
                 <div style="display:flex;gap:14px;margin-top:4px;font-size:11px;color:var(--text-secondary);">
-                    <span>📦 ${d.quantity} ${d.unit || 'units'}</span>
-                    <span>⚡ ${formatEstimate(d.secPerUnit)}/unit</span>
+                    <span>${d.quantity} ${d.unit || 'units'}</span>
                     <span>${d.station || ''}</span>
                 </div>
-                ${entry.cook ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">👨‍🍳 ${entry.cook}</div>` : ''}
+                ${entry.cook ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${entry.cook}</div>` : ''}
             </div>`;
         });
 
