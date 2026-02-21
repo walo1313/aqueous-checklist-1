@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 75;
+const APP_BUILD = 76;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -79,7 +79,7 @@ function convertToBase(qty, unit, depth) {
     if (PAN_UNITS.includes(unit)) {
         const d = depth || 4;
         const oz = (PAN_OZ[unit] && PAN_OZ[unit][d]) || PAN_OZ[unit][4] || 1;
-        return oz;
+        return qty * oz;
     }
     if (VOLUME_UNITS.includes(unit)) return qty * (UNIT_TO_OZ[unit] || 1);
     if (WEIGHT_UNITS.includes(unit)) return qty * (UNIT_TO_G[unit] || 1);
@@ -687,7 +687,7 @@ function renderIngredients(station) {
 
         let parDisplay = '';
         if (st.low && st.parQty && st.parUnit) {
-            parDisplay = `<span class="par-display">${st.parQty} ${st.parUnit}</span>`;
+            parDisplay = `<span class="par-display">${formatParDisplay(st.parQty, st.parUnit, st.parDepth)}</span>`;
         } else if (st.low && st.parLevel) {
             parDisplay = `<span class="par-display">${st.parLevel}</span>`;
         }
@@ -724,13 +724,6 @@ function renderIngredients(station) {
                         onclick="setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
                 </div>
                 <div class="par-row">
-                    ${PAN_UNITS.includes(st.parUnit) ? `
-                    <select class="par-select" onchange="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, this.value)" style="width:60px;">
-                        <option value="2" ${st.parDepth == 2 ? 'selected' : ''}>2"</option>
-                        <option value="4" ${st.parDepth == 4 || !st.parDepth ? 'selected' : ''}>4"</option>
-                        <option value="6" ${st.parDepth == 6 ? 'selected' : ''}>6"</option>
-                    </select>
-                    ` : `
                     <div class="par-stepper">
                         <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -1)">−</button>
                         <input type="number" class="par-qty-input"
@@ -741,7 +734,13 @@ function renderIngredients(station) {
                             onclick="event.stopPropagation()">
                         <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, 1)">+</button>
                     </div>
-                    `}
+                    ${PAN_UNITS.includes(st.parUnit) ? `
+                    <select class="par-select" onchange="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, this.value)" style="width:50px;">
+                        <option value="2" ${st.parDepth == 2 ? 'selected' : ''}>2"</option>
+                        <option value="4" ${st.parDepth == 4 || !st.parDepth ? 'selected' : ''}>4"</option>
+                        <option value="6" ${st.parDepth == 6 ? 'selected' : ''}>6"</option>
+                    </select>
+                    ` : ''}
                     <select class="par-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
                         <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
                         ${unitOptions.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
@@ -976,6 +975,7 @@ function toggleLow(stationId, ingredientId) {
             if (defaults) {
                 if (!station.status[ingredientId].parQty) station.status[ingredientId].parQty = defaults.qty;
                 if (!station.status[ingredientId].parUnit) station.status[ingredientId].parUnit = defaults.unit;
+                if (!station.status[ingredientId].parDepth && defaults.depth) station.status[ingredientId].parDepth = defaults.depth;
                 updateParLevel(station, ingredientId);
             }
         }
@@ -1018,7 +1018,7 @@ function setParUnit(stationId, ingredientId, value) {
     const st = station.status[ingredientId];
     st.parUnit = value;
     if (PAN_UNITS.includes(value)) {
-        st.parQty = st.parDepth || 4;
+        st.parQty = 1;
         if (!st.parDepth) st.parDepth = 4;
     } else {
         st.parDepth = null;
@@ -1034,9 +1034,7 @@ function setParDepth(stationId, ingredientId, value) {
     handleClick();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
-    const d = parseInt(value) || 4;
-    station.status[ingredientId].parDepth = d;
-    station.status[ingredientId].parQty = d;
+    station.status[ingredientId].parDepth = parseInt(value) || 4;
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
@@ -1062,10 +1060,18 @@ function adjustParQty(stationId, ingredientId, delta) {
     rerenderStationBody(stationId);
 }
 
+function formatParDisplay(qty, unit, depth) {
+    if (PAN_UNITS.includes(unit)) {
+        const d = depth || 4;
+        return `${qty || 1}  ${d}"  ${unit}`;
+    }
+    return `${qty} ${unit}`;
+}
+
 function updateParLevel(station, ingredientId) {
     const st = station.status[ingredientId];
     if (st.parQty && st.parUnit) {
-        st.parLevel = `${st.parQty} ${st.parUnit}`;
+        st.parLevel = formatParDisplay(st.parQty, st.parUnit, st.parDepth);
     } else if (st.parQty) {
         st.parLevel = `${st.parQty}`;
     } else {
@@ -1079,7 +1085,7 @@ function saveIngredientDefault(station, ingredientId) {
     if (!ing) return;
     const key = ing.name.toLowerCase();
     if (st.parQty || st.parUnit) {
-        ingredientDefaults[key] = { qty: st.parQty, unit: st.parUnit };
+        ingredientDefaults[key] = { qty: st.parQty, unit: st.parUnit, depth: st.parDepth || null };
         saveIngredientDefaults();
     }
 }
@@ -1275,7 +1281,7 @@ function renderSummaryGroup(title, level, tasks) {
 
         // Par display
         const parTag = task.status.parQty && task.status.parUnit
-            ? `<span class="par-tag">${task.status.parQty} ${task.status.parUnit}</span>`
+            ? `<span class="par-tag">${formatParDisplay(task.status.parQty, task.status.parUnit, task.status.parDepth)}</span>`
             : (task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : '');
 
         html += `
@@ -1744,7 +1750,7 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
     const existing = document.getElementById('modalTaskComplete');
     if (existing) existing.remove();
 
-    const unitLabel = defaultUnit ? `<span style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-left:6px;">${defaultUnit}</span>` : '';
+    const unitLabel = defaultUnit ? `<span style="font-size:14px;font-weight:600;color:var(--text-secondary);margin-left:6px;">${PAN_UNITS.includes(defaultUnit) ? `${st.parDepth || 4}" ${defaultUnit}` : defaultUnit}</span>` : '';
 
     const modal = document.createElement('div');
     modal.id = 'modalTaskComplete';
@@ -1806,6 +1812,7 @@ function confirmTaskComplete(stationId, ingredientId) {
             seconds: tSec,
             quantity: qty,
             unit,
+            depth: st.parDepth || null,
             baseUnit,
             secPerUnit: Math.round(secPerBaseUnit)
         });
@@ -2419,7 +2426,7 @@ function renderLogDetail(container) {
                     <span style="font-size:10px;color:var(--text-muted);">${timeStr}</span>
                 </div>
                 <div style="display:flex;gap:14px;margin-top:4px;font-size:11px;color:var(--text-secondary);">
-                    <span>${d.quantity} ${d.unit || 'units'}</span>
+                    <span>${PAN_UNITS.includes(d.unit) ? formatParDisplay(d.quantity, d.unit, d.depth) : `${d.quantity} ${d.unit || 'units'}`}</span>
                     <span>${d.station || ''}</span>
                 </div>
                 ${entry.cook ? `<div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${entry.cook}</div>` : ''}
