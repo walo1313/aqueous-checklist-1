@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 79;
+const APP_BUILD = 80;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -690,8 +690,6 @@ function renderIngredients(station) {
     station.ingredients.forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
-        const unitOptions = ['quart','pint','cup','oz','1/9pan','1/6pan','1/3pan','1/2pan','fullpan','kg','lb','g','each','recipe'];
-
         const escapedIngName = ing.name.replace(/'/g, "\\'");
         html += `
         <div class="ingredient ${st.low ? 'low' : ''}" id="ing-${station.id}-${ing.id}">
@@ -711,31 +709,38 @@ function renderIngredients(station) {
                     <button class="priority-btn ${st.priority === 'low' ? 'low' : ''}"
                         onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
                 </div>
-                <div class="par-row">
-                    <div class="par-stepper">
-                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -1)">−</button>
-                        <input type="number" class="par-qty-input"
-                            value="${st.parQty || ''}"
-                            placeholder="0"
-                            min="0" step="1" inputmode="decimal"
-                            oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
-                            onclick="event.stopPropagation()">
-                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, 1)">+</button>
-                    </div>
+                <div class="smart-qty-row">
+                    <input type="number" class="smart-qty-input"
+                        value="${st.parQty || ''}"
+                        placeholder="0"
+                        min="0" step="1" inputmode="decimal"
+                        oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
+                        onclick="event.stopPropagation()">
                     ${PAN_UNITS.includes(st.parUnit) ? `
-                    <select class="par-select" onchange="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, this.value)" style="width:50px;">
-                        <option value="2" ${st.parDepth == 2 ? 'selected' : ''}>2"</option>
-                        <option value="4" ${st.parDepth == 4 || !st.parDepth ? 'selected' : ''}>4"</option>
-                        <option value="6" ${st.parDepth == 6 ? 'selected' : ''}>6"</option>
-                    </select>
+                    <div class="depth-chips">
+                        <button class="depth-chip ${(st.parDepth || 4) == 2 ? 'active' : ''}" onclick="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, 2)">2"</button>
+                        <button class="depth-chip ${(st.parDepth || 4) == 4 ? 'active' : ''}" onclick="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, 4)">4"</button>
+                        <button class="depth-chip ${(st.parDepth || 4) == 6 ? 'active' : ''}" onclick="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, 6)">6"</button>
+                    </div>
                     ` : ''}
-                    <select class="par-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
+                    <select class="smart-unit-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
                         <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
-                        ${unitOptions.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        <optgroup label="Weight">
+                            ${WEIGHT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </optgroup>
+                        <optgroup label="Volume">
+                            ${VOLUME_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </optgroup>
+                        <optgroup label="Pans">
+                            ${PAN_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </optgroup>
+                        <optgroup label="Count">
+                            ${COUNT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </optgroup>
                     </select>
                 </div>
                 <div class="par-notes-row">
-                    <input type="text" class="par-input par-notes-input" placeholder="Notes (descongelar, cocer...)"
+                    <input type="text" class="par-input par-notes-input" placeholder="Notes..."
                         value="${st.parNotes || ''}"
                         oninput="debounce('parn_${station.id}_${ing.id}', () => setParNotes(${station.id}, ${ing.id}, this.value), 600)"
                         onclick="event.stopPropagation()">

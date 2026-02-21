@@ -490,57 +490,76 @@
             transform: translateY(1px);
         }
 
-        .par-row {
+        .smart-qty-row {
             display: flex;
             align-items: center;
             gap: 8px;
-            flex-wrap: wrap;
         }
 
-        .par-stepper {
-            display: flex;
-            align-items: center;
+        .smart-qty-input {
+            width: 52px;
+            padding: 8px 4px;
+            border: none;
             background: var(--surface);
             border-radius: var(--radius-sm);
             box-shadow: var(--neu-inset);
-            overflow: hidden;
-        }
-
-        .stepper-btn {
-            width: 34px;
-            height: 34px;
-            border: none;
-            background: var(--surface);
-            color: var(--accent);
-            font-size: 18px;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .stepper-btn:active {
-            background: var(--shadow);
-            transform: scale(0.85);
-            transition: all 0.08s ease;
-        }
-
-        .par-qty-input {
-            width: 44px;
-            padding: 7px 2px;
-            border: none;
-            background: transparent;
-            font-size: 15px;
-            font-weight: 700;
+            font-size: 20px;
+            font-weight: 800;
             text-align: center;
             color: var(--text);
             font-family: 'Inter', sans-serif;
             -moz-appearance: textfield;
+            flex-shrink: 0;
         }
-        .par-qty-input::-webkit-inner-spin-button,
-        .par-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        .par-qty-input:focus { outline: none; }
+        .smart-qty-input::-webkit-inner-spin-button,
+        .smart-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .smart-qty-input:focus { outline: none; box-shadow: var(--neu-inset-deep); }
+
+        .smart-unit-select {
+            flex: 1;
+            padding: 8px 10px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 700;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+            min-width: 60px;
+        }
+        .smart-unit-select:focus { outline: none; }
+
+        .depth-chips {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .depth-chip {
+            padding: 6px 10px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 700;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .depth-chip.active {
+            color: var(--accent);
+            box-shadow: var(--neu-inset);
+        }
+        .depth-chip:active {
+            transform: scale(0.9);
+            transition: all 0.08s;
+        }
 
         .par-label {
             font-size: 11px;
