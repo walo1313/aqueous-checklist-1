@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 84;
+const APP_BUILD = 85;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -691,13 +691,17 @@ function renderIngredients(station) {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
+        const isExpanded = expandedIngs.has(`${station.id}-${ing.id}`);
+        const hasPri = st.priority && !st.completed;
+        const priLabel = hasPri ? st.priority.charAt(0).toUpperCase() + st.priority.slice(1) : 'Priority';
         html += `
-        <div class="ingredient ${st.low ? 'low' : ''} ${st.priority && !st.completed ? 'has-priority priority-' + st.priority : ''} ${expandedIngs.has(`${station.id}-${ing.id}`) ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
+        <div class="ingredient ${st.low ? 'low' : ''} ${hasPri ? 'has-priority priority-' + st.priority : ''} ${isExpanded ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
             <div class="ingredient-header"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
                  oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
-                <button class="priority-dot ${st.priority && !st.completed ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})"></button>
+                ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
+                ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
                 <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
