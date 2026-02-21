@@ -383,16 +383,16 @@
             transition: all 0.15s;
         }
         .priority-dot.high {
-            background: #FF4D4D;
-            box-shadow: 0 0 8px rgba(255, 77, 77, 0.6);
+            background: #FF3B3B;
+            box-shadow: 0 0 10px rgba(255, 59, 59, 0.7), 0 0 4px rgba(255, 59, 59, 0.4);
         }
         .priority-dot.medium {
-            background: #FFB020;
-            box-shadow: 0 0 8px rgba(255, 176, 32, 0.6);
+            background: #FFB800;
+            box-shadow: 0 0 10px rgba(255, 184, 0, 0.7), 0 0 4px rgba(255, 184, 0, 0.4);
         }
         .priority-dot.low {
-            background: #4D9EFF;
-            box-shadow: 0 0 8px rgba(77, 158, 255, 0.6);
+            background: #00BFFF;
+            box-shadow: 0 0 10px rgba(0, 191, 255, 0.7), 0 0 4px rgba(0, 191, 255, 0.4);
         }
 
         .ingredient-name {
@@ -474,8 +474,8 @@
         }
 
         .priority-pill {
-            padding: 5px 14px;
-            border: none;
+            padding: 4px 12px;
+            border: 1.5px solid var(--divider);
             border-radius: 20px;
             font-size: 11px;
             font-weight: 700;
@@ -492,19 +492,22 @@
             transition: all 0.08s;
         }
         .priority-pill.high {
-            background: var(--high-tint);
-            color: var(--high);
-            box-shadow: var(--neu-shadow-sm);
+            background: rgba(255, 59, 59, 0.12);
+            color: #FF3B3B;
+            border-color: rgba(255, 59, 59, 0.4);
+            box-shadow: 0 0 8px rgba(255, 59, 59, 0.15);
         }
         .priority-pill.medium {
-            background: var(--medium-tint);
-            color: var(--medium);
-            box-shadow: var(--neu-shadow-sm);
+            background: rgba(255, 184, 0, 0.12);
+            color: #CC9400;
+            border-color: rgba(255, 184, 0, 0.4);
+            box-shadow: 0 0 8px rgba(255, 184, 0, 0.15);
         }
         .priority-pill.low {
-            background: var(--low-tint);
-            color: var(--low);
-            box-shadow: var(--neu-shadow-sm);
+            background: rgba(0, 191, 255, 0.12);
+            color: #0099CC;
+            border-color: rgba(0, 191, 255, 0.4);
+            box-shadow: 0 0 8px rgba(0, 191, 255, 0.15);
         }
 
         /* Calibration Modal */
