@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 62;
+const APP_BUILD = 63;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1381,7 +1381,7 @@ function sendSWMessage(msg) {
 let _lastNotifSignature = '';
 
 function updateTimerNotification() {
-    forceUpdateTimerNotification();
+    // no-op for interval ticks — notifications only update on state changes
 }
 
 function forceUpdateTimerNotification() {
@@ -1421,7 +1421,7 @@ function forceUpdateTimerNotification() {
         return;
     }
 
-    const sig = timers.map(t => `${t.id}:${t.running}:${formatTime(Math.abs(t.seconds))}`).join('|');
+    const sig = timers.map(t => `${t.id}:${t.running}`).join('|');
     if (sig === _lastNotifSignature) return;
     const wasEmpty = _lastNotifSignature === '';
     _lastNotifSignature = sig;

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v62';
+const CACHE_NAME = 'aqueous-v63';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -52,12 +52,6 @@ self.addEventListener('activate', event => {
 const NOTIF_TAG_PREFIX = 'aqueous-timer-';
 let activeTimerIds = new Set();
 
-function formatTimeSW(totalSec) {
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
 // Handle messages from app
 self.addEventListener('message', event => {
   if (!event.data) return;
@@ -75,12 +69,11 @@ self.addEventListener('message', event => {
       });
     });
 
-    // Show/update notification for each timer
+    // Show/update notification for each timer — static (no live time)
     timers.forEach(t => {
       const tag = NOTIF_TAG_PREFIX + t.id;
-      const timeStr = formatTimeSW(Math.abs(t.seconds));
       const title = t.label;
-      const body = t.overtime ? `−${timeStr} (overtime)` : timeStr;
+      const body = t.running ? 'Active' : 'Paused';
       const isNewTimer = isNew || !activeTimerIds.has(t.id);
 
       const actions = t.running
