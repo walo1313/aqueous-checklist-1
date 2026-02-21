@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 81;
+const APP_BUILD = 82;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2874,8 +2874,8 @@ function renderSettings(container) {
                         Sync Now
                     </button>
                     <button class="btn btn-outline version-btn" onclick="handleClick(); checkForUpdates()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        Check for Updates
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
+                        Force Update
                     </button>
                 </div>
             </div>
@@ -2977,27 +2977,28 @@ function syncNow() {
 }
 
 function checkForUpdates() {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'CHECK_UPDATE' });
-    }
-    // Also try to update SW registration
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistration().then(reg => {
-            if (reg) {
-                reg.update().then(() => {
-                    if (reg.waiting) {
-                        showToast('🆕 New version available! Restart app to update.');
-                    } else {
-                        showToast(`✓ You're on the latest version (${APP_VERSION} Build ${APP_BUILD})`);
-                    }
-                }).catch(() => {
-                    showToast(`✓ You're on the latest version (${APP_VERSION} Build ${APP_BUILD})`);
-                });
-            }
-        });
-    } else {
-        showToast(`✓ Version ${APP_VERSION} Build ${APP_BUILD}`);
-    }
+    showToast('Checking for updates...');
+
+    // 1. Delete all caches
+    const clearCaches = caches.keys().then(names =>
+        Promise.all(names.map(n => caches.delete(n)))
+    );
+
+    // 2. Unregister service worker
+    const unregSW = navigator.serviceWorker
+        ? navigator.serviceWorker.getRegistration().then(reg => reg ? reg.unregister() : true)
+        : Promise.resolve(true);
+
+    Promise.all([clearCaches, unregSW]).then(() => {
+        // 3. Hard reload — bypass browser cache
+        showToast('Updating...');
+        setTimeout(() => {
+            window.location.href = window.location.pathname + '?v=' + Date.now();
+        }, 500);
+    }).catch(() => {
+        // Fallback: just force reload
+        window.location.reload(true);
+    });
 }
 
 // ==================== UTILITIES ====================
