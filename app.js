@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 64;
+const APP_BUILD = 65;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1379,6 +1379,7 @@ function sendSWMessage(msg) {
 }
 
 let _lastNotifSignature = '';
+let _notifStationIds = new Set();
 
 function updateTimerNotification() {
     // no-op for interval ticks — notifications only update on state changes
@@ -1389,39 +1390,60 @@ function forceUpdateTimerNotification() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;
 
-    const lines = [];
+    // Group active ingredients by station
+    const stationMap = {}; // { stationId: { name, ingredients: [] } }
 
     Object.entries(taskTimers).forEach(([key, t]) => {
-        lines.push(t.ingName);
+        const sid = t.stationId;
+        const station = stations.find(s => s.id === sid);
+        const sName = station ? station.name : 'Station';
+        if (!stationMap[sid]) stationMap[sid] = { name: sName, ingredients: [] };
+        stationMap[sid].ingredients.push(t.ingName);
     });
 
     Object.entries(blockTimers).forEach(([level, bt]) => {
-        const blockLabels = { high: 'High Priority Block', medium: 'Medium Priority Block', low: 'Low Priority Block', none: 'Block' };
-        const blockName = blockLabels[level] || level;
-        const ings = [];
         stations.forEach(station => {
             station.ingredients.forEach(ing => {
                 const st = station.status[ing.id];
                 if (!st || st.completed) return;
                 if ((st.priority || 'none') !== level) return;
-                ings.push(ing.name);
+                const sid = station.id;
+                if (!stationMap[sid]) stationMap[sid] = { name: station.name, ingredients: [] };
+                if (!stationMap[sid].ingredients.includes(ing.name)) {
+                    stationMap[sid].ingredients.push(ing.name);
+                }
             });
         });
-        if (ings.length > 0) lines.push(`${blockName}: ${ings.join(', ')}`);
-        else lines.push(blockName);
     });
 
-    if (lines.length === 0) {
+    const stationList = Object.entries(stationMap).map(([id, data]) => ({
+        id,
+        name: data.name,
+        ingredients: data.ingredients
+    }));
+
+    if (stationList.length === 0) {
         _lastNotifSignature = '';
+        _notifStationIds = new Set();
         sendSWMessage({ type: 'TIMER_CLEAR_ALL' });
         return;
     }
 
-    const sig = lines.join('|');
+    const sig = stationList.map(s => `${s.id}:${s.ingredients.join(',')}`).join('|');
     if (sig === _lastNotifSignature) return;
-    _lastNotifSignature = sig;
 
-    sendSWMessage({ type: 'TIMER_STATUS', body: lines.join('\n') });
+    // Detect which stations are truly new (for vibration)
+    const newStationIds = new Set(stationList.map(s => s.id));
+    const brandNew = stationList.filter(s => !_notifStationIds.has(s.id)).map(s => s.id);
+
+    _lastNotifSignature = sig;
+    _notifStationIds = newStationIds;
+
+    sendSWMessage({
+        type: 'TIMER_STATIONS',
+        stations: stationList,
+        newStationIds: brandNew
+    });
 }
 
 // Listen for messages from Service Worker

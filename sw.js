@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v64';
+const CACHE_NAME = 'aqueous-v65';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -7,6 +7,7 @@ const urlsToCache = [
   './icon-512.png',
   './mascot.png',
   './badge-96.png',
+  './notif-icon-96.png',
   './mascot-explosive.mp4',
   './mascot-rasta.mp4',
   './mascot-sad.mp4',
@@ -49,28 +50,55 @@ self.addEventListener('activate', event => {
   );
 });
 
-const NOTIF_TAG = 'aqueous-active';
-let notifShown = false;
+const NOTIF_TAG_PREFIX = 'aqueous-station-';
+const NOTIF_GROUP = 'aqueous-timers';
+let activeStationIds = new Set();
 
 // Handle messages from app
 self.addEventListener('message', event => {
   if (!event.data) return;
 
-  if (event.data.type === 'TIMER_STATUS') {
-    self.registration.showNotification('Aqueous', {
-      body: event.data.body,
-      tag: NOTIF_TAG,
-      badge: './badge-96.png',
-      requireInteraction: true,
-      silent: true,
-      data: { action: 'open_summary' }
+  if (event.data.type === 'TIMER_STATIONS') {
+    const stationList = event.data.stations || [];
+    const newStationIds = new Set(event.data.newStationIds || []);
+    const currentIds = new Set(stationList.map(s => s.id));
+
+    // Close notifications for stations no longer active
+    self.registration.getNotifications().then(notifs => {
+      notifs.forEach(n => {
+        const sid = n.data && n.data.stationId;
+        if (sid && !currentIds.has(sid)) n.close();
+      });
     });
-    notifShown = true;
+
+    // Show/update one notification per station
+    stationList.forEach(s => {
+      const tag = NOTIF_TAG_PREFIX + s.id;
+      const isNew = newStationIds.has(s.id);
+      const body = s.ingredients.map(i => '• ' + i).join('\n');
+
+      const options = {
+        body,
+        tag,
+        icon: './notif-icon-96.png',
+        badge: './notif-icon-96.png',
+        requireInteraction: true,
+        silent: !isNew,
+        renotify: isNew,
+        group: NOTIF_GROUP,
+        data: { stationId: s.id, action: 'open_summary' }
+      };
+      if (isNew) options.vibrate = [80];
+
+      self.registration.showNotification('\u{1F468}\u{200D}\u{1F373} ' + s.name, options);
+    });
+
+    activeStationIds = currentIds;
   }
 
   if (event.data.type === 'TIMER_CLEAR_ALL') {
     self.registration.getNotifications().then(n => n.forEach(n => n.close()));
-    notifShown = false;
+    activeStationIds.clear();
   }
 });
 
