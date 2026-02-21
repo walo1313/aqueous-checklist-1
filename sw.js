@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v68';
+const CACHE_NAME = 'aqueous-v70';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -80,8 +80,8 @@ self.addEventListener('message', event => {
       const options = {
         body,
         tag,
-        icon: './notif-icon-96.png',
-        badge: './notif-icon-96.png',
+        icon: './badge-96.png',
+        badge: './badge-96.png',
         requireInteraction: true,
         silent: !isNew,
         renotify: isNew,
