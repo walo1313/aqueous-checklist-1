@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 93;
+const APP_BUILD = 94;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2994,15 +2994,13 @@ function editLogEntry(index) {
             <p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">Total: ${formatTime(totalSec)}</p>
 
             <div class="split-slider-labels">
-                <span class="split-label passive">Passive<br><strong id="editPassiveDisplay">${formatTime(totalSec - initActive)}</strong></span>
                 <span class="split-label active">Active<br><strong id="editActiveDisplay">${formatTime(initActive)}</strong></span>
+                <span class="split-label passive">Passive<br><strong id="editPassiveDisplay">${formatTime(totalSec - initActive)}</strong></span>
             </div>
-            <div class="split-slider-track" id="splitTrack" style="--thumb-pct:${totalSec > 0 ? ((totalSec - initActive) / totalSec * 100) : 0}%">
-                <div class="split-slider-fill-passive" id="splitFillPassive" style="width:${totalSec > 0 ? ((totalSec - initActive) / totalSec * 100) : 0}%"></div>
+            <div class="split-slider-track" id="splitTrack" data-total="${totalSec}" style="--thumb-pct:${totalSec > 0 ? (initActive / totalSec * 100) : 100}%">
                 <div class="split-slider-fill-active" id="splitFillActive" style="width:${totalSec > 0 ? (initActive / totalSec * 100) : 100}%"></div>
-                <input type="range" class="split-slider-input" id="editSplitSlider"
-                    min="0" max="${totalSec}" value="${initActive}" step="1"
-                    oninput="updateSplitSlider(this.value, ${totalSec})">
+                <div class="split-slider-fill-passive" id="splitFillPassive" style="width:${totalSec > 0 ? ((totalSec - initActive) / totalSec * 100) : 0}%"></div>
+                <input type="hidden" id="editSplitSlider" value="${initActive}">
             </div>
 
             <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;margin-bottom:16px;">
@@ -3018,18 +3016,54 @@ function editLogEntry(index) {
         </div>`;
     document.body.appendChild(modal);
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    initSplitSliderDrag(totalSec);
 }
 
-function updateSplitSlider(activeVal, totalSec) {
-    const active = parseInt(activeVal) || 0;
-    const passive = totalSec - active;
-    document.getElementById('editActiveDisplay').textContent = formatTime(active);
-    document.getElementById('editPassiveDisplay').textContent = formatTime(passive);
-    const pct = totalSec > 0 ? (active / totalSec * 100) : 100;
-    document.getElementById('splitFillActive').style.width = pct + '%';
-    document.getElementById('splitFillPassive').style.width = (100 - pct) + '%';
-    const passivePct = 100 - pct;
-    document.getElementById('splitTrack').style.setProperty('--thumb-pct', passivePct + '%');
+function initSplitSliderDrag(totalSec) {
+    const track = document.getElementById('splitTrack');
+    if (!track || totalSec <= 0) return;
+
+    function posToActive(clientX) {
+        const rect = track.getBoundingClientRect();
+        const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+        const ratio = x / rect.width;
+        // Left = active, right = passive
+        // ratio 0 (full left) = active 0 = all passive
+        // ratio 1 (full right) = active totalSec = all active
+        return Math.round(ratio * totalSec);
+    }
+
+    function update(clientX) {
+        const active = posToActive(clientX);
+        const passive = totalSec - active;
+        document.getElementById('editSplitSlider').value = active;
+        document.getElementById('editActiveDisplay').textContent = formatTime(active);
+        document.getElementById('editPassiveDisplay').textContent = formatTime(passive);
+        const activePct = active / totalSec * 100;
+        document.getElementById('splitFillActive').style.width = activePct + '%';
+        document.getElementById('splitFillPassive').style.width = (100 - activePct) + '%';
+        track.style.setProperty('--thumb-pct', activePct + '%');
+    }
+
+    // Touch events
+    track.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        update(e.touches[0].clientX);
+        function onMove(ev) { ev.preventDefault(); update(ev.touches[0].clientX); }
+        function onEnd() { document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onEnd); }
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onEnd);
+    }, { passive: false });
+
+    // Mouse events
+    track.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        update(e.clientX);
+        function onMove(ev) { ev.preventDefault(); update(ev.clientX); }
+        function onEnd() { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onEnd); }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onEnd);
+    });
 }
 
 function saveLogEdit(index, totalSec) {
