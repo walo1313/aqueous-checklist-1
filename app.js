@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 85;
+const APP_BUILD = 86;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -19,6 +19,7 @@ let history = [];
 let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
 let ingredientDefaults = {}; // { "ingredientname": { qty: N, unit: "quart" } }
+let taskTemplates = {}; // { "ingredientname": { activeFixedSeconds, activeSecondsPerUnit, passiveFixedSeconds, passiveSecondsPerUnit, lastUpdatedAt, calibratedBy, templateVersion } }
 
 // Mascot animation tracking
 let checkCount = 0;
@@ -109,6 +110,27 @@ function getBlockRemainingSeconds(bt) {
 
 function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
     const key = ingName.toLowerCase();
+
+    // Check task templates first (active/passive calibrated data)
+    const tmpl = taskTemplates[key];
+    if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) {
+        const baseQty = convertToBase(parQty || 1, parUnit || 'each', parDepth);
+        const activeTotal = (tmpl.activeFixedSeconds || 0) + Math.round((tmpl.activeSecondsPerUnit || 0) * baseQty);
+        const passiveTotal = (tmpl.passiveFixedSeconds || 0) + Math.round((tmpl.passiveSecondsPerUnit || 0) * baseQty);
+        const convFactor = PAN_UNITS.includes(parUnit)
+            ? ((PAN_OZ[parUnit] && PAN_OZ[parUnit][parDepth || 4]) || 1)
+            : (UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1);
+        return {
+            activeSeconds: activeTotal,
+            passiveSeconds: passiveTotal,
+            totalSeconds: activeTotal + passiveTotal,
+            bestPerDisplayUnit: Math.round((tmpl.activeSecondsPerUnit || 0) * convFactor),
+            displayUnit: parUnit,
+            hasTemplate: true
+        };
+    }
+
+    // Fallback to prepTimes (legacy single-timer data)
     const pt = prepTimes[key];
     if (!pt || !pt.bestSecPerUnit || !parQty || !parUnit) return null;
     const baseUnit = getBaseUnit(parUnit);
@@ -119,7 +141,7 @@ function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
         ? ((PAN_OZ[parUnit] && PAN_OZ[parUnit][parDepth || 4]) || 1)
         : (UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1);
     const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * convFactor);
-    return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit };
+    return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit, hasTemplate: false };
 }
 
 // PWA Install
@@ -399,10 +421,18 @@ function loadData() {
             if (st.parUnit === 'batch') st.parUnit = 'recipe';
         });
     });
+
+    // Load task templates
+    const savedTemplates = localStorage.getItem('aqueous_taskTemplates');
+    if (savedTemplates) taskTemplates = JSON.parse(savedTemplates);
 }
 
 function savePrepTimes() {
     localStorage.setItem('aqueous_prep_times', JSON.stringify(prepTimes));
+}
+
+function saveTaskTemplates() {
+    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
 }
 
 function saveIngredientDefaults() {
@@ -2832,6 +2862,18 @@ function renderSettings(container) {
         </div>
 
         <div class="settings-group">
+            <div class="settings-group-title">Task Templates</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">${Object.keys(taskTemplates).length} templates</span>
+                    <span class="setting-desc">Active/passive time calibrations</span>
+                </div>
+                ${Object.keys(taskTemplates).length > 0 ? `<button class="btn-delete" onclick="handleClick(); clearTaskTemplates()">Clear</button>` : ''}
+            </div>
+            ${Object.keys(taskTemplates).length > 0 ? renderTaskTemplatesTable() : ''}
+        </div>
+
+        <div class="settings-group">
             <div class="settings-group-title">Data</div>
             <div class="setting-row">
                 <div class="setting-info">
@@ -2907,6 +2949,30 @@ function renderPrepTimesTable() {
     });
     html += '</div>';
     return html;
+}
+
+function renderTaskTemplatesTable() {
+    let html = '<div style="margin-top:8px;">';
+    Object.entries(taskTemplates).forEach(([key, tmpl]) => {
+        const aMins = Math.floor((tmpl.activeSecondsPerUnit || 0) / 60);
+        const aSecs = Math.round((tmpl.activeSecondsPerUnit || 0) % 60);
+        const pMins = Math.floor((tmpl.passiveSecondsPerUnit || 0) / 60);
+        const pSecs = Math.round((tmpl.passiveSecondsPerUnit || 0) % 60);
+        html += `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.04);font-size:11px;">
+            <span style="font-weight:600;text-transform:capitalize;">${key}</span>
+            <span style="color:var(--text-muted);">A: ${aMins}m${aSecs}s P: ${pMins}m${pSecs}s v${tmpl.templateVersion || 1}</span>
+        </div>`;
+    });
+    html += '</div>';
+    return html;
+}
+
+function clearTaskTemplates() {
+    if (!confirm('Clear all task templates?')) return;
+    taskTemplates = {};
+    saveTaskTemplates();
+    renderSettings(document.getElementById('panelOverlay'));
+    showToast('Templates cleared');
 }
 
 function selectMascot(key) {
