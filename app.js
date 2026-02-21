@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 72;
+const APP_BUILD = 73;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -732,14 +732,14 @@ function renderIngredients(station) {
                     </select>
                     ` : `
                     <div class="par-stepper">
-                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5})">−</button>
+                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, -1)">−</button>
                         <input type="number" class="par-qty-input"
                             value="${st.parQty || ''}"
                             placeholder="0"
-                            min="0" step="${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5}" inputmode="decimal"
+                            min="0" step="1" inputmode="decimal"
                             oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
                             onclick="event.stopPropagation()">
-                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, ${WEIGHT_UNITS.includes(st.parUnit) ? 1 : 0.5})">+</button>
+                        <button class="stepper-btn" onclick="event.stopPropagation(); handleClick(); adjustParQty(${station.id}, ${ing.id}, 1)">+</button>
                     </div>
                     `}
                     <select class="par-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
@@ -1022,7 +1022,7 @@ function setParUnit(stationId, ingredientId, value) {
         if (!st.parDepth) st.parDepth = 4;
     } else {
         st.parDepth = null;
-        if (value && !st.parQty) st.parQty = 1;
+        st.parQty = 1;
     }
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
