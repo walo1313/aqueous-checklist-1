@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 89;
+const APP_BUILD = 90;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1502,6 +1502,60 @@ function updateStationCount(stationId) {
     el.classList.toggle('all-done', lowCount > 0 && lowCount === totalCount);
 }
 
+// ==================== SERVICE FEASIBILITY ====================
+
+function calculateFeasibility() {
+    let totalActive = 0;
+    let totalPassive = 0;
+    let taskBreakdown = [];
+
+    stations.forEach(station => {
+        station.ingredients.forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st || !st.low || st.completed) return;
+            const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit, st.parDepth);
+            if (!est) return;
+
+            const active = est.activeSeconds || est.totalSeconds || 0;
+            const passive = est.passiveSeconds || 0;
+            totalActive += active;
+            totalPassive += passive;
+            taskBreakdown.push({ name: ing.name, active, passive });
+        });
+    });
+
+    if (taskBreakdown.length === 0) return null;
+
+    const longestPassive = taskBreakdown.reduce((max, t) => Math.max(max, t.passive), 0);
+    const estimatedElapsed = Math.max(totalActive, longestPassive);
+
+    const prepWindowSec = (settings.prepWindowMinutes || 0) * 60;
+
+    let status, message;
+    if (prepWindowSec <= 0) {
+        status = 'unknown';
+        message = 'Set prep window in Settings';
+    } else if (totalActive > prepWindowSec) {
+        status = 'weeds';
+        message = 'High risk — likely In the Weeds';
+    } else if (totalActive > prepWindowSec * 0.8) {
+        status = 'tight';
+        message = 'Tight window — schedule carefully';
+    } else {
+        status = 'pocket';
+        message = "You're In the Pocket";
+    }
+
+    const passiveWindowMinutes = Math.max(0, Math.floor(totalPassive / 60));
+
+    return {
+        totalActive, totalPassive, estimatedElapsed,
+        status, message,
+        passiveWindowMinutes,
+        prepWindowSec, taskBreakdown
+    };
+}
+
 // ==================== SUMMARY VIEW ====================
 
 function renderSummary(container) {
@@ -1555,6 +1609,21 @@ function renderSummary(container) {
                 <div class="progress-bar ${progress >= 100 ? 'complete' : ''}" style="width: ${progress}%"></div>
             </div>
         </div>`;
+
+    // Feasibility banner
+    const feasibility = calculateFeasibility();
+    if (feasibility && feasibility.taskBreakdown.length > 0) {
+        html += `
+        <div class="feasibility-banner ${feasibility.status}">
+            <div class="feasibility-status">${feasibility.message}</div>
+            <div class="feasibility-stats">
+                Active: ${formatEstimate(feasibility.totalActive)} &bull; Passive: ${formatEstimate(feasibility.totalPassive)}
+            </div>
+            ${feasibility.passiveWindowMinutes > 0 ? `
+            <div class="feasibility-passive-hint">~${feasibility.passiveWindowMinutes} min of passive time available for other tasks</div>
+            ` : ''}
+        </div>`;
+    }
 
     if (highTasks.length > 0) {
         html += renderSummaryGroup('Before Service', 'high', highTasks);
@@ -3315,6 +3384,32 @@ function renderSettings(container) {
                 </div>
                 <button class="neu-toggle ${settings.sound ? 'active' : ''}"
                     onclick="toggleSetting('sound', this)"></button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Service Planning</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Service Start</span>
+                    <span class="setting-desc">When does service begin?</span>
+                </div>
+                <input type="time" class="form-control" value="${settings.serviceTime || ''}"
+                    onchange="settings.serviceTime = this.value || null; saveSettings(); markAllPanelsDirty();"
+                    style="width:100px;font-size:13px;text-align:center;border:none;background:var(--bg);border-radius:8px;box-shadow:var(--neu-inset);padding:6px 8px;">
+            </div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Prep Window</span>
+                    <span class="setting-desc">Hours available before service</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;">
+                    <input type="number" class="form-control" value="${settings.prepWindowMinutes ? settings.prepWindowMinutes / 60 : ''}"
+                        placeholder="0" min="0.5" max="24" step="0.5"
+                        onchange="settings.prepWindowMinutes = parseFloat(this.value) * 60 || null; saveSettings(); markAllPanelsDirty();"
+                        style="width:60px;font-size:13px;text-align:center;border:none;background:var(--bg);border-radius:8px;box-shadow:var(--neu-inset);padding:6px 8px;">
+                    <span style="font-size:11px;color:var(--text-muted);">hrs</span>
+                </div>
             </div>
         </div>
 
