@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 78;
+const APP_BUILD = 79;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -678,6 +678,11 @@ function renderHome(container) {
     });
 
     container.innerHTML = html;
+    // Restore expand states
+    expandedIngs.forEach(key => {
+        const ctrl = document.getElementById(`ing-ctrl-${key}`);
+        if (ctrl) ctrl.classList.add('open');
+    });
 }
 
 function renderIngredients(station) {
@@ -685,43 +690,26 @@ function renderIngredients(station) {
     station.ingredients.forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
-        let parDisplay = '';
-        if (st.low && st.parQty && st.parUnit) {
-            parDisplay = `<span class="par-display">${formatParDisplay(st.parQty, st.parUnit, st.parDepth)}</span>`;
-        } else if (st.low && st.parLevel) {
-            parDisplay = `<span class="par-display">${st.parLevel}</span>`;
-        }
-        if (st.low && st.parNotes) {
-            parDisplay += `<span class="par-display" style="font-style:italic;margin-left:4px;font-size:9px;">${st.parNotes}</span>`;
-        }
-
         const unitOptions = ['quart','pint','cup','oz','1/9pan','1/6pan','1/3pan','1/2pan','fullpan','kg','lb','g','each','recipe'];
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
         html += `
-        <div class="ingredient ${st.low ? 'low' : ''}">
+        <div class="ingredient ${st.low ? 'low' : ''}" id="ing-${station.id}-${ing.id}">
             <div class="ingredient-header"
+                 onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
                  oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
-                <label class="ingredient-label">
-                    <input type="checkbox" class="neu-check"
-                        ${st.low ? 'checked' : ''}
-                        onchange="toggleLow(${station.id}, ${ing.id})">
-                    <span class="ingredient-name">${ing.name}</span>
-                </label>
-                <div class="ingredient-badges">
-                    ${parDisplay}
-                </div>
+                <span class="ingredient-name">${ing.name}</span>
             </div>
-            <div class="ingredient-controls ${st.low ? '' : 'hidden'}">
+            <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
                 <div class="priority-row">
                     <button class="priority-btn ${st.priority === 'high' ? 'high' : ''}"
-                        onclick="setPriority(${station.id}, ${ing.id}, 'high')">High</button>
+                        onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'high')">High</button>
                     <button class="priority-btn ${st.priority === 'medium' ? 'medium' : ''}"
-                        onclick="setPriority(${station.id}, ${ing.id}, 'medium')">Medium</button>
+                        onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'medium')">Medium</button>
                     <button class="priority-btn ${st.priority === 'low' ? 'low' : ''}"
-                        onclick="setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
+                        onclick="event.stopPropagation(); setPriority(${station.id}, ${ing.id}, 'low')">Low</button>
                 </div>
                 <div class="par-row">
                     <div class="par-stepper">
@@ -759,6 +747,7 @@ function renderIngredients(station) {
 }
 
 let longPressTimer = null;
+const expandedIngs = new Set();
 
 function startLongPress(event, stationId, ingId, ingName) {
     longPressTimer = setTimeout(() => {
@@ -957,49 +946,51 @@ function confirmRenameStation(stationId) {
 
 // ==================== INGREDIENT ACTIONS ====================
 
-function toggleLow(stationId, ingredientId) {
+function toggleIngExpand(stationId, ingredientId) {
     handleClick();
-    animateMascot();
-    const station = stations.find(s => s.id === stationId);
-    if (!station) return;
+    const key = `${stationId}-${ingredientId}`;
+    const ctrl = document.getElementById(`ing-ctrl-${key}`);
+    if (!ctrl) return;
 
-    if (!station.status[ingredientId]) {
-        station.status[ingredientId] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
-    }
-
-    station.status[ingredientId].low = !station.status[ingredientId].low;
-
-    if (station.status[ingredientId].low) {
-        // Auto-fill from saved defaults
-        const ing = station.ingredients.find(i => i.id === ingredientId);
-        if (ing) {
-            const key = ing.name.toLowerCase();
-            const defaults = ingredientDefaults[key];
-            if (defaults) {
-                if (!station.status[ingredientId].parQty) station.status[ingredientId].parQty = defaults.qty;
-                if (!station.status[ingredientId].parUnit) station.status[ingredientId].parUnit = defaults.unit;
-                if (!station.status[ingredientId].parDepth && defaults.depth) station.status[ingredientId].parDepth = defaults.depth;
-                updateParLevel(station, ingredientId);
+    const isOpen = ctrl.classList.toggle('open');
+    if (isOpen) {
+        expandedIngs.add(key);
+        // Auto-fill defaults on first expand
+        const station = stations.find(s => s.id === stationId);
+        if (station && station.status[ingredientId]) {
+            const st = station.status[ingredientId];
+            if (!st.parQty && !st.parUnit) {
+                const ing = station.ingredients.find(i => i.id === ingredientId);
+                if (ing) {
+                    const defaults = ingredientDefaults[ing.name.toLowerCase()];
+                    if (defaults) {
+                        if (defaults.qty) st.parQty = defaults.qty;
+                        if (defaults.unit) st.parUnit = defaults.unit;
+                        if (defaults.depth) st.parDepth = defaults.depth;
+                        updateParLevel(station, ingredientId);
+                        rerenderStationBody(stationId);
+                    }
+                }
             }
         }
     } else {
-        station.status[ingredientId].priority = null;
-        station.status[ingredientId].completed = false;
+        expandedIngs.delete(key);
     }
-
-    saveData(true);
-
-    // Re-render only the station body to preserve scroll position
-    rerenderStationBody(stationId);
 }
 
 function setPriority(stationId, ingredientId, priority) {
     handleClick();
+    animateMascot();
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
 
-    station.status[ingredientId].priority =
-        station.status[ingredientId].priority === priority ? null : priority;
+    st.priority = st.priority === priority ? null : priority;
+    st.low = !!st.priority;
+
+    if (!st.low) {
+        st.completed = false;
+    }
 
     saveData(true);
     rerenderStationBody(stationId);
@@ -1137,6 +1128,11 @@ function rerenderStationBody(stationId) {
         const panel = getPanel('home');
         const scrollBefore = panel ? panel.scrollTop : 0;
         body.innerHTML = renderIngredients(station) + stationFooter(stationId);
+        // Restore expand states
+        expandedIngs.forEach(key => {
+            const ctrl = document.getElementById(`ing-ctrl-${key}`);
+            if (ctrl) ctrl.classList.add('open');
+        });
         if (panel) panel.scrollTop = scrollBefore;
     }
     updateStationCount(stationId);
