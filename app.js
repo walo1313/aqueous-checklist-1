@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 74;
+const APP_BUILD = 75;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2381,7 +2381,7 @@ function renderLogDetail(container) {
             <div class="log-detail-name">${logDetailIngredient}</div>
             <div class="log-detail-stats">
                 <div class="log-stat">
-                    <span class="log-stat-value">${bestStr}</span>
+                    <span class="log-stat-value"><img src="./badge-96.png" style="width:14px;height:14px;vertical-align:middle;margin-right:2px;">${bestStr}</span>
                     <span class="log-stat-label">Best</span>
                 </div>
                 <div class="log-stat">
@@ -2414,7 +2414,7 @@ function renderLogDetail(container) {
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <div style="display:flex;align-items:center;gap:6px;">
                         <span style="font-size:18px;font-weight:800;color:var(--accent);">${formatTime(d.seconds)}</span>
-                        ${isBest ? '<span style="font-size:10px;color:var(--accent);">Best</span>' : ''}
+                        ${isBest ? '<span style="font-size:10px;color:var(--accent);display:flex;align-items:center;gap:2px;"><img src="./badge-96.png" style="width:12px;height:12px;">Best</span>' : ''}
                     </div>
                     <span style="font-size:10px;color:var(--text-muted);">${timeStr}</span>
                 </div>
