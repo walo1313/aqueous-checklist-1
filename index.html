@@ -1114,6 +1114,45 @@
             50% { box-shadow: 0 2px 16px var(--accent-glow); }
         }
 
+        .best-time-btn {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 5px 12px;
+            border: none;
+            border-radius: 12px;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .best-time-btn:active { box-shadow: var(--neu-inset); transform: scale(0.92); transition: all 0.08s ease; }
+        .best-time-btn.active {
+            background: var(--accent);
+            box-shadow: 0 2px 8px var(--accent-glow);
+            animation: taskTimerPulse 1.5s ease infinite;
+        }
+        .best-time-btn.active .best-time-icon,
+        .best-time-btn.active .best-time-value { color: white; }
+        .best-time-btn.paused {
+            background: var(--high);
+            box-shadow: 0 2px 6px rgba(239,83,80,0.3);
+        }
+        .best-time-btn.paused .best-time-icon,
+        .best-time-btn.paused .best-time-value { color: white; }
+        .best-time-icon {
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .best-time-value {
+            font-size: 14px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            color: var(--text);
+            letter-spacing: 0.5px;
+        }
+
         .inline-timer-row {
             display: flex;
             align-items: center;

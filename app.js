@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 95;
+const APP_BUILD = 96;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -142,6 +142,18 @@ function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
         : (UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1);
     const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * convFactor);
     return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit, hasTemplate: false };
+}
+
+function getIngredientBestTime(ingName) {
+    const key = ingName.toLowerCase();
+    let best = null;
+    activityLog.forEach(entry => {
+        if (entry.type !== 'task_complete') return;
+        if (!entry.data || entry.data.ingredient.toLowerCase() !== key) return;
+        const total = entry.data.elapsedSeconds || entry.data.seconds || ((entry.data.activeSeconds || 0) + (entry.data.passiveSeconds || 0));
+        if (total > 0 && (best === null || total < best)) best = total;
+    });
+    return best;
 }
 
 // PWA Install
@@ -1670,12 +1682,9 @@ function renderSummaryGroup(title, level, tasks) {
                 <button class="block-timer-ctrl reset" onclick="event.stopPropagation(); resetBlockTimer('${level}')">✕</button>
             </div>`;
     } else if (incompleteTasks.length > 0 && hasTimingData) {
-        const estLabel = blockEst.hasTemplateData && blockEst.passive > 0
-            ? `~${formatEstimate(blockEst.active)} active + ~${formatEstimate(blockEst.passive)} passive`
-            : `~${formatEstimate(totalEstSeconds)}`;
         blockTimerHTML = `
             <button class="block-timer-start" onclick="event.stopPropagation(); toggleBlockTimer('${level}')">
-                ⏱ ${estLabel}
+                ⏱ ${formatTime(totalEstSeconds)}
             </button>`;
     }
 
@@ -1694,16 +1703,23 @@ function renderSummaryGroup(title, level, tasks) {
         const hasTimer = isRunning || isPaused;
         const escapedName = task.ingredient.name.replace(/'/g, "\\'");
 
-        // Per-ingredient time goal
-        const est = getIngredientEstimate(task.ingredient.name, task.status.parQty, task.status.parUnit, task.status.parDepth);
-        const goalInfo = est
-            ? `<span style="font-size:9px;color:var(--text-muted);">Best: ${formatEstimate(est.bestPerDisplayUnit)} per ${task.status.parUnit}</span>`
-            : '';
+        // Best time from completed logs
+        const bestTime = getIngredientBestTime(task.ingredient.name);
 
         // Par display
         const parTag = task.status.parQty && task.status.parUnit
             ? `<span class="par-tag">${formatParDisplay(task.status.parQty, task.status.parUnit, task.status.parDepth)}</span>`
             : (task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : '');
+
+        // Timer button: only render if bestTime exists from logs
+        let timerBtnHTML = '';
+        if (!task.status.completed && bestTime) {
+            timerBtnHTML = `
+                <button class="best-time-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
+                    <span class="best-time-icon">⏱</span>
+                    <span class="best-time-value">${formatTime(bestTime)}</span>
+                </button>`;
+        }
 
         html += `
             <div class="summary-item ${task.status.completed ? 'done' : ''}">
@@ -1714,16 +1730,11 @@ function renderSummaryGroup(title, level, tasks) {
                     <div class="summary-item-info">
                         <span class="summary-item-name">${task.ingredient.name}</span>
                         <span class="summary-item-station">${task.stationName}</span>
-                        ${goalInfo}
                     </div>
                 </label>
                 <div class="summary-item-actions">
                     ${parTag}
-                    ${!task.status.completed ? `
-                        <button class="task-timer-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
-                            ⏱
-                        </button>
-                    ` : ''}
+                    ${timerBtnHTML}
                 </div>
             </div>`;
 
@@ -1733,10 +1744,20 @@ function renderSummaryGroup(title, level, tasks) {
                              : timer.phase === 'passive' ? 'Passive' : '';
             const phaseClass = timer.phase === 'active' ? 'phase-active'
                              : timer.phase === 'passive' ? 'phase-passive' : '';
+            const elapsed = getTimerSeconds(timer);
+            let clockDisplay;
+            let clockOvertimeClass = '';
+            if (timer.bestGoalSeconds > 0) {
+                const remaining = timer.bestGoalSeconds - elapsed;
+                clockDisplay = (remaining < 0 ? '-' : '') + formatTime(Math.abs(remaining));
+                if (remaining < 0) clockOvertimeClass = 'overtime';
+            } else {
+                clockDisplay = formatTime(elapsed);
+            }
             html += `
                 <div class="inline-timer-row" id="timer_${timerKey}">
                     ${phaseLabel ? `<span class="phase-pill ${phaseClass}">${phaseLabel}</span>` : ''}
-                    <span class="inline-timer-clock" id="clock_${timerKey}">${formatTime(getTimerSeconds(timer))}</span>
+                    <span class="inline-timer-clock ${clockOvertimeClass}" id="clock_${timerKey}">${clockDisplay}</span>
                     <div class="inline-timer-controls">
                         ${timer.phase === 'active' && timer.hasPassivePhase ? `
                             <button class="inline-timer-btn next" onclick="handleClick(); nextTimerPhase('${timerKey}')">Next</button>
@@ -1955,6 +1976,9 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
     const hasTemplate = tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0);
     const hasPassive = hasTemplate && tmpl.passiveSecondsPerUnit > 0;
 
+    // Best time from logs for countdown
+    const bestGoal = getIngredientBestTime(ingName) || 0;
+
     // Start new timer
     taskTimers[timerKey] = {
         stationId, ingredientId, ingName,
@@ -1966,9 +1990,21 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
         passiveSeconds: 0,
         wallStartedAt: Date.now(),
         hasPassivePhase: hasPassive,
+        bestGoalSeconds: bestGoal,
         interval: setInterval(() => {
+            const t = taskTimers[timerKey];
+            const elapsed = getTimerSeconds(t);
             const clock = document.getElementById(`clock_${timerKey}`);
-            if (clock) clock.textContent = formatTime(getTimerSeconds(taskTimers[timerKey]));
+            if (clock) {
+                if (t.bestGoalSeconds > 0) {
+                    const remaining = t.bestGoalSeconds - elapsed;
+                    clock.textContent = (remaining < 0 ? '-' : '') + formatTime(Math.abs(remaining));
+                    if (remaining < 0) clock.classList.add('overtime');
+                    else clock.classList.remove('overtime');
+                } else {
+                    clock.textContent = formatTime(elapsed);
+                }
+            }
             updateTimerNotification();
         }, 1000)
     };
@@ -1976,7 +2012,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
     forceUpdateTimerNotification();
 
     checkAndManageWakeLock();
-    showToast(hasTemplate ? `⏱ Active: ${ingName}` : `⏱ Timing: ${ingName}`);
+    showToast(bestGoal > 0 ? `⏱ ${formatTime(bestGoal)} countdown` : `⏱ Timing: ${ingName}`);
     refreshSummaryPanel();
 }
 
@@ -2035,7 +2071,18 @@ function nextTimerPhase(timerKey) {
     if (t.interval) clearInterval(t.interval);
     t.interval = setInterval(() => {
         const clock = document.getElementById(`clock_${timerKey}`);
-        if (clock) clock.textContent = formatTime(getTimerSeconds(t));
+        if (clock) {
+            const passiveElapsed = getTimerSeconds(t);
+            const totalElapsed = t.activeSeconds + passiveElapsed;
+            if (t.bestGoalSeconds > 0) {
+                const remaining = t.bestGoalSeconds - totalElapsed;
+                clock.textContent = (remaining < 0 ? '-' : '') + formatTime(Math.abs(remaining));
+                if (remaining < 0) clock.classList.add('overtime');
+                else clock.classList.remove('overtime');
+            } else {
+                clock.textContent = formatTime(passiveElapsed);
+            }
+        }
         updateTimerNotification();
     }, 1000);
 
@@ -2046,44 +2093,29 @@ function nextTimerPhase(timerKey) {
 
 // ── Block Timers (countdown from estimated total) ──
 function getBlockEstimateSeconds(level) {
-    // Calculate total estimated seconds for incomplete tasks in this block
+    // Sum best times from completed logs for incomplete tasks in this block
     let totalEst = 0;
-    let totalActive = 0;
-    let totalPassive = 0;
-    let hasTemplateData = false;
     stations.forEach(station => {
         station.ingredients.forEach(ing => {
             const st = station.status[ing.id];
             if (!st || st.completed) return;
             if ((st.priority || 'none') !== level) return;
-            const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit, st.parDepth);
-            if (est) {
-                totalEst += est.totalSeconds;
-                if (est.hasTemplate) {
-                    totalActive += est.activeSeconds || 0;
-                    totalPassive += est.passiveSeconds || 0;
-                    hasTemplateData = true;
-                } else {
-                    totalActive += est.totalSeconds;
-                }
-            }
+            const best = getIngredientBestTime(ing.name);
+            if (best) totalEst += best;
         });
     });
-    return { total: totalEst, active: totalActive, passive: totalPassive, hasTemplateData };
+    return { total: totalEst };
 }
 
 function blockHasTimingData(level) {
-    // Check if ANY incomplete ingredient in this block has prepTimes or template data
+    // Check if ANY incomplete ingredient in this block has completed log data
     let has = false;
     stations.forEach(station => {
         station.ingredients.forEach(ing => {
             const st = station.status[ing.id];
             if (!st || st.completed) return;
             if ((st.priority || 'none') !== level) return;
-            const key = ing.name.toLowerCase();
-            if (prepTimes[key] && prepTimes[key].bestSecPerUnit) has = true;
-            const tmpl = taskTemplates[key];
-            if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) has = true;
+            if (getIngredientBestTime(ing.name)) has = true;
         });
     });
     return has;
