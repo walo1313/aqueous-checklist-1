@@ -507,6 +507,48 @@
             box-shadow: var(--neu-shadow-sm);
         }
 
+        /* Calibration Modal */
+        .calibration-modal { text-align: center; }
+        .calibration-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+        .calibration-phase-label {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        .calibration-phase-label.active { color: var(--accent); }
+        .calibration-phase-label.passive { color: var(--low); }
+        .calibration-clock {
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+        }
+        .calibration-summary {
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            margin: 16px 0;
+            box-shadow: var(--neu-inset);
+        }
+        .calibration-summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .calibration-summary-row + .calibration-summary-row {
+            border-top: 1px solid var(--divider);
+        }
+
         .smart-qty-row {
             display: flex;
             align-items: center;

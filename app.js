@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 86;
+const APP_BUILD = 87;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -812,6 +812,10 @@ function showIngredientContextMenu(event, stationId, ingId, ingName) {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 Edit
             </button>
+            <button class="context-menu-item" onclick="startCalibration(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Calibrate
+            </button>
             <button class="context-menu-item delete" onclick="deleteIngredientFromHome(${stationId}, ${ingId})">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
                 Delete
@@ -893,6 +897,302 @@ function confirmEditIngredientName(stationId, ingId) {
     showToast(`Renamed to ${newName}`);
 }
 
+// ==================== CALIBRATION WORKFLOW ====================
+
+let calibrationState = null;
+
+function getCalibrationTimerSeconds(timer) {
+    if (!timer) return 0;
+    if (timer.running) return timer.pausedElapsed + Math.floor((Date.now() - timer.startedAt) / 1000);
+    return timer.pausedElapsed;
+}
+
+function startCalibration(stationId, ingredientId, ingName) {
+    const menu = document.getElementById('ingredientContextMenu');
+    if (menu) menu.remove();
+
+    const station = stations.find(s => s.id === stationId);
+    const st = station ? station.status[ingredientId] : null;
+
+    calibrationState = {
+        stationId, ingredientId, ingName,
+        qty: st && st.parQty ? st.parQty : 1,
+        unit: st && st.parUnit ? st.parUnit : 'each',
+        depth: st && st.parDepth ? st.parDepth : 4,
+        step: 'qty',
+        activeTimer: null,
+        passiveTimer: null,
+        activeTotal: 0,
+        passiveTotal: 0
+    };
+    renderCalibrationModal();
+}
+
+function renderCalibrationModal() {
+    const cs = calibrationState;
+    if (!cs) return;
+
+    const existing = document.getElementById('modalCalibration');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalCalibration';
+    modal.className = 'modal show';
+
+    let content = '';
+
+    if (cs.step === 'qty') {
+        const unitOptions = [...WEIGHT_UNITS, ...VOLUME_UNITS, ...PAN_UNITS, ...COUNT_UNITS]
+            .map(u => `<option value="${u}" ${cs.unit === u ? 'selected' : ''}>${u}</option>`).join('');
+        content = `
+            <div class="modal-content calibration-modal">
+                <div class="calibration-title">${cs.ingName}</div>
+                <p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;">How many are you prepping?</p>
+                <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:20px;">
+                    <input type="number" id="calQtyInput" class="smart-qty-input" value="${cs.qty}" min="0.1" step="1" inputmode="decimal" style="width:80px;font-size:24px;text-align:center;">
+                    <select id="calUnitSelect" class="smart-unit-select" style="font-size:14px;">
+                        ${unitOptions}
+                    </select>
+                </div>
+                ${PAN_UNITS.includes(cs.unit) ? `
+                <div class="depth-chips" style="justify-content:center;margin-bottom:16px;">
+                    <button class="depth-chip ${cs.depth == 2 ? 'active' : ''}" onclick="calibrationSetDepth(2)">2"</button>
+                    <button class="depth-chip ${cs.depth == 4 ? 'active' : ''}" onclick="calibrationSetDepth(4)">4"</button>
+                    <button class="depth-chip ${cs.depth == 6 ? 'active' : ''}" onclick="calibrationSetDepth(6)">6"</button>
+                </div>` : ''}
+                <div class="btn-group">
+                    <button class="btn btn-secondary squishy" onclick="calibrationDiscard()">Cancel</button>
+                    <button class="btn btn-primary squishy" onclick="handleClick(); calibrationStartActive()">Start Active</button>
+                </div>
+            </div>`;
+    } else if (cs.step === 'active') {
+        const sec = getCalibrationTimerSeconds(cs.activeTimer);
+        const isPaused = cs.activeTimer && !cs.activeTimer.running;
+        content = `
+            <div class="modal-content calibration-modal">
+                <div class="calibration-title">${cs.ingName} <span style="color:var(--text-muted);font-size:14px;">x${cs.qty}</span></div>
+                <div class="calibration-phase-label active">ACTIVE — Hands-On</div>
+                <div class="calibration-clock" id="calClock">${formatTime(sec)}</div>
+                <div class="btn-group" style="margin-top:20px;">
+                    ${isPaused ? `
+                        <button class="btn btn-secondary squishy" onclick="handleClick(); calibrationResumeActive()">Resume</button>
+                    ` : `
+                        <button class="btn btn-secondary squishy" onclick="handleClick(); calibrationPauseActive()">Pause</button>
+                    `}
+                    <button class="btn btn-primary squishy" onclick="handleClick(); calibrationNextPhase()">Next</button>
+                </div>
+                <button class="btn-text" style="margin-top:12px;font-size:11px;color:var(--text-muted);border:none;background:none;cursor:pointer;" onclick="handleClick(); calibrationSkipToConfirm()">Skip passive</button>
+            </div>`;
+    } else if (cs.step === 'passive') {
+        const sec = getCalibrationTimerSeconds(cs.passiveTimer);
+        const isPaused = cs.passiveTimer && !cs.passiveTimer.running;
+        content = `
+            <div class="modal-content calibration-modal">
+                <div class="calibration-title">${cs.ingName} <span style="color:var(--text-muted);font-size:14px;">x${cs.qty}</span></div>
+                <div class="calibration-phase-label passive">PASSIVE — Hands-Off</div>
+                <div class="calibration-clock" id="calClock">${formatTime(sec)}</div>
+                <div class="btn-group" style="margin-top:20px;">
+                    ${isPaused ? `
+                        <button class="btn btn-secondary squishy" onclick="handleClick(); calibrationResumePassive()">Resume</button>
+                    ` : `
+                        <button class="btn btn-secondary squishy" onclick="handleClick(); calibrationPausePassive()">Pause</button>
+                    `}
+                    <button class="btn btn-primary squishy" onclick="handleClick(); calibrationDone()">Done</button>
+                </div>
+            </div>`;
+    } else if (cs.step === 'confirm') {
+        const baseQty = convertToBase(cs.qty, cs.unit, cs.depth);
+        const activePerUnit = baseQty > 0 ? cs.activeTotal / baseQty : cs.activeTotal;
+        const passivePerUnit = baseQty > 0 ? cs.passiveTotal / baseQty : cs.passiveTotal;
+        const convFactor = PAN_UNITS.includes(cs.unit)
+            ? ((PAN_OZ[cs.unit] && PAN_OZ[cs.unit][cs.depth || 4]) || 1)
+            : (UNIT_TO_OZ[cs.unit] || UNIT_TO_G[cs.unit] || 1);
+        const activePerDisplay = Math.round(activePerUnit * convFactor);
+        const passivePerDisplay = Math.round(passivePerUnit * convFactor);
+        content = `
+            <div class="modal-content calibration-modal">
+                <div class="calibration-title">${cs.ingName} <span style="color:var(--text-muted);font-size:14px;">x${cs.qty}</span></div>
+                <div class="calibration-summary">
+                    <div class="calibration-summary-row">
+                        <span style="font-weight:600;color:var(--accent);">Active</span>
+                        <span>${formatTime(cs.activeTotal)} <span style="font-size:10px;color:var(--text-muted);">(${formatEstimate(activePerDisplay)}/${cs.unit})</span></span>
+                    </div>
+                    <div class="calibration-summary-row">
+                        <span style="font-weight:600;color:var(--low);">Passive</span>
+                        <span>${formatTime(cs.passiveTotal)} <span style="font-size:10px;color:var(--text-muted);">(${formatEstimate(passivePerDisplay)}/${cs.unit})</span></span>
+                    </div>
+                </div>
+                <div class="btn-group" style="margin-top:20px;">
+                    <button class="btn btn-secondary squishy" onclick="handleClick(); calibrationDiscard()">Discard</button>
+                    <button class="btn btn-primary squishy" onclick="handleClick(); calibrationSave()">Save Template</button>
+                </div>
+            </div>`;
+    }
+
+    modal.innerHTML = content;
+    document.body.appendChild(modal);
+}
+
+function calibrationSetDepth(d) {
+    if (!calibrationState) return;
+    calibrationState.depth = d;
+    renderCalibrationModal();
+}
+
+function calibrationStartActive() {
+    const cs = calibrationState;
+    if (!cs) return;
+    const qtyInput = document.getElementById('calQtyInput');
+    const unitSelect = document.getElementById('calUnitSelect');
+    if (qtyInput) cs.qty = parseFloat(qtyInput.value) || 1;
+    if (unitSelect) cs.unit = unitSelect.value;
+
+    cs.step = 'active';
+    cs.activeTimer = {
+        running: true,
+        startedAt: Date.now(),
+        pausedElapsed: 0,
+        interval: setInterval(() => {
+            const clock = document.getElementById('calClock');
+            if (clock) clock.textContent = formatTime(getCalibrationTimerSeconds(cs.activeTimer));
+        }, 1000)
+    };
+    renderCalibrationModal();
+}
+
+function calibrationPauseActive() {
+    const cs = calibrationState;
+    if (!cs || !cs.activeTimer || !cs.activeTimer.running) return;
+    cs.activeTimer.pausedElapsed = getCalibrationTimerSeconds(cs.activeTimer);
+    cs.activeTimer.running = false;
+    cs.activeTimer.startedAt = null;
+    if (cs.activeTimer.interval) clearInterval(cs.activeTimer.interval);
+    cs.activeTimer.interval = null;
+    renderCalibrationModal();
+}
+
+function calibrationResumeActive() {
+    const cs = calibrationState;
+    if (!cs || !cs.activeTimer || cs.activeTimer.running) return;
+    cs.activeTimer.running = true;
+    cs.activeTimer.startedAt = Date.now();
+    cs.activeTimer.interval = setInterval(() => {
+        const clock = document.getElementById('calClock');
+        if (clock) clock.textContent = formatTime(getCalibrationTimerSeconds(cs.activeTimer));
+    }, 1000);
+    renderCalibrationModal();
+}
+
+function calibrationNextPhase() {
+    const cs = calibrationState;
+    if (!cs) return;
+    cs.activeTotal = getCalibrationTimerSeconds(cs.activeTimer);
+    if (cs.activeTimer && cs.activeTimer.interval) clearInterval(cs.activeTimer.interval);
+
+    cs.step = 'passive';
+    cs.passiveTimer = {
+        running: true,
+        startedAt: Date.now(),
+        pausedElapsed: 0,
+        interval: setInterval(() => {
+            const clock = document.getElementById('calClock');
+            if (clock) clock.textContent = formatTime(getCalibrationTimerSeconds(cs.passiveTimer));
+        }, 1000)
+    };
+    renderCalibrationModal();
+}
+
+function calibrationPausePassive() {
+    const cs = calibrationState;
+    if (!cs || !cs.passiveTimer || !cs.passiveTimer.running) return;
+    cs.passiveTimer.pausedElapsed = getCalibrationTimerSeconds(cs.passiveTimer);
+    cs.passiveTimer.running = false;
+    cs.passiveTimer.startedAt = null;
+    if (cs.passiveTimer.interval) clearInterval(cs.passiveTimer.interval);
+    cs.passiveTimer.interval = null;
+    renderCalibrationModal();
+}
+
+function calibrationResumePassive() {
+    const cs = calibrationState;
+    if (!cs || !cs.passiveTimer || cs.passiveTimer.running) return;
+    cs.passiveTimer.running = true;
+    cs.passiveTimer.startedAt = Date.now();
+    cs.passiveTimer.interval = setInterval(() => {
+        const clock = document.getElementById('calClock');
+        if (clock) clock.textContent = formatTime(getCalibrationTimerSeconds(cs.passiveTimer));
+    }, 1000);
+    renderCalibrationModal();
+}
+
+function calibrationSkipToConfirm() {
+    const cs = calibrationState;
+    if (!cs) return;
+    cs.activeTotal = getCalibrationTimerSeconds(cs.activeTimer);
+    if (cs.activeTimer && cs.activeTimer.interval) clearInterval(cs.activeTimer.interval);
+    cs.passiveTotal = 0;
+    cs.step = 'confirm';
+    renderCalibrationModal();
+}
+
+function calibrationDone() {
+    const cs = calibrationState;
+    if (!cs) return;
+    cs.passiveTotal = getCalibrationTimerSeconds(cs.passiveTimer);
+    if (cs.passiveTimer && cs.passiveTimer.interval) clearInterval(cs.passiveTimer.interval);
+    cs.step = 'confirm';
+    renderCalibrationModal();
+}
+
+function calibrationSave() {
+    const cs = calibrationState;
+    if (!cs) return;
+    const baseQty = convertToBase(cs.qty, cs.unit, cs.depth);
+    const activePerUnit = baseQty > 0 ? cs.activeTotal / baseQty : cs.activeTotal;
+    const passivePerUnit = baseQty > 0 ? cs.passiveTotal / baseQty : cs.passiveTotal;
+    const key = cs.ingName.toLowerCase();
+    const existing = taskTemplates[key];
+
+    taskTemplates[key] = {
+        activeFixedSeconds: 0,
+        activeSecondsPerUnit: activePerUnit,
+        passiveFixedSeconds: 0,
+        passiveSecondsPerUnit: passivePerUnit,
+        lastUpdatedAt: new Date().toISOString(),
+        calibratedBy: settings.cookName || 'Chef',
+        templateVersion: existing ? (existing.templateVersion || 0) + 1 : 1
+    };
+    saveTaskTemplates();
+
+    logActivity('calibration', {
+        ingredient: cs.ingName,
+        station: stations.find(s => s.id === cs.stationId)?.name || '',
+        activeSeconds: cs.activeTotal,
+        passiveSeconds: cs.passiveTotal,
+        quantity: cs.qty,
+        unit: cs.unit,
+        depth: cs.depth
+    });
+
+    const modal = document.getElementById('modalCalibration');
+    if (modal) modal.remove();
+    calibrationState = null;
+
+    animateMascot();
+    showToast('Template saved');
+    markAllPanelsDirty();
+}
+
+function calibrationDiscard() {
+    const cs = calibrationState;
+    if (cs) {
+        if (cs.activeTimer && cs.activeTimer.interval) clearInterval(cs.activeTimer.interval);
+        if (cs.passiveTimer && cs.passiveTimer.interval) clearInterval(cs.passiveTimer.interval);
+    }
+    calibrationState = null;
+    const modal = document.getElementById('modalCalibration');
+    if (modal) modal.remove();
+}
 
 function toggleStation(stationId) {
     const station = stations.find(s => s.id === stationId);
