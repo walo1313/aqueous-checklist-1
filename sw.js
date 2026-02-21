@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v63';
+const CACHE_NAME = 'aqueous-v64';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -49,89 +49,42 @@ self.addEventListener('activate', event => {
   );
 });
 
-const NOTIF_TAG_PREFIX = 'aqueous-timer-';
-let activeTimerIds = new Set();
+const NOTIF_TAG = 'aqueous-active';
+let notifShown = false;
 
 // Handle messages from app
 self.addEventListener('message', event => {
   if (!event.data) return;
 
-  if (event.data.type === 'TIMER_SYNC') {
-    const timers = event.data.timers || [];
-    const isNew = event.data.isNew;
-    const newIds = new Set(timers.map(t => t.id));
-
-    // Close notifications for timers that no longer exist
-    self.registration.getNotifications().then(notifs => {
-      notifs.forEach(n => {
-        const id = n.data && n.data.timerId;
-        if (id && !newIds.has(id)) n.close();
-      });
+  if (event.data.type === 'TIMER_STATUS') {
+    self.registration.showNotification('Aqueous', {
+      body: event.data.body,
+      tag: NOTIF_TAG,
+      badge: './badge-96.png',
+      requireInteraction: true,
+      silent: true,
+      data: { action: 'open_summary' }
     });
-
-    // Show/update notification for each timer — static (no live time)
-    timers.forEach(t => {
-      const tag = NOTIF_TAG_PREFIX + t.id;
-      const title = t.label;
-      const body = t.running ? 'Active' : 'Paused';
-      const isNewTimer = isNew || !activeTimerIds.has(t.id);
-
-      const actions = t.running
-        ? [{ action: 'pause', title: '⏸ Pause' }, { action: 'done', title: '✅ Done' }]
-        : [{ action: 'resume', title: '▶ Resume' }, { action: 'done', title: '✅ Done' }];
-
-      const options = {
-        body,
-        tag,
-        badge: './badge-96.png',
-        requireInteraction: true,
-        silent: !isNewTimer,
-        renotify: isNewTimer,
-        actions,
-        data: { timerId: t.id, action: 'open_summary' }
-      };
-      if (isNewTimer) options.vibrate = [100];
-
-      self.registration.showNotification(title, options);
-    });
-
-    activeTimerIds = newIds;
+    notifShown = true;
   }
 
   if (event.data.type === 'TIMER_CLEAR_ALL') {
     self.registration.getNotifications().then(n => n.forEach(n => n.close()));
-    activeTimerIds.clear();
+    notifShown = false;
   }
 });
 
-// Handle notification tap and action buttons
+// Handle notification tap — open app on Summary
 self.addEventListener('notificationclick', event => {
-  const timerId = event.notification.data && event.notification.data.timerId;
-  const action = event.action;
-
-  if (action && timerId) {
-    // User clicked an action button (pause/resume/done)
-    event.notification.close();
-    event.waitUntil(
-      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-        const msg = { type: 'TIMER_ACTION', timerId, action };
-        if (windowClients.length > 0) {
-          windowClients[0].postMessage(msg);
-        }
-      })
-    );
-  } else {
-    // User tapped the notification body — open app on Summary
-    event.notification.close();
-    event.waitUntil(
-      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-        if (windowClients.length > 0) {
-          windowClients[0].focus();
-          windowClients[0].postMessage({ type: 'OPEN_SUMMARY' });
-        } else {
-          clients.openWindow('./?view=summary');
-        }
-      })
-    );
-  }
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
+      if (windowClients.length > 0) {
+        windowClients[0].focus();
+        windowClients[0].postMessage({ type: 'OPEN_SUMMARY' });
+      } else {
+        clients.openWindow('./?view=summary');
+      }
+    })
+  );
 });

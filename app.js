@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 63;
+const APP_BUILD = 64;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1389,44 +1389,39 @@ function forceUpdateTimerNotification() {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!navigator.serviceWorker) return;
 
-    const timers = [];
+    const lines = [];
 
     Object.entries(taskTimers).forEach(([key, t]) => {
-        timers.push({
-            id: key,
-            type: 'task',
-            label: t.ingName,
-            seconds: getTimerSeconds(t),
-            running: t.running
-        });
+        lines.push(t.ingName);
     });
 
     Object.entries(blockTimers).forEach(([level, bt]) => {
-        const labels = { high: 'High Priority', medium: 'Medium Priority', low: 'Low Priority', none: 'No Priority' };
-        const remaining = getBlockRemainingSeconds(bt);
-        timers.push({
-            id: `block_${level}`,
-            type: 'block',
-            level,
-            label: labels[level] || level,
-            seconds: remaining,
-            running: bt.running,
-            overtime: remaining < 0
+        const blockLabels = { high: 'High Priority Block', medium: 'Medium Priority Block', low: 'Low Priority Block', none: 'Block' };
+        const blockName = blockLabels[level] || level;
+        const ings = [];
+        stations.forEach(station => {
+            station.ingredients.forEach(ing => {
+                const st = station.status[ing.id];
+                if (!st || st.completed) return;
+                if ((st.priority || 'none') !== level) return;
+                ings.push(ing.name);
+            });
         });
+        if (ings.length > 0) lines.push(`${blockName}: ${ings.join(', ')}`);
+        else lines.push(blockName);
     });
 
-    if (timers.length === 0) {
+    if (lines.length === 0) {
         _lastNotifSignature = '';
         sendSWMessage({ type: 'TIMER_CLEAR_ALL' });
         return;
     }
 
-    const sig = timers.map(t => `${t.id}:${t.running}`).join('|');
+    const sig = lines.join('|');
     if (sig === _lastNotifSignature) return;
-    const wasEmpty = _lastNotifSignature === '';
     _lastNotifSignature = sig;
 
-    sendSWMessage({ type: 'TIMER_SYNC', timers, isNew: wasEmpty });
+    sendSWMessage({ type: 'TIMER_STATUS', body: lines.join('\n') });
 }
 
 // Listen for messages from Service Worker
@@ -1435,24 +1430,6 @@ if (navigator.serviceWorker) {
         if (!event.data) return;
         if (event.data.type === 'OPEN_SUMMARY') {
             switchView('summary');
-        }
-        if (event.data.type === 'TIMER_ACTION') {
-            const { timerId, action } = event.data;
-            if (timerId.startsWith('block_')) {
-                const level = timerId.replace('block_', '');
-                if (action === 'pause') pauseBlockTimer(level);
-                else if (action === 'resume') resumeBlockTimer(level);
-                else if (action === 'done') resetBlockTimer(level);
-            } else {
-                if (action === 'pause') pauseTaskTimer(timerId);
-                else if (action === 'resume') resumeTaskTimer(timerId);
-                else if (action === 'done') {
-                    const parts = timerId.split('_');
-                    const stationId = parseInt(parts[0]);
-                    const ingredientId = parseInt(parts[1]);
-                    confirmTaskComplete(stationId, ingredientId);
-                }
-            }
         }
     });
 }
