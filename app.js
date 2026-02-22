@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 133;
+const APP_BUILD = 134;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -726,9 +726,13 @@ function updateHeader() {
 
 function showDate() {
     const today = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    const d = days[today.getDay()];
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const yy = String(today.getFullYear()).slice(-2);
     const el = document.getElementById('dateDisplay');
-    if (el) el.textContent = today.toLocaleDateString('en-US', options);
+    if (el) el.textContent = `${d} ${mm}/${dd}/${yy}`;
 }
 
 // ==================== DATA PERSISTENCE ====================
