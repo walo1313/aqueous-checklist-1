@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 101;
+const APP_BUILD = 102;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -897,17 +897,141 @@ function renderDishIngredients(station, dish) {
 
 let longPressTimer = null;
 const expandedIngs = new Set();
+let dragState = null;
 
 function startLongPress(event, stationId, ingId, ingName) {
+    const station = stations.find(s => s.id === stationId);
+    const hasManyDishes = station && station.dishes && station.dishes.length > 1;
+
     longPressTimer = setTimeout(() => {
         longPressTimer = null;
         if (navigator.vibrate) navigator.vibrate(30);
-        showIngredientContextMenu(event, stationId, ingId, ingName);
+        if (hasManyDishes) {
+            startIngredientDrag(stationId, ingId, ingName, event);
+        } else {
+            showIngredientContextMenu(event, stationId, ingId, ingName);
+        }
     }, 500);
 }
 
 function cancelLongPress() {
     if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}
+
+function startIngredientDrag(stationId, ingId, ingName, event) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const sourceDish = findDishForIngredient(station, ingId);
+    if (!sourceDish) return;
+
+    const ingEl = document.getElementById(`ing-${stationId}-${ingId}`);
+    if (!ingEl) return;
+
+    const touch = event.touches ? event.touches[0] : event;
+    const rect = ingEl.getBoundingClientRect();
+
+    // Create ghost
+    const ghost = document.createElement('div');
+    ghost.id = 'dragGhost';
+    ghost.className = 'drag-ghost';
+    ghost.textContent = ingName;
+    ghost.style.left = (touch.clientX - 60) + 'px';
+    ghost.style.top = (touch.clientY - 20) + 'px';
+    document.body.appendChild(ghost);
+
+    // Dim original
+    ingEl.classList.add('dragging');
+
+    dragState = {
+        stationId,
+        ingId,
+        ingName,
+        sourceDishId: sourceDish.id,
+        ghost,
+        ingEl,
+        currentDropTarget: null
+    };
+
+    // Highlight all dish folders as potential drop zones
+    document.querySelectorAll(`.dish-folder[data-station-id="${stationId}"]`).forEach(df => {
+        if (parseInt(df.dataset.dishId) !== sourceDish.id) {
+            df.classList.add('drop-zone');
+        }
+    });
+
+    document.addEventListener('touchmove', handleDragMove, { passive: false });
+    document.addEventListener('touchend', handleDragEnd);
+    document.addEventListener('touchcancel', handleDragEnd);
+}
+
+function handleDragMove(e) {
+    if (!dragState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    dragState.ghost.style.left = (touch.clientX - 60) + 'px';
+    dragState.ghost.style.top = (touch.clientY - 20) + 'px';
+
+    // Detect drop target
+    const folders = document.querySelectorAll(`.dish-folder[data-station-id="${dragState.stationId}"]`);
+    let found = null;
+    folders.forEach(df => {
+        const r = df.getBoundingClientRect();
+        if (touch.clientX >= r.left && touch.clientX <= r.right && touch.clientY >= r.top && touch.clientY <= r.bottom) {
+            if (parseInt(df.dataset.dishId) !== dragState.sourceDishId) {
+                found = df;
+            }
+        }
+    });
+
+    if (dragState.currentDropTarget && dragState.currentDropTarget !== found) {
+        dragState.currentDropTarget.classList.remove('drop-target');
+    }
+    if (found) {
+        found.classList.add('drop-target');
+    }
+    dragState.currentDropTarget = found;
+}
+
+function handleDragEnd(e) {
+    if (!dragState) return;
+
+    document.removeEventListener('touchmove', handleDragMove);
+    document.removeEventListener('touchend', handleDragEnd);
+    document.removeEventListener('touchcancel', handleDragEnd);
+
+    // Clean up visual
+    if (dragState.ghost) dragState.ghost.remove();
+    if (dragState.ingEl) dragState.ingEl.classList.remove('dragging');
+    document.querySelectorAll('.drop-zone, .drop-target').forEach(el => {
+        el.classList.remove('drop-zone', 'drop-target');
+    });
+
+    // Execute move if dropped on valid target
+    if (dragState.currentDropTarget) {
+        const targetDishId = parseInt(dragState.currentDropTarget.dataset.dishId);
+        moveIngredientToDish(dragState.stationId, dragState.sourceDishId, targetDishId, dragState.ingId);
+    }
+
+    dragState = null;
+}
+
+function moveIngredientToDish(stationId, fromDishId, toDishId, ingredientId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const fromDish = station.dishes.find(d => d.id === fromDishId);
+    const toDish = station.dishes.find(d => d.id === toDishId);
+    if (!fromDish || !toDish) return;
+
+    const ingIdx = fromDish.ingredients.findIndex(i => i.id === ingredientId);
+    if (ingIdx === -1) return;
+
+    const [ing] = fromDish.ingredients.splice(ingIdx, 1);
+    toDish.ingredients.push(ing);
+
+    saveData(true);
+    rerenderStationBody(stationId);
+    showToast(`Moved to ${toDish.name}`);
 }
 
 function showIngredientContextMenu(event, stationId, ingId, ingName) {
