@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 120;
+const APP_BUILD = 121;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -216,11 +216,11 @@ function clockOut() {
     overlay.className = 'time-picker-overlay';
     overlay.innerHTML = `
         <div class="time-picker-panel">
-            <div class="tp-title">End Shift?</div>
-            <p style="font-size:13px;color:var(--text-secondary);margin:16px 0 24px;line-height:1.4;">Clock out and clear shift time?</p>
+            <div class="tp-title">Stop Timer?</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin:16px 0 24px;line-height:1.4;">You want to stop timer?</p>
             <div class="tp-actions">
-                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">Cancel</button>
-                <button class="tp-btn tp-save" onclick="confirmClockOut()">Clock Out</button>
+                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">No</button>
+                <button class="tp-btn tp-save" onclick="confirmClockOut()">Yes</button>
             </div>
         </div>`;
     document.body.appendChild(overlay);
@@ -1018,7 +1018,7 @@ function renderHome(container) {
             </div>
             <div class="home-timer-row">
                 <button class="timer-toggle-btn ${timerOn ? 'on' : ''}" onclick="${timerOn ? 'clockOut()' : 'clockIn()'}">
-                    Timer ${timerOn ? 'ON' : 'OFF'}
+                    Start Prep
                 </button>
                 <span class="countdown-label" id="countdownLabel">${timerOn ? '' : ''}</span>
             </div>
