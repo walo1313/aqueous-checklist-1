@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 124;
+const APP_BUILD = 125;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -16,9 +16,9 @@ let stations = [];
 let editingStationId = null;
 let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
 let homeSubTab = localStorage.getItem('aqueous_homeSubTab') || 'stations';
-let mlDayStates = {}; // { "YYYY-MM-DD_stationId_ingId": { struck: bool } }
+let dayChecklists = {}; // { "YYYY-MM-DD": [{ stationId, ingredientId, name, stationName, priority, parQty, parUnit, parDepth, struck, timeEstimate }] }
 let history = [];
-let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
+let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true, activeDay: null };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
 let ingredientDefaults = {}; // { "ingredientname": { qty: N, unit: "quart" } }
 let taskTemplates = {}; // { "ingredientname": { activeFixedSeconds, activeSecondsPerUnit, passiveFixedSeconds, passiveSecondsPerUnit, lastUpdatedAt, calibratedBy, templateVersion } }
@@ -591,8 +591,11 @@ function dismissInstall() {
 
 function initApp() {
     loadData();
-    mlLoadDayStates();
+    loadDayChecklists();
+    migrateMlDayStates();
     processCarryOver();
+    cleanOldDayChecklists();
+    if (!dayChecklists[getActiveDay()]) dayChecklists[getActiveDay()] = [];
     updateHeader();
 
     // Check URL params (e.g. opened from notification)
@@ -862,21 +865,47 @@ function processCarryOver() {
     const lastDate = localStorage.getItem('aqueous_last_date');
 
     if (lastDate && lastDate !== today) {
-        // Save yesterday's snapshot to history
         saveSnapshotToHistory(lastDate);
 
-        // Carry over uncompleted items: increase priority to high
-        stations.forEach(station => {
-            getAllIngredients(station).forEach(ing => {
-                const st = station.status[ing.id];
-                if (st && st.low && !st.completed) {
-                    st.priority = 'high';
+        // Auto-close yesterday's day checklist
+        const yesterdayKey = new Date(lastDate).toISOString().slice(0, 10);
+        if (dayChecklists[yesterdayKey] && dayChecklists[yesterdayKey].length > 0) {
+            const list = dayChecklists[yesterdayKey];
+            const nextDay = getTodayKey();
+
+            list.filter(x => x.struck).forEach(item => {
+                const station = stations.find(s => s.id === item.stationId);
+                if (station && station.status[item.ingredientId]) {
+                    station.status[item.ingredientId].completed = false;
+                    station.status[item.ingredientId].priority = null;
+                    station.status[item.ingredientId].low = false;
                 }
-                if (st) st.completed = false;
             });
-        });
+
+            const carryOver = list.filter(x => !x.struck).map(item => ({
+                ...item, priority: 'high', struck: false
+            }));
+            if (!dayChecklists[nextDay]) dayChecklists[nextDay] = [];
+            carryOver.forEach(item => {
+                const exists = dayChecklists[nextDay].findIndex(
+                    x => x.stationId === item.stationId && x.ingredientId === item.ingredientId
+                );
+                if (exists >= 0) dayChecklists[nextDay][exists] = item;
+                else dayChecklists[nextDay].push(item);
+            });
+
+            dayChecklists[yesterdayKey] = [];
+            saveDayChecklists();
+        }
+
         saveData(true);
         cleanOldHistory();
+    }
+
+    // Reset activeDay to today on new day
+    if (settings.activeDay && settings.activeDay < getTodayKey()) {
+        settings.activeDay = null;
+        saveSettings();
     }
 
     localStorage.setItem('aqueous_last_date', today);
@@ -1094,6 +1123,13 @@ function renderHome(container) {
                 <button class="home-tab-btn ${homeSubTab === 'master' ? 'active' : ''}" onclick="switchHomeSubTab('master')">Master List</button>
             </div>
             ${homeSubTab === 'master' ? `
+            <div class="day-selector-row">
+                <button class="day-chip ${getActiveDay() === getTodayKey() ? 'active' : ''}" onclick="setActiveDay(null)">Today</button>
+                <button class="day-chip ${getActiveDay() === getNextDayKey(getTodayKey()) ? 'active' : ''}" onclick="setActiveDay('${getNextDayKey(getTodayKey())}')">Tomorrow</button>
+                <button class="day-chip day-chip-pick" onclick="showDayPicker()">📅</button>
+                <button class="close-day-btn" onclick="confirmCloseDay()">Close Day</button>
+                <span class="day-label">${formatDayLabel(getActiveDay())}</span>
+            </div>
             <div class="home-timer-row">
                 <span class="timer-label">Timer</span>
                 <span class="countdown-label" id="countdownLabel"></span>
@@ -1162,42 +1198,217 @@ function renderStationsView() {
     return html;
 }
 
-// ── Master List Day States (strike only, per day) ──
+// ── Day Checklists (per-day independent checklists) ──
 
-function mlGetDateKey() {
-    return new Date().toISOString().slice(0, 10);
-}
+function migrateMlDayStates() {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    if (dayChecklists[todayKey] && dayChecklists[todayKey].length > 0) return;
 
-function mlLoadDayStates() {
-    const dateKey = mlGetDateKey();
-    const saved = localStorage.getItem('aqueous_mlDayStates');
-    if (saved) {
-        const all = JSON.parse(saved);
-        mlDayStates = {};
-        Object.entries(all).forEach(([k, v]) => {
-            if (k.startsWith(dateKey + '_')) mlDayStates[k] = v;
+    // Build today's checklist from station.status + old mlDayStates
+    const oldSaved = localStorage.getItem('aqueous_mlDayStates');
+    const oldStates = oldSaved ? JSON.parse(oldSaved) : {};
+    const items = [];
+
+    stations.forEach(station => {
+        getAllIngredients(station).forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st || !st.low || !st.priority) return;
+            const oldKey = `${todayKey}_${station.id}_${ing.id}`;
+            const wasStruck = oldStates[oldKey] ? oldStates[oldKey].struck : false;
+            items.push({
+                stationId: station.id,
+                ingredientId: ing.id,
+                name: ing.name,
+                stationName: station.name,
+                priority: st.priority,
+                parQty: st.parQty,
+                parUnit: st.parUnit,
+                parDepth: st.parDepth,
+                struck: wasStruck,
+                timeEstimate: null
+            });
         });
-    } else {
-        mlDayStates = {};
+    });
+
+    if (items.length > 0) {
+        dayChecklists[todayKey] = items;
+        saveDayChecklists();
     }
 }
 
-function mlSaveDayStates() {
-    const dateKey = mlGetDateKey();
-    const toSave = {};
-    Object.entries(mlDayStates).forEach(([k, v]) => {
-        if (k.startsWith(dateKey + '_')) toSave[k] = v;
+function getTodayKey() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function getNextDayKey(dateKey) {
+    const d = new Date(dateKey + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+}
+
+function getActiveDay() {
+    return settings.activeDay || getTodayKey();
+}
+
+function formatDayLabel(dateKey) {
+    const today = getTodayKey();
+    const tomorrow = getNextDayKey(today);
+    if (dateKey === today) return 'Today';
+    if (dateKey === tomorrow) return 'Tomorrow';
+    const d = new Date(dateKey + 'T12:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function loadDayChecklists() {
+    const saved = localStorage.getItem('aqueous_dayChecklists');
+    dayChecklists = saved ? JSON.parse(saved) : {};
+}
+
+function saveDayChecklists() {
+    localStorage.setItem('aqueous_dayChecklists', JSON.stringify(dayChecklists));
+}
+
+function cleanOldDayChecklists() {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffKey = cutoff.toISOString().slice(0, 10);
+    Object.keys(dayChecklists).forEach(key => {
+        if (key < cutoffKey) delete dayChecklists[key];
     });
-    localStorage.setItem('aqueous_mlDayStates', JSON.stringify(toSave));
+    saveDayChecklists();
 }
 
-function mlStateKey(stationId, ingredientId) {
-    return `${mlGetDateKey()}_${stationId}_${ingredientId}`;
+function syncItemToChecklist(stationId, ingredientId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const st = station.status[ingredientId];
+    const ing = getAllIngredients(station).find(i => i.id === ingredientId);
+    if (!ing) return;
+    const day = getActiveDay();
+    if (!dayChecklists[day]) dayChecklists[day] = [];
+    const list = dayChecklists[day];
+    const idx = list.findIndex(x => x.stationId === stationId && x.ingredientId === ingredientId);
+
+    if (st && st.low && st.priority) {
+        const item = {
+            stationId, ingredientId,
+            name: ing.name,
+            stationName: station.name,
+            priority: st.priority,
+            parQty: st.parQty,
+            parUnit: st.parUnit,
+            parDepth: st.parDepth,
+            struck: idx >= 0 ? list[idx].struck : false,
+            timeEstimate: getTimeForMasterList(ing.name, st.parQty, st.parUnit, st.parDepth)
+        };
+        if (idx >= 0) list[idx] = item;
+        else list.push(item);
+    } else {
+        if (idx >= 0) list.splice(idx, 1);
+    }
+    saveDayChecklists();
 }
 
-function mlIsStruck(stationId, ingredientId) {
-    const ds = mlDayStates[mlStateKey(stationId, ingredientId)];
-    return ds ? ds.struck : false;
+function setActiveDay(dateKey) {
+    handleClick();
+    settings.activeDay = dateKey;
+    saveSettings();
+    if (!dayChecklists[getActiveDay()]) {
+        dayChecklists[getActiveDay()] = [];
+    }
+    panelDirty.home = true;
+    renderPanel('home');
+}
+
+function showDayPicker() {
+    handleClick();
+    const overlay = document.createElement('div');
+    overlay.className = 'time-picker-overlay';
+    overlay.id = 'dayPickerOverlay';
+    overlay.innerHTML = `
+        <div class="time-picker-panel">
+            <div class="tp-title">Pick a Day</div>
+            <input type="date" id="dayPickerInput" value="${getActiveDay()}"
+                style="width:100%;font-size:16px;padding:12px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);margin:16px 0;">
+            <div class="tp-actions">
+                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">Cancel</button>
+                <button class="tp-btn tp-save" onclick="confirmDayPick()">Set</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+}
+
+function confirmDayPick() {
+    const input = document.getElementById('dayPickerInput');
+    if (input && input.value) {
+        setActiveDay(input.value);
+    }
+    closeTimePicker();
+}
+
+function confirmCloseDay() {
+    handleClick();
+    const overlay = document.createElement('div');
+    overlay.className = 'time-picker-overlay';
+    overlay.innerHTML = `
+        <div class="time-picker-panel">
+            <div class="tp-title">Close Day?</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin:16px 0;line-height:1.4;">
+                Completed items will be archived. Pending items carry over to tomorrow with high priority.
+            </p>
+            <div class="tp-actions">
+                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">Cancel</button>
+                <button class="tp-btn tp-save" onclick="closeDay()">Close Day</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+}
+
+function closeDay() {
+    const day = getActiveDay();
+    const list = dayChecklists[day] || [];
+    const nextDay = getNextDayKey(day);
+
+    list.filter(x => x.struck).forEach(item => {
+        logActivity('task_complete', {
+            ingredient: item.name,
+            station: item.stationName,
+            seconds: 0, quantity: 0, secPerUnit: 0
+        });
+        const station = stations.find(s => s.id === item.stationId);
+        if (station && station.status[item.ingredientId]) {
+            station.status[item.ingredientId].completed = false;
+            station.status[item.ingredientId].priority = null;
+            station.status[item.ingredientId].low = false;
+        }
+    });
+
+    const carryOver = list.filter(x => !x.struck).map(item => ({
+        ...item,
+        priority: 'high',
+        struck: false
+    }));
+
+    if (!dayChecklists[nextDay]) dayChecklists[nextDay] = [];
+    carryOver.forEach(item => {
+        const exists = dayChecklists[nextDay].findIndex(
+            x => x.stationId === item.stationId && x.ingredientId === item.ingredientId
+        );
+        if (exists >= 0) {
+            dayChecklists[nextDay][exists] = item;
+        } else {
+            dayChecklists[nextDay].push(item);
+        }
+    });
+
+    dayChecklists[day] = [];
+    saveDayChecklists();
+    saveData(true);
+
+    closeTimePicker();
+    setActiveDay(day === getTodayKey() ? null : nextDay);
 }
 
 // ── Master List Interactions ──
@@ -1206,16 +1417,14 @@ let mlSwipeState = null;
 
 function mlToggleStrike(stationId, ingredientId) {
     handleClick();
-    const key = mlStateKey(stationId, ingredientId);
-    const isStruck = mlIsStruck(stationId, ingredientId);
-    if (!isStruck) {
-        mlDayStates[key] = { struck: true };
-    } else {
-        delete mlDayStates[key];
-    }
-    mlSaveDayStates();
+    const day = getActiveDay();
+    const list = dayChecklists[day] || [];
+    const item = list.find(x => x.stationId === stationId && x.ingredientId === ingredientId);
+    if (!item) return;
+    item.struck = !item.struck;
+    saveDayChecklists();
     const row = document.getElementById(`ml-${stationId}-${ingredientId}`);
-    if (row) row.classList.toggle('ml-struck', !isStruck);
+    if (row) row.classList.toggle('ml-struck', item.struck);
 }
 
 function mlSwipeStart(e, stationId, ingredientId) {
@@ -1332,7 +1541,6 @@ function mlDeleteItem(stationId, ingredientId) {
         station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
     });
 
-    // Auto-clean station data
     if (st) {
         const pLevel = st.priority || 'none';
         st.completed = false;
@@ -1344,10 +1552,12 @@ function mlDeleteItem(stationId, ingredientId) {
         refreshSummaryPanel();
     }
 
-    // Remove strike state if any
-    const key = mlStateKey(stationId, ingredientId);
-    delete mlDayStates[key];
-    mlSaveDayStates();
+    // Remove from day checklist
+    const day = getActiveDay();
+    const list = dayChecklists[day] || [];
+    const idx = list.findIndex(x => x.stationId === stationId && x.ingredientId === ingredientId);
+    if (idx >= 0) list.splice(idx, 1);
+    saveDayChecklists();
 
     panelDirty.home = true;
     renderPanel('home');
@@ -1363,40 +1573,10 @@ function getTimeForMasterList(ingName, parQty, parUnit, parDepth) {
 }
 
 function renderMasterListView() {
-    mlLoadDayStates();
+    const day = getActiveDay();
+    const items = dayChecklists[day] || [];
 
-    // Collect active items grouped by station
-    const stationGroups = [];
-    stations.forEach(station => {
-        const items = [];
-        getAllIngredients(station).forEach(ing => {
-            const st = station.status[ing.id];
-            if (!st || !st.low || !st.priority) return;
-            items.push({
-                stationId: station.id,
-                ingredientId: ing.id,
-                name: ing.name,
-                priority: st.priority,
-                parQty: st.parQty,
-                parUnit: st.parUnit,
-                parDepth: st.parDepth,
-                struck: mlIsStruck(station.id, ing.id),
-                timeEstimate: getTimeForMasterList(ing.name, st.parQty, st.parUnit, st.parDepth)
-            });
-        });
-        if (items.length > 0) {
-            const priOrder = { high: 0, medium: 1, low: 2 };
-            items.sort((a, b) => {
-                const pa = priOrder[a.priority] ?? 3;
-                const pb = priOrder[b.priority] ?? 3;
-                if (pa !== pb) return pa - pb;
-                return a.name.localeCompare(b.name);
-            });
-            stationGroups.push({ name: station.name, items });
-        }
-    });
-
-    if (stationGroups.length === 0) {
+    if (items.length === 0) {
         return `
             <div class="empty-state">
                 <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">All clear</p>
@@ -1404,12 +1584,22 @@ function renderMasterListView() {
             </div>`;
     }
 
+    const groups = {};
+    items.forEach(item => {
+        if (!groups[item.stationName]) groups[item.stationName] = [];
+        groups[item.stationName].push(item);
+    });
+
+    const priOrder = { high: 0, medium: 1, low: 2 };
     let html = '';
-    stationGroups.forEach(group => {
-        html += `<div class="ml-station-label">${group.name}</div>`;
-        group.items.forEach(item => {
-            html += mlRenderRow(item);
+    Object.keys(groups).forEach(stationName => {
+        const sorted = groups[stationName].sort((a, b) => {
+            const pa = priOrder[a.priority] ?? 3;
+            const pb = priOrder[b.priority] ?? 3;
+            return pa !== pb ? pa - pb : a.name.localeCompare(b.name);
         });
+        html += `<div class="ml-station-label">${stationName}</div>`;
+        sorted.forEach(item => { html += mlRenderRow(item); });
     });
 
     return html;
@@ -2384,6 +2574,7 @@ function cyclePriority(stationId, ingredientId) {
     if (!st.low) st.completed = false;
 
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
     rerenderStationBody(stationId);
 }
 
@@ -2399,6 +2590,7 @@ function setPriority(stationId, ingredientId, priority) {
     if (!st.low) st.completed = false;
 
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
     rerenderStationBody(stationId);
 }
 

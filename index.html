@@ -246,6 +246,57 @@
             border: 1.5px solid rgba(255,106,26,0.25);
         }
         .home-tab-btn:active { transform: scale(0.95); }
+        .day-selector-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .day-selector-row::-webkit-scrollbar { display: none; }
+        .day-chip {
+            flex-shrink: 0;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text-muted);
+            border: none;
+            cursor: pointer;
+        }
+        .day-chip.active {
+            box-shadow: var(--neu-inset);
+            color: var(--accent);
+            background: var(--accent-tint);
+        }
+        .day-chip-pick {
+            padding: 6px 10px;
+            font-size: 14px;
+        }
+        .day-chip:active { transform: scale(0.95); }
+        .close-day-btn {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            background: var(--surface);
+            border: none;
+            padding: 4px 12px;
+            border-radius: 20px;
+            box-shadow: var(--neu-shadow-sm);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .close-day-btn:active { transform: scale(0.95); }
+        .day-label {
+            flex: 1;
+            text-align: right;
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--text-muted);
+        }
         .home-timer-row {
             display: flex;
             align-items: center;
