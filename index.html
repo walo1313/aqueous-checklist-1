@@ -240,164 +240,70 @@
         /* ===== MASTER LIST VIEW ===== */
         .master-list-header {
             text-align: center;
-            padding: 8px 0 16px;
+            padding: 4px 0 10px;
         }
         .master-list-title {
-            font-size: 28px;
+            font-size: 26px;
             font-weight: 900;
             letter-spacing: 4px;
             color: var(--text);
         }
         .master-list-date {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
             color: var(--text-muted);
             margin-top: 2px;
         }
-        .master-list-sub {
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--text-muted);
-            margin-top: 4px;
-            opacity: 0.7;
-        }
         .ml-station-label {
-            font-size: 11px;
+            font-size: 13px;
             font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-            padding: 14px 4px 6px;
-            border-bottom: 1.5px solid var(--accent);
-            margin-bottom: 4px;
+            color: var(--accent);
+            padding: 12px 4px 4px;
         }
         .ml-row {
-            position: relative;
-            min-height: 54px;
-            border-radius: var(--radius);
-            margin-bottom: 6px;
-            overflow: hidden;
-        }
-        .ml-row-bg {
-            position: absolute;
-            inset: 0;
-            background: var(--accent);
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding-left: 18px;
-            color: white;
-            font-size: 14px;
-            font-weight: 700;
-            border-radius: var(--radius);
-        }
-        .ml-row-slider {
-            position: relative;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 12px;
-            min-height: 54px;
+            gap: 10px;
+            padding: 10px 12px;
+            min-height: 44px;
             background: var(--surface);
             border-radius: var(--radius);
             box-shadow: var(--neu-shadow-sm);
-            z-index: 1;
+            margin-bottom: 4px;
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: pan-y;
-            transition: transform 0.25s ease;
+            touch-action: pan-x;
+            transition: transform 0.25s ease, opacity 0.25s ease;
         }
-        .ml-row-slider:active { background: var(--bg); }
-        .ml-row .priority-dot {
-            flex-shrink: 0;
-        }
+        .ml-row:active { background: var(--bg); }
+        .ml-row .priority-dot { flex-shrink: 0; }
         .ml-name {
             flex: 1;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--text);
             transition: all 0.15s;
         }
         .ml-qty {
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             color: var(--text-secondary);
             white-space: nowrap;
             flex-shrink: 0;
             transition: opacity 0.15s;
         }
-        /* Struck state */
         .ml-row.ml-struck .ml-name {
             text-decoration: line-through;
-            opacity: 0.5;
+            opacity: 0.45;
         }
-        .ml-row.ml-struck .ml-qty {
-            opacity: 0.4;
+        .ml-row.ml-struck .ml-qty { opacity: 0.35; }
+        .ml-row.ml-swipe-delete {
+            background: #C62828;
         }
-        /* Swipe commit threshold visual */
-        .ml-row.ml-swipe-commit .ml-row-bg {
-            background: #2E7D32;
-        }
-        /* Done Today section */
-        .ml-done-section {
-            margin-top: 20px;
-        }
-        .ml-done-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 4px;
-            cursor: pointer;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        .ml-done-toggle {
-            font-size: 12px;
-            color: var(--text-muted);
-            width: 14px;
-        }
-        .ml-done-title {
-            font-size: 12px;
-            font-weight: 800;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-muted);
-        }
-        .ml-done-count {
-            font-size: 11px;
-            font-weight: 700;
-            background: var(--bg);
-            color: var(--text-muted);
-            padding: 2px 8px;
-            border-radius: 10px;
-            box-shadow: var(--neu-inset);
-        }
-        .ml-done-body.collapsed { display: none; }
-        .ml-row-done {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 12px;
-            min-height: 44px;
-            background: var(--surface);
-            border-radius: var(--radius);
-            box-shadow: var(--neu-shadow-sm);
-            margin-bottom: 6px;
-        }
-        .ml-undo-btn {
-            border: none;
-            background: var(--bg);
-            box-shadow: var(--neu-shadow-sm);
-            color: var(--accent);
-            font-size: 11px;
-            font-weight: 700;
-            padding: 6px 14px;
-            border-radius: 8px;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .ml-undo-btn:active { box-shadow: var(--neu-inset); transform: scale(0.9); }
+        .ml-row.ml-swipe-delete .ml-name,
+        .ml-row.ml-swipe-delete .ml-qty,
+        .ml-row.ml-swipe-delete .priority-dot { opacity: 0.5; }
 
         /* ===== GLASS CARDS ===== */
         .glass-card {
