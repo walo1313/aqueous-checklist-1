@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 135;
+const APP_BUILD = 136;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2325,7 +2325,7 @@ function renderDishIngredients(station, dish) {
                  onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
-                 oncontextmenu="event.preventDefault(); event.stopPropagation(); showTimingModal(${station.id}, ${ing.id}, '${escapedIngName}')">
+                 oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
                 ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
                 ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
                 <span class="ingredient-name" onclick="inlineEditIngName(event, ${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
@@ -2385,11 +2385,18 @@ const expandedIngs = new Set();
 let dragState = null;
 
 function startLongPress(event, stationId, ingId, ingName) {
+    const station = stations.find(s => s.id === stationId);
+    const hasManyDishes = station && station.dishes && station.dishes.length > 1;
+
     longPressTimer = setTimeout(() => {
         longPressTimer = null;
         if (navigator.vibrate) navigator.vibrate(30);
-        showTimingModal(stationId, ingId, ingName);
-    }, 600);
+        if (hasManyDishes) {
+            startIngredientDrag(stationId, ingId, ingName, event);
+        } else {
+            showIngredientContextMenu(event, stationId, ingId, ingName);
+        }
+    }, 500);
 }
 
 function cancelLongPress() {
@@ -2528,12 +2535,16 @@ function showIngredientContextMenu(event, stationId, ingId, ingName) {
     menu.innerHTML = `
         <div class="context-menu">
             <div class="context-menu-title">${ingName}</div>
+            <button class="context-menu-item" onclick="document.getElementById('ingredientContextMenu').remove(); showTimingModal(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Timing
+            </button>
             <button class="context-menu-item" onclick="editIngredientFromHome(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                Edit
+                Rename
             </button>
             <button class="context-menu-item" onclick="startCalibration(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
                 Calibrate
             </button>
             <button class="context-menu-item delete" onclick="deleteIngredientFromHome(${stationId}, ${ingId})">
