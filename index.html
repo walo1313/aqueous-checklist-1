@@ -989,72 +989,148 @@
         }
         .summary-time-controls {
             display: flex;
-            gap: 12px;
-            justify-content: center;
+            gap: 10px;
             margin-bottom: 14px;
         }
-        .summary-time-picker {
+        .stp-tap {
             flex: 1;
-            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 8px;
+            background: var(--bg);
+            border-radius: 12px;
+            box-shadow: var(--neu-inset);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
         }
+        .stp-tap:active { opacity: 0.7; }
         .stp-label {
-            display: block;
             font-size: 10px;
             font-weight: 800;
             letter-spacing: 1.5px;
             color: var(--text-muted);
-            margin-bottom: 6px;
         }
-        .stp-clock {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 2px;
-            background: var(--bg);
-            border-radius: 14px;
-            box-shadow: var(--neu-inset);
-            padding: 8px 6px;
-        }
-        .stp-col {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 2px;
-        }
-        .stp-arrow {
-            border: none;
-            background: transparent;
-            color: var(--accent);
-            font-size: 10px;
-            padding: 4px 8px;
-            cursor: pointer;
-            line-height: 1;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .stp-arrow:active { opacity: 0.5; }
-        .stp-digit {
-            font-size: 28px;
+        .stp-time {
+            font-size: 22px;
             font-weight: 900;
             color: var(--text);
             font-variant-numeric: tabular-nums;
-            min-width: 32px;
+        }
+
+        /* Time Picker Overlay */
+        .time-picker-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .time-picker-overlay.open { opacity: 1; }
+        .time-picker-panel {
+            background: var(--surface);
+            border-radius: 20px;
+            padding: 28px 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 280px;
+            text-align: center;
+        }
+        .tp-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+        .tp-scroll-area {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 24px;
+        }
+        .tp-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+        .tp-arrow {
+            border: none;
+            background: var(--bg);
+            color: var(--accent);
+            font-size: 14px;
+            width: 48px;
+            height: 36px;
+            border-radius: 10px;
+            box-shadow: var(--neu-shadow-sm);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tp-arrow:active { box-shadow: var(--neu-inset); transform: scale(0.92); }
+        .tp-digit {
+            font-size: 48px;
+            font-weight: 900;
+            color: var(--text);
+            font-variant-numeric: tabular-nums;
+            min-width: 52px;
             text-align: center;
             line-height: 1;
         }
-        .stp-sep {
-            font-size: 24px;
+        .tp-sep {
+            font-size: 40px;
             font-weight: 900;
             color: var(--text-muted);
-            padding: 0 1px;
+            padding: 0 2px;
             align-self: center;
         }
-        .stp-ampm {
-            font-size: 11px;
+        .tp-ampm-btn {
+            font-size: 16px;
+            font-weight: 900;
+            color: white;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            padding: 8px 14px;
+            margin-left: 8px;
+            cursor: pointer;
+            align-self: center;
+            box-shadow: 0 2px 8px var(--accent-glow);
+        }
+        .tp-ampm-btn:active { transform: scale(0.9); }
+        .tp-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .tp-btn {
+            flex: 1;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 0;
+            font-size: 15px;
             font-weight: 800;
-            color: var(--accent);
-            margin-left: 4px;
-            align-self: center;
+            cursor: pointer;
         }
+        .tp-cancel {
+            background: var(--bg);
+            color: var(--text-muted);
+            box-shadow: var(--neu-shadow-sm);
+        }
+        .tp-save {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 2px 10px var(--accent-glow);
+        }
+        .tp-btn:active { transform: scale(0.95); }
 
         /* Feasibility Banner */
         .feasibility-banner {

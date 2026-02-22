@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 111;
+const APP_BUILD = 112;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -189,21 +189,82 @@ function formatTimeAmPm(timeStr) {
     return { h: String(h12), m: String(mm).padStart(2, '0'), ampm };
 }
 
-function summaryTimeScroll(field, part, delta) {
+function openTimePicker(field) {
     handleClick();
     const current = settings[field] || '12:00';
     let [hh, mm] = current.split(':').map(Number);
+    const label = field === 'shiftStart' ? 'Shift Start' : 'Service Start';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'time-picker-overlay';
+    overlay.innerHTML = `
+        <div class="time-picker-panel">
+            <div class="tp-title">${label}</div>
+            <div class="tp-scroll-area">
+                <div class="tp-col">
+                    <button class="tp-arrow" onclick="tpAdjust('h',1)">&#9650;</button>
+                    <span class="tp-digit" id="tpHour">${hh === 0 ? 12 : (hh > 12 ? hh - 12 : hh)}</span>
+                    <button class="tp-arrow" onclick="tpAdjust('h',-1)">&#9660;</button>
+                </div>
+                <span class="tp-sep">:</span>
+                <div class="tp-col">
+                    <button class="tp-arrow" onclick="tpAdjust('m',1)">&#9650;</button>
+                    <span class="tp-digit" id="tpMin">${String(mm).padStart(2,'0')}</span>
+                    <button class="tp-arrow" onclick="tpAdjust('m',-1)">&#9660;</button>
+                </div>
+                <button class="tp-ampm-btn" id="tpAmpm" onclick="tpToggleAmPm()">${hh >= 12 ? 'PM' : 'AM'}</button>
+            </div>
+            <div class="tp-actions">
+                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">Cancel</button>
+                <button class="tp-btn tp-save" onclick="saveTimePicker()">Set</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+
+    window._tpField = field;
+    window._tpH = hh;
+    window._tpM = mm;
+}
+
+function tpAdjust(part, delta) {
+    handleClick();
     if (part === 'h') {
-        hh = (hh + delta + 24) % 24;
+        window._tpH = (window._tpH + delta + 24) % 24;
     } else {
-        mm = mm + delta * 15;
-        if (mm >= 60) { mm = 0; hh = (hh + 1) % 24; }
-        if (mm < 0) { mm = 45; hh = (hh - 1 + 24) % 24; }
+        window._tpM += delta * 5;
+        if (window._tpM >= 60) { window._tpM = 0; window._tpH = (window._tpH + 1) % 24; }
+        if (window._tpM < 0) { window._tpM = 55; window._tpH = (window._tpH - 1 + 24) % 24; }
     }
-    settings[field] = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+    const h = window._tpH;
+    document.getElementById('tpHour').textContent = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+    document.getElementById('tpMin').textContent = String(window._tpM).padStart(2, '0');
+    document.getElementById('tpAmpm').textContent = h >= 12 ? 'PM' : 'AM';
+}
+
+function tpToggleAmPm() {
+    handleClick();
+    window._tpH = (window._tpH + 12) % 24;
+    document.getElementById('tpAmpm').textContent = window._tpH >= 12 ? 'PM' : 'AM';
+    const h = window._tpH;
+    document.getElementById('tpHour').textContent = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+}
+
+function saveTimePicker() {
+    handleClick();
+    settings[window._tpField] = `${String(window._tpH).padStart(2,'0')}:${String(window._tpM).padStart(2,'0')}`;
     autoCalcPrepWindow();
     saveSettings();
+    closeTimePicker();
     refreshSummaryPanel();
+}
+
+function closeTimePicker() {
+    const overlay = document.querySelector('.time-picker-overlay');
+    if (overlay) {
+        overlay.classList.remove('open');
+        setTimeout(() => overlay.remove(), 200);
+    }
 }
 
 function toggleSummaryStation(stationId) {
@@ -2390,43 +2451,19 @@ function renderSummary(container) {
 
     const shiftT = formatTimeAmPm(settings.shiftStart);
     const serviceT = formatTimeAmPm(settings.serviceTime);
+    const shiftDisplay = settings.shiftStart ? `${shiftT.h}:${shiftT.m} ${shiftT.ampm}` : 'Set';
+    const serviceDisplay = settings.serviceTime ? `${serviceT.h}:${serviceT.m} ${serviceT.ampm}` : 'Set';
 
     let html = `
         <div class="summary-header-card">
             <div class="summary-time-controls">
-                <div class="summary-time-picker">
+                <div class="stp-tap" onclick="openTimePicker('shiftStart')">
                     <span class="stp-label">SHIFT</span>
-                    <div class="stp-clock">
-                        <div class="stp-col">
-                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','h',1)">&#9650;</button>
-                            <span class="stp-digit">${shiftT.h}</span>
-                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','h',-1)">&#9660;</button>
-                        </div>
-                        <span class="stp-sep">:</span>
-                        <div class="stp-col">
-                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','m',1)">&#9650;</button>
-                            <span class="stp-digit">${shiftT.m}</span>
-                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','m',-1)">&#9660;</button>
-                        </div>
-                        <span class="stp-ampm">${shiftT.ampm}</span>
-                    </div>
+                    <span class="stp-time">${shiftDisplay}</span>
                 </div>
-                <div class="summary-time-picker">
+                <div class="stp-tap" onclick="openTimePicker('serviceTime')">
                     <span class="stp-label">SERVICE</span>
-                    <div class="stp-clock">
-                        <div class="stp-col">
-                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','h',1)">&#9650;</button>
-                            <span class="stp-digit">${serviceT.h}</span>
-                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','h',-1)">&#9660;</button>
-                        </div>
-                        <span class="stp-sep">:</span>
-                        <div class="stp-col">
-                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','m',1)">&#9650;</button>
-                            <span class="stp-digit">${serviceT.m}</span>
-                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','m',-1)">&#9660;</button>
-                        </div>
-                        <span class="stp-ampm">${serviceT.ampm}</span>
-                    </div>
+                    <span class="stp-time">${serviceDisplay}</span>
                 </div>
             </div>
             <div class="progress-info">
