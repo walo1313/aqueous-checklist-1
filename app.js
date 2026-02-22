@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 114;
+const APP_BUILD = 115;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2540,10 +2540,6 @@ function renderSummary(container) {
         return;
     }
 
-    const completedCount = allTasks.filter(t => t.status.completed).length;
-    const totalCount = allTasks.length;
-    const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
     const shiftOn = !!settings.shiftStart;
     const shiftDisplay = formatTimeAmPm(settings.shiftStart);
     const serviceDisplay = formatTimeAmPm(settings.serviceTime);
@@ -2568,11 +2564,7 @@ function renderSummary(container) {
                 <span class="countdown-label" id="countdownLabel">${shiftOn ? '' : 'Clock in to start'}</span>
             </div>
             <div class="countdown-bar-container">
-                <div class="countdown-bar" id="countdownBar" style="width: ${shiftOn ? '100' : '100'}%"></div>
-            </div>
-            <div class="progress-info">
-                <span class="progress-text">${completedCount}/${totalCount} done</span>
-                <span class="progress-percent">${progress}%</span>
+                <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
             </div>
         </div>`;
 
