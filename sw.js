@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v122';
+const CACHE_NAME = 'aqueous-v123';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -102,18 +102,46 @@ self.addEventListener('message', event => {
     self.registration.getNotifications().then(n => n.forEach(n => n.close()));
     activeStationIds.clear();
   }
+
+  if (event.data.type === 'PREP_TIMER_UPDATE') {
+    const tag = 'aqueous-prep-timer';
+    const options = {
+      body: event.data.body,
+      tag,
+      icon: './badge-96.png',
+      badge: './badge-96.png',
+      requireInteraction: true,
+      silent: !event.data.timeUp,
+      renotify: event.data.timeUp,
+      actions: [{ action: 'stop', title: 'Stop Timer' }],
+      data: { action: 'open_home', isPrep: true }
+    };
+    if (event.data.timeUp) options.vibrate = [300, 100, 300, 100, 300];
+    self.registration.showNotification('⏱ Prep Timer', options);
+  }
+
+  if (event.data.type === 'PREP_TIMER_CLEAR') {
+    self.registration.getNotifications({ tag: 'aqueous-prep-timer' }).then(n => n.forEach(n => n.close()));
+  }
 });
 
-// Handle notification tap — open app on Summary
+// Handle notification tap — open app
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  const isPrep = event.notification.data && event.notification.data.isPrep;
+  const isStop = event.action === 'stop';
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
       if (windowClients.length > 0) {
         windowClients[0].focus();
-        windowClients[0].postMessage({ type: 'OPEN_SUMMARY' });
+        if (isStop || isPrep) {
+          windowClients[0].postMessage({ type: 'STOP_PREP_TIMER' });
+        } else {
+          windowClients[0].postMessage({ type: 'OPEN_SUMMARY' });
+        }
       } else {
-        clients.openWindow('./?view=summary');
+        clients.openWindow('./?view=home');
       }
     })
   );

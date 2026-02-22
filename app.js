@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 122;
+const APP_BUILD = 123;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -203,10 +203,11 @@ function clockIn() {
     autoCalcPrepWindow();
     saveSettings();
     startCountdownBar();
+    startPrepNotification();
+    requestNotificationPermission();
     refreshSummaryPanel();
     panelDirty.home = true;
     renderPanel('home');
-    showToast('Clocked in');
 }
 
 function clockOut() {
@@ -233,11 +234,11 @@ function confirmClockOut() {
     settings.prepWindowMinutes = null;
     saveSettings();
     stopCountdownBar();
+    clearPrepNotification();
     closeTimePicker();
     refreshSummaryPanel();
     panelDirty.home = true;
     renderPanel('home');
-    showToast('Clocked out');
 }
 
 // ==================== COUNTDOWN TIMER BAR ====================
@@ -260,6 +261,9 @@ function stopCountdownBar() {
     }
 }
 
+let prepAlarmFired = false;
+let prepNotifInterval = null;
+
 function updateCountdownBar() {
     const bar = document.getElementById('countdownBar');
     const label = document.getElementById('countdownLabel');
@@ -267,14 +271,14 @@ function updateCountdownBar() {
 
     if (!settings.clockInTimestamp) {
         bar.style.width = '100%';
-        label.textContent = 'Clock in to start';
+        label.textContent = '';
         return;
     }
 
     const totalSec = getCountdownTotalSeconds();
     if (totalSec <= 0) {
         bar.style.width = '100%';
-        label.textContent = 'No timing data yet';
+        label.textContent = 'No timing data';
         return;
     }
 
@@ -287,11 +291,79 @@ function updateCountdownBar() {
     if (remainingSec <= 0) {
         label.textContent = 'Time is up!';
         bar.style.width = '0%';
+        if (!prepAlarmFired) {
+            prepAlarmFired = true;
+            playAlarm();
+        }
     } else {
         const m = Math.floor(remainingSec / 60);
         const s = remainingSec % 60;
-        label.textContent = `${m}:${String(s).padStart(2, '0')} left`;
+        label.textContent = `${m}:${String(s).padStart(2, '0')}`;
     }
+}
+
+function playAlarm() {
+    try {
+        const ctx = getAudioCtx();
+        const duration = 1.5;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.6);
+        osc.frequency.setValueAtTime(660, ctx.currentTime + 0.9);
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 1.2);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+}
+
+function startPrepNotification() {
+    clearPrepNotification();
+    prepAlarmFired = false;
+    updatePrepNotification();
+    prepNotifInterval = setInterval(updatePrepNotification, 30000);
+}
+
+function clearPrepNotification() {
+    if (prepNotifInterval) {
+        clearInterval(prepNotifInterval);
+        prepNotifInterval = null;
+    }
+    sendSWMessage({ type: 'PREP_TIMER_CLEAR' });
+}
+
+function updatePrepNotification() {
+    if (!settings.clockInTimestamp) return;
+    if (!settings.timerNotifications) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+    const totalSec = getCountdownTotalSeconds();
+    if (totalSec <= 0) return;
+
+    const elapsedSec = Math.floor((Date.now() - settings.clockInTimestamp) / 1000);
+    const remainingSec = Math.max(0, totalSec - elapsedSec);
+
+    let body;
+    if (remainingSec <= 0) {
+        body = 'Time is up!';
+    } else {
+        const m = Math.floor(remainingSec / 60);
+        const s = remainingSec % 60;
+        body = `${m}:${String(s).padStart(2, '0')} remaining`;
+    }
+
+    sendSWMessage({
+        type: 'PREP_TIMER_UPDATE',
+        body,
+        timeUp: remainingSec <= 0
+    });
 }
 
 function openTimePicker(field) {
@@ -545,6 +617,11 @@ function initApp() {
     // Position track instantly (no animation) and render initial panel
     slideTrackTo(currentView, false);
     renderPanel(currentView);
+
+    // Resume prep timer notification if active
+    if (settings.clockInTimestamp) {
+        startPrepNotification();
+    }
 
     // First time: ask cook name
     if (!settings.cookName) {
@@ -1018,10 +1095,10 @@ function renderHome(container) {
             </div>
             ${homeSubTab === 'master' ? `
             <div class="home-timer-row">
-                <button class="timer-toggle-btn ${timerOn ? 'on' : ''}" onclick="${timerOn ? 'clockOut()' : 'clockIn()'}">
-                    Timer
-                </button>
+                <span class="timer-label">Timer</span>
                 <span class="countdown-label" id="countdownLabel"></span>
+                <button class="neu-toggle ${timerOn ? 'active' : ''}"
+                    onclick="${timerOn ? 'clockOut()' : 'clockIn()'}"></button>
             </div>
             <div class="countdown-bar-container">
                 <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
@@ -2891,6 +2968,9 @@ if (navigator.serviceWorker) {
         if (!event.data) return;
         if (event.data.type === 'OPEN_SUMMARY') {
             switchView('summary');
+        }
+        if (event.data.type === 'STOP_PREP_TIMER') {
+            confirmClockOut();
         }
     });
 }
