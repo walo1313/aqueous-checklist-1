@@ -987,47 +987,73 @@
             box-shadow: var(--neu-shadow);
             margin-bottom: 12px;
         }
-        .summary-top-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-            gap: 8px;
-        }
-        .summary-date {
-            font-size: 13px;
-            font-weight: 700;
-            color: var(--text);
-            white-space: nowrap;
-        }
         .summary-time-controls {
             display: flex;
-            gap: 8px;
-            align-items: flex-end;
+            gap: 12px;
+            justify-content: center;
+            margin-bottom: 14px;
         }
-        .summary-time-field {
+        .summary-time-picker {
+            flex: 1;
+            text-align: center;
+        }
+        .stp-label {
+            display: block;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+        .stp-clock {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            background: var(--bg);
+            border-radius: 14px;
+            box-shadow: var(--neu-inset);
+            padding: 8px 6px;
+        }
+        .stp-col {
             display: flex;
             flex-direction: column;
+            align-items: center;
             gap: 2px;
         }
-        .summary-time-field label {
-            font-size: 9px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-muted);
-        }
-        .summary-time-field input[type="time"] {
-            width: 85px;
-            font-size: 13px;
-            font-weight: 600;
-            text-align: center;
+        .stp-arrow {
             border: none;
-            background: var(--bg);
-            border-radius: 8px;
-            box-shadow: var(--neu-inset);
-            padding: 5px 6px;
+            background: transparent;
+            color: var(--accent);
+            font-size: 10px;
+            padding: 4px 8px;
+            cursor: pointer;
+            line-height: 1;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .stp-arrow:active { opacity: 0.5; }
+        .stp-digit {
+            font-size: 28px;
+            font-weight: 900;
             color: var(--text);
+            font-variant-numeric: tabular-nums;
+            min-width: 32px;
+            text-align: center;
+            line-height: 1;
+        }
+        .stp-sep {
+            font-size: 24px;
+            font-weight: 900;
+            color: var(--text-muted);
+            padding: 0 1px;
+            align-self: center;
+        }
+        .stp-ampm {
+            font-size: 11px;
+            font-weight: 800;
+            color: var(--accent);
+            margin-left: 4px;
+            align-self: center;
         }
 
         /* Feasibility Banner */

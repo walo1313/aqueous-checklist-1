@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 109;
+const APP_BUILD = 110;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -179,6 +179,31 @@ function autoCalcPrepWindow() {
     let diffMin = (eh * 60 + em) - (sh * 60 + sm);
     if (diffMin < 0) diffMin += 24 * 60;
     settings.prepWindowMinutes = diffMin;
+}
+
+function formatTimeAmPm(timeStr) {
+    if (!timeStr) return { h: '--', m: '--', ampm: '' };
+    const [hh, mm] = timeStr.split(':').map(Number);
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const h12 = hh === 0 ? 12 : (hh > 12 ? hh - 12 : hh);
+    return { h: String(h12), m: String(mm).padStart(2, '0'), ampm };
+}
+
+function summaryTimeScroll(field, part, delta) {
+    handleClick();
+    const current = settings[field] || '12:00';
+    let [hh, mm] = current.split(':').map(Number);
+    if (part === 'h') {
+        hh = (hh + delta + 24) % 24;
+    } else {
+        mm = mm + delta * 15;
+        if (mm >= 60) { mm = 0; hh = (hh + 1) % 24; }
+        if (mm < 0) { mm = 45; hh = (hh - 1 + 24) % 24; }
+    }
+    settings[field] = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+    autoCalcPrepWindow();
+    saveSettings();
+    refreshSummaryPanel();
 }
 
 function toggleSummaryStation(stationId) {
@@ -2363,23 +2388,44 @@ function renderSummary(container) {
     const totalCount = allTasks.length;
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-    const today = new Date();
-    const summaryDateStr = today.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const shiftT = formatTimeAmPm(settings.shiftStart);
+    const serviceT = formatTimeAmPm(settings.serviceTime);
 
     let html = `
         <div class="summary-header-card">
-            <div class="summary-top-row">
-                <span class="summary-date">${summaryDateStr}</span>
-                <div class="summary-time-controls">
-                    <div class="summary-time-field">
-                        <label>Shift</label>
-                        <input type="time" value="${settings.shiftStart || ''}"
-                            onchange="settings.shiftStart = this.value || null; autoCalcPrepWindow(); saveSettings(); refreshSummaryPanel();">
+            <div class="summary-time-controls">
+                <div class="summary-time-picker">
+                    <span class="stp-label">SHIFT</span>
+                    <div class="stp-clock">
+                        <div class="stp-col">
+                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','h',1)">&#9650;</button>
+                            <span class="stp-digit">${shiftT.h}</span>
+                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','h',-1)">&#9660;</button>
+                        </div>
+                        <span class="stp-sep">:</span>
+                        <div class="stp-col">
+                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','m',1)">&#9650;</button>
+                            <span class="stp-digit">${shiftT.m}</span>
+                            <button class="stp-arrow" onclick="summaryTimeScroll('shiftStart','m',-1)">&#9660;</button>
+                        </div>
+                        <span class="stp-ampm">${shiftT.ampm}</span>
                     </div>
-                    <div class="summary-time-field">
-                        <label>Service</label>
-                        <input type="time" value="${settings.serviceTime || ''}"
-                            onchange="settings.serviceTime = this.value || null; autoCalcPrepWindow(); saveSettings(); refreshSummaryPanel();">
+                </div>
+                <div class="summary-time-picker">
+                    <span class="stp-label">SERVICE</span>
+                    <div class="stp-clock">
+                        <div class="stp-col">
+                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','h',1)">&#9650;</button>
+                            <span class="stp-digit">${serviceT.h}</span>
+                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','h',-1)">&#9660;</button>
+                        </div>
+                        <span class="stp-sep">:</span>
+                        <div class="stp-col">
+                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','m',1)">&#9650;</button>
+                            <span class="stp-digit">${serviceT.m}</span>
+                            <button class="stp-arrow" onclick="summaryTimeScroll('serviceTime','m',-1)">&#9660;</button>
+                        </div>
+                        <span class="stp-ampm">${serviceT.ampm}</span>
                     </div>
                 </div>
             </div>
