@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 115;
+const APP_BUILD = 116;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2567,18 +2567,6 @@ function renderSummary(container) {
                 <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
             </div>
         </div>`;
-
-    // Feasibility banner
-    const feasibility = calculateFeasibility();
-    if (feasibility && feasibility.taskBreakdown.length > 0) {
-        html += `
-        <div class="feasibility-banner ${feasibility.status}">
-            <div class="feasibility-status">${feasibility.message}</div>
-            <div class="feasibility-stats">
-                Active: ${formatEstimate(feasibility.totalActive)} &bull; Passive: ${formatEstimate(feasibility.totalPassive)}
-            </div>
-        </div>`;
-    }
 
     // Group tasks by station
     const stationGroups = {};
