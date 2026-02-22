@@ -1203,32 +1203,50 @@
             font-style: italic;
         }
 
-        .progress-info {
+        /* Countdown Timer Bar */
+        .countdown-info {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 10px;
+            align-items: center;
+            margin-bottom: 6px;
         }
-
-        .progress-text { font-size: 13px; font-weight: 700; color: var(--text); }
-        .progress-percent { font-size: 13px; font-weight: 800; color: var(--text-secondary); }
-
-        /* Neumorphic Progress Bar (Slider Cavity) */
-        .progress-bar-container {
-            height: 10px;
+        .countdown-title {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .countdown-label {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--accent);
+        }
+        .countdown-bar-container {
+            height: 14px;
             background: var(--surface);
-            border-radius: 5px;
+            border-radius: 7px;
             box-shadow: var(--neu-inset);
             overflow: hidden;
             padding: 2px;
+            margin-bottom: 10px;
+        }
+        .countdown-bar {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 6px;
+            transition: width 1s linear;
+            box-shadow: 0 0 8px rgba(255, 106, 26, 0.3);
         }
 
-        .progress-bar {
-            height: 100%;
-            background: var(--success);
-            border-radius: 4px;
-            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 0 6px rgba(52, 168, 83, 0.2);
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
         }
+
+        .progress-text { font-size: 12px; font-weight: 700; color: var(--text-secondary); }
+        .progress-percent { font-size: 12px; font-weight: 800; color: var(--text-secondary); }
 
         .summary-station-section {
             margin-bottom: 16px;

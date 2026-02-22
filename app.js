@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 113;
+const APP_BUILD = 114;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -193,8 +193,10 @@ function clockIn() {
     handleClick();
     const now = new Date();
     settings.shiftStart = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    settings.clockInTimestamp = now.getTime();
     autoCalcPrepWindow();
     saveSettings();
+    startCountdownBar();
     refreshSummaryPanel();
     showToast('Clocked in');
 }
@@ -219,11 +221,67 @@ function clockOut() {
 
 function confirmClockOut() {
     settings.shiftStart = null;
+    settings.clockInTimestamp = null;
     settings.prepWindowMinutes = null;
     saveSettings();
+    stopCountdownBar();
     closeTimePicker();
     refreshSummaryPanel();
     showToast('Clocked out');
+}
+
+// ==================== COUNTDOWN TIMER BAR ====================
+let countdownBarInterval = null;
+
+function getCountdownTotalSeconds() {
+    const f = calculateFeasibility();
+    return f ? f.totalActive : 0;
+}
+
+function startCountdownBar() {
+    stopCountdownBar();
+    countdownBarInterval = setInterval(updateCountdownBar, 1000);
+}
+
+function stopCountdownBar() {
+    if (countdownBarInterval) {
+        clearInterval(countdownBarInterval);
+        countdownBarInterval = null;
+    }
+}
+
+function updateCountdownBar() {
+    const bar = document.getElementById('countdownBar');
+    const label = document.getElementById('countdownLabel');
+    if (!bar || !label) return;
+
+    if (!settings.clockInTimestamp) {
+        bar.style.width = '100%';
+        label.textContent = 'Clock in to start';
+        return;
+    }
+
+    const totalSec = getCountdownTotalSeconds();
+    if (totalSec <= 0) {
+        bar.style.width = '100%';
+        label.textContent = 'No timing data yet';
+        return;
+    }
+
+    const elapsedSec = Math.floor((Date.now() - settings.clockInTimestamp) / 1000);
+    const remainingSec = Math.max(0, totalSec - elapsedSec);
+    const pct = Math.max(0, (remainingSec / totalSec) * 100);
+
+    bar.style.width = pct + '%';
+
+    if (remainingSec <= 0) {
+        label.textContent = 'Time is up!';
+        bar.style.width = '0%';
+    } else {
+        const m = Math.floor(remainingSec / 60);
+        const s = remainingSec % 60;
+        label.textContent = `${m}:${String(s).padStart(2, '0')} left`;
+    }
 }
 
 function openTimePicker(field) {
@@ -2505,12 +2563,16 @@ function renderSummary(container) {
                     <span class="service-time" onclick="openTimePicker('serviceTime')">${serviceDisplay || 'Set'}</span>
                 </div>
             </div>
+            <div class="countdown-info">
+                <span class="countdown-title">timer in base of checklist</span>
+                <span class="countdown-label" id="countdownLabel">${shiftOn ? '' : 'Clock in to start'}</span>
+            </div>
+            <div class="countdown-bar-container">
+                <div class="countdown-bar" id="countdownBar" style="width: ${shiftOn ? '100' : '100'}%"></div>
+            </div>
             <div class="progress-info">
                 <span class="progress-text">${completedCount}/${totalCount} done</span>
                 <span class="progress-percent">${progress}%</span>
-            </div>
-            <div class="progress-bar-container">
-                <div class="progress-bar" style="width: ${progress}%"></div>
             </div>
         </div>`;
 
@@ -2558,6 +2620,12 @@ function renderSummary(container) {
     });
 
     container.innerHTML = html;
+
+    // Kick off countdown bar if shift is active
+    if (settings.clockInTimestamp) {
+        updateCountdownBar();
+        startCountdownBar();
+    }
 }
 
 function renderSummaryGroup(title, level, tasks) {
