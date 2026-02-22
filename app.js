@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 118;
+const APP_BUILD = 119;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -204,6 +204,8 @@ function clockIn() {
     saveSettings();
     startCountdownBar();
     refreshSummaryPanel();
+    panelDirty.home = true;
+    renderPanel('home');
     showToast('Clocked in');
 }
 
@@ -233,6 +235,8 @@ function confirmClockOut() {
     stopCountdownBar();
     closeTimePicker();
     refreshSummaryPanel();
+    panelDirty.home = true;
+    renderPanel('home');
     showToast('Clocked out');
 }
 
@@ -358,6 +362,8 @@ function saveTimePicker() {
     saveSettings();
     closeTimePicker();
     refreshSummaryPanel();
+    panelDirty.home = true;
+    renderPanel('home');
 }
 
 function closeTimePicker() {
@@ -993,6 +999,37 @@ function switchHomeSubTab(tab) {
     renderPanel('home');
 }
 
+function renderShiftCard() {
+    autoCalcPrepWindow();
+    const shiftOn = !!settings.shiftStart;
+    const shiftDisplay = formatTimeAmPm(settings.shiftStart);
+    const serviceDisplay = formatTimeAmPm(settings.serviceTime);
+
+    return `
+        <div class="summary-header-card">
+            <div class="summary-time-controls">
+                <div class="shift-block ${shiftOn ? 'on' : ''}">
+                    <span class="shift-label">SHIFT</span>
+                    <button class="shift-btn ${shiftOn ? 'on' : ''}" onclick="${shiftOn ? 'clockOut()' : 'clockIn()'}">
+                        ${shiftOn ? 'ON' : 'OFF'}
+                    </button>
+                    ${shiftOn ? `<span class="shift-time" onclick="openTimePicker('shiftStart')">${shiftDisplay}</span>` : ''}
+                </div>
+                <div class="service-block">
+                    <span class="shift-label">SERVICE</span>
+                    <span class="service-time" onclick="openTimePicker('serviceTime')">${serviceDisplay || 'Set'}</span>
+                </div>
+            </div>
+            <div class="countdown-info">
+                <span class="countdown-title">timer in base of checklist</span>
+                <span class="countdown-label" id="countdownLabel">${shiftOn ? '' : 'Clock in to start'}</span>
+            </div>
+            <div class="countdown-bar-container">
+                <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
+            </div>
+        </div>`;
+}
+
 function renderHome(container) {
     let content = '';
     if (homeSubTab === 'master') {
@@ -1002,6 +1039,7 @@ function renderHome(container) {
     }
 
     container.innerHTML = `
+        ${renderShiftCard()}
         <div class="home-tab-sticky">
             <div class="home-tab-switch">
                 <button class="home-tab-btn ${homeSubTab === 'stations' ? 'active' : ''}" onclick="switchHomeSubTab('stations')">Stations</button>
@@ -1009,6 +1047,12 @@ function renderHome(container) {
             </div>
         </div>
         <div class="home-tab-content">${content}</div>`;
+
+    // Kick off countdown bar if shift is active
+    if (settings.clockInTimestamp) {
+        updateCountdownBar();
+        startCountdownBar();
+    }
 
     if (homeSubTab === 'stations') {
         expandedIngs.forEach(key => {
@@ -2532,7 +2576,6 @@ function calculateFeasibility() {
 // ==================== SUMMARY VIEW ====================
 
 function renderSummary(container) {
-    autoCalcPrepWindow();
     let allTasks = [];
 
     stations.forEach(station => {
@@ -2558,33 +2601,7 @@ function renderSummary(container) {
         return;
     }
 
-    const shiftOn = !!settings.shiftStart;
-    const shiftDisplay = formatTimeAmPm(settings.shiftStart);
-    const serviceDisplay = formatTimeAmPm(settings.serviceTime);
-
-    let html = `
-        <div class="summary-header-card">
-            <div class="summary-time-controls">
-                <div class="shift-block ${shiftOn ? 'on' : ''}">
-                    <span class="shift-label">SHIFT</span>
-                    <button class="shift-btn ${shiftOn ? 'on' : ''}" onclick="${shiftOn ? 'clockOut()' : 'clockIn()'}">
-                        ${shiftOn ? 'ON' : 'OFF'}
-                    </button>
-                    ${shiftOn ? `<span class="shift-time" onclick="openTimePicker('shiftStart')">${shiftDisplay}</span>` : ''}
-                </div>
-                <div class="service-block">
-                    <span class="shift-label">SERVICE</span>
-                    <span class="service-time" onclick="openTimePicker('serviceTime')">${serviceDisplay || 'Set'}</span>
-                </div>
-            </div>
-            <div class="countdown-info">
-                <span class="countdown-title">timer in base of checklist</span>
-                <span class="countdown-label" id="countdownLabel">${shiftOn ? '' : 'Clock in to start'}</span>
-            </div>
-            <div class="countdown-bar-container">
-                <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
-            </div>
-        </div>`;
+    let html = '';
 
     // Group tasks by station
     const stationGroups = {};
@@ -2618,12 +2635,6 @@ function renderSummary(container) {
     });
 
     container.innerHTML = html;
-
-    // Kick off countdown bar if shift is active
-    if (settings.clockInTimestamp) {
-        updateCountdownBar();
-        startCountdownBar();
-    }
 }
 
 function renderSummaryGroup(title, level, tasks) {
