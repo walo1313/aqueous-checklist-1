@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 128;
+const APP_BUILD = 129;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -18,6 +18,7 @@ let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
 let homeSubTab = localStorage.getItem('aqueous_homeSubTab') || 'stations';
 let dayChecklists = {}; // { "YYYY-MM-DD": [{ stationId, ingredientId, name, stationName, priority, parQty, parUnit, parDepth, struck, timeEstimate }] }
 let history = [];
+let completedHistory = {}; // { "YYYY-MM-DD": [{ name, stationName, priority, parQty, parUnit, parDepth, timeEstimate }] }
 let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true, activeDay: null };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
 let ingredientDefaults = {}; // { "ingredientname": { qty: N, unit: "quart" } }
@@ -613,9 +614,11 @@ function dismissInstall() {
 function initApp() {
     loadData();
     loadDayChecklists();
+    loadCompletedHistory();
     migrateMlDayStates();
     processCarryOver();
     cleanOldDayChecklists();
+    cleanOldCompletedHistory();
     if (!dayChecklists[getActiveDay()]) dayChecklists[getActiveDay()] = [];
     updateHeader();
 
@@ -894,7 +897,14 @@ function processCarryOver() {
             const list = dayChecklists[yesterdayKey];
             const nextDay = getTodayKey();
 
-            list.filter(x => x.struck).forEach(item => {
+            // Save completed items to history
+            const struckItems = list.filter(x => x.struck);
+            if (struckItems.length > 0) {
+                saveCompletedItems(yesterdayKey, struckItems);
+            }
+
+            // Clear station.status for completed items
+            struckItems.forEach(item => {
                 const station = stations.find(s => s.id === item.stationId);
                 if (station && station.status[item.ingredientId]) {
                     station.status[item.ingredientId].completed = false;
@@ -903,6 +913,7 @@ function processCarryOver() {
                 }
             });
 
+            // Carry over non-struck to today with high priority
             const carryOver = list.filter(x => !x.struck).map(item => ({
                 ...item, priority: 'high', struck: false
             }));
@@ -1289,6 +1300,41 @@ function saveDayChecklists() {
     localStorage.setItem('aqueous_dayChecklists', JSON.stringify(dayChecklists));
 }
 
+function loadCompletedHistory() {
+    const saved = localStorage.getItem('aqueous_completedHistory');
+    completedHistory = saved ? JSON.parse(saved) : {};
+}
+
+function saveCompletedHistory() {
+    localStorage.setItem('aqueous_completedHistory', JSON.stringify(completedHistory));
+}
+
+function cleanOldCompletedHistory() {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffKey = cutoff.toISOString().slice(0, 10);
+    Object.keys(completedHistory).forEach(key => {
+        if (key < cutoffKey) delete completedHistory[key];
+    });
+    saveCompletedHistory();
+}
+
+function saveCompletedItems(dayKey, items) {
+    if (!completedHistory[dayKey]) completedHistory[dayKey] = [];
+    items.forEach(item => {
+        completedHistory[dayKey].push({
+            name: item.name,
+            stationName: item.stationName,
+            priority: item.priority,
+            parQty: item.parQty,
+            parUnit: item.parUnit,
+            parDepth: item.parDepth,
+            timeEstimate: getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth)
+        });
+    });
+    saveCompletedHistory();
+}
+
 function cleanOldDayChecklists() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 7);
@@ -1401,15 +1447,14 @@ function closeDay() {
         clearPrepNotification();
     }
 
-    // Save snapshot to history before clearing
-    saveSnapshotToHistory(new Date().toDateString());
+    // Save completed (struck) items to completedHistory
+    const struckItems = list.filter(x => x.struck);
+    if (struckItems.length > 0) {
+        saveCompletedItems(day, struckItems);
+    }
 
-    list.filter(x => x.struck).forEach(item => {
-        logActivity('task_complete', {
-            ingredient: item.name,
-            station: item.stationName,
-            seconds: 0, quantity: 0, secPerUnit: 0
-        });
+    // Clear station.status for completed items
+    struckItems.forEach(item => {
         const station = stations.find(s => s.id === item.stationId);
         if (station && station.status[item.ingredientId]) {
             station.status[item.ingredientId].completed = false;
@@ -1418,6 +1463,7 @@ function closeDay() {
         }
     });
 
+    // Carry over non-struck items to next day with high priority
     const carryOver = list.filter(x => !x.struck).map(item => ({
         ...item,
         priority: 'high',
@@ -1572,10 +1618,13 @@ function mlDeleteItem(stationId, ingredientId) {
     const st = station.status[ingredientId];
     const ing = getAllIngredients(station).find(i => i.id === ingredientId);
 
-    logActivity('task_complete', {
-        ingredient: ing ? ing.name : '',
-        station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
-    });
+    // Save to completed history
+    const day = getActiveDay();
+    const list = dayChecklists[day] || [];
+    const checklistItem = list.find(x => x.stationId === stationId && x.ingredientId === ingredientId);
+    if (checklistItem) {
+        saveCompletedItems(day, [checklistItem]);
+    }
 
     if (st) {
         const pLevel = st.priority || 'none';
@@ -1589,13 +1638,12 @@ function mlDeleteItem(stationId, ingredientId) {
     }
 
     // Remove from day checklist
-    const day = getActiveDay();
-    const list = dayChecklists[day] || [];
     const idx = list.findIndex(x => x.stationId === stationId && x.ingredientId === ingredientId);
     if (idx >= 0) list.splice(idx, 1);
     saveDayChecklists();
 
     panelDirty.home = true;
+    panelDirty.history = true;
     renderPanel('home');
 }
 
@@ -4666,21 +4714,10 @@ function renderHistoryTab(container) {
     });
     html += '</div>';
 
-    // Collect task_complete entries for selected date
-    const taskEntries = activityLog.filter(e => e.type === 'task_complete' && e.timestamp && e.timestamp.startsWith(historySelectedDate));
+    // Read completed items for selected date
+    const items = completedHistory[historySelectedDate] || [];
 
-    // Group by station
-    const byStation = {};
-    taskEntries.forEach(e => {
-        const d = e.data || {};
-        const sName = d.station || 'Unknown';
-        if (!byStation[sName]) byStation[sName] = [];
-        byStation[sName].push(d);
-    });
-
-    const stationNames = Object.keys(byStation);
-
-    if (stationNames.length === 0) {
+    if (items.length === 0) {
         html += `<div class="history-day-status">
             <div class="history-day-label">No Data</div>
             <div class="history-day-sub">No completed tasks this day</div>
@@ -4689,25 +4726,50 @@ function renderHistoryTab(container) {
         return;
     }
 
-    // Summary card
-    const totalTasks = taskEntries.length;
+    // Group by station
+    const byStation = {};
+    items.forEach(item => {
+        const sName = item.stationName || 'Unknown';
+        if (!byStation[sName]) byStation[sName] = [];
+        byStation[sName].push(item);
+    });
+
+    // Summary
+    const stationNames = Object.keys(byStation);
     html += `<div class="history-day-status">
-        <div class="history-day-label">${totalTasks} task${totalTasks !== 1 ? 's' : ''} completed</div>
+        <div class="history-day-label">${items.length} task${items.length !== 1 ? 's' : ''} completed</div>
         <div class="history-day-sub">${stationNames.length} station${stationNames.length !== 1 ? 's' : ''}</div>
     </div>`;
 
-    // Cards per station → ingredients
+    // Render each station as a card with ingredient rows (station-expand style)
     stationNames.forEach(sName => {
-        const items = byStation[sName];
-        html += `<div class="history-block-card" style="flex-direction:column;align-items:stretch;gap:8px;">
-            <div class="history-block-name" style="color:var(--accent);">${sName}</div>`;
-        items.forEach(d => {
-            html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
-                <span>${d.ingredient || 'Item'}</span>
-                <span style="color:var(--text-muted);font-size:11px;">${d.quantity ? d.quantity + ' qty' : '✓'}</span>
+        const stationItems = byStation[sName];
+        html += `<div class="neu-card station-card">
+            <div class="station-header" style="cursor:default;">
+                <div class="station-header-left">
+                    <span class="station-name">${sName}</span>
+                    <span class="station-count">${stationItems.length}</span>
+                </div>
+            </div>
+            <div class="station-body">`;
+
+        stationItems.forEach(item => {
+            const freshTime = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
+            const qtyDisplay = item.parQty && item.parUnit
+                ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
+                : (item.parQty ? `${item.parQty}` : '');
+
+            html += `<div class="ingredient has-priority priority-${item.priority || 'low'}" style="border-left-color:var(--success);">
+                <div class="ingredient-header" style="cursor:default;">
+                    <span class="priority-dot ${item.priority || 'low'}"></span>
+                    <span class="ingredient-name" style="flex:1;text-decoration:line-through;opacity:0.7;">${item.name}</span>
+                    ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
+                    ${freshTime ? `<span class="ml-time">${formatTime(freshTime)}</span>` : ''}
+                </div>
             </div>`;
         });
-        html += `</div>`;
+
+        html += `</div></div>`;
     });
 
     container.innerHTML = html;
