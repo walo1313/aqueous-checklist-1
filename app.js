@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 129;
+const APP_BUILD = 130;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -715,33 +715,128 @@ function showDate() {
 
 // ==================== DATA PERSISTENCE ====================
 
+function buildSeafoodStation() {
+    let nextId = 1;
+    const id = () => nextId++;
+
+    function dish(name, ings) {
+        const dishId = id();
+        const ingredients = ings.map(i => ({ id: id(), name: i.name }));
+        return { obj: { id: dishId, name, sortOrder: 0, expanded: true, ingredients }, parData: ings };
+    }
+
+    const dishes = [
+        dish('Gambas al Gochujang', [
+            { name: 'Split prawn', unit: 'each', qty: 1 },
+            { name: 'Gochujang-Infused Garlic Oil', unit: 'quart', qty: 1 },
+            { name: 'Shaved fennel', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Fried Bao (2 pz)', unit: 'each', qty: 1 },
+            { name: 'Arugula', unit: '1/6pan', qty: 1, depth: 4 },
+            { name: 'Crispy shallot', unit: 'pint', qty: 1 },
+            { name: 'Lemon juice', unit: 'each', qty: 1 },
+            { name: 'Pickled fresno', unit: 'cup', qty: 1 },
+            { name: 'Olive oil', unit: 'each', qty: 1 },
+            { name: 'Gochujang sauce', unit: '1/6pan', qty: 1, depth: 4 }
+        ]),
+        dish("Butcher's Cut of the Day", [
+            { name: 'Demi', unit: 'quart', qty: 1 },
+            { name: 'Brocoli', unit: 'each', qty: 1 },
+            { name: 'Potato pave', unit: 'each', qty: 1 },
+            { name: 'Pistachio', unit: 'quart', qty: 1 },
+            { name: 'Cut of the day', unit: 'each', qty: 1 }
+        ]),
+        dish('Chicken Breast', [
+            { name: 'Chicken breast', unit: 'each', qty: 1 },
+            { name: 'Pomme puree', unit: 'quart', qty: 1 },
+            { name: 'Caramelized pearl onion', unit: 'pint', qty: 1 },
+            { name: 'Mushroom marsala', unit: 'quart', qty: 1 },
+            { name: 'Fennel', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'King trumpet', unit: '1/9pan', qty: 1, depth: 4 }
+        ]),
+        dish('Surf & Turf', [
+            { name: 'A5 Wagyu (3 oz)', unit: 'each', qty: 1 },
+            { name: 'Alaskan King Crab (3 oz)', unit: 'each', qty: 1 },
+            { name: 'Yuzukosho Miso Kabocha (3)', unit: 'each', qty: 1 },
+            { name: 'Asparagus (2)', unit: 'each', qty: 1 },
+            { name: 'Demi', unit: 'quart', qty: 1 },
+            { name: 'Butter', unit: '1/6pan', qty: 1, depth: 4 }
+        ]),
+        dish('Wok-Fried Filet Mignon & Chicken', [
+            { name: 'Filet Mignon', unit: 'each', qty: 1 },
+            { name: 'Chicken', unit: 'each', qty: 1 },
+            { name: 'Stir-fried sauce', unit: 'recipe', qty: 1 },
+            { name: 'Lemongrass jazmin rice (200gr)', unit: 'each', qty: 1 },
+            { name: 'Onion', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Bell peppers', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Sliced garlic', unit: 'cup', qty: 1 },
+            { name: 'Ginger', unit: 'cup', qty: 1 },
+            { name: 'Asparagus', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Baby bok choy', unit: '1/6pan', qty: 1, depth: 4 },
+            { name: 'Snow peas', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Scallions', unit: 'cup', qty: 1 }
+        ]),
+        dish('Yuzukosho Miso Kabocha (sub-recipe)', [
+            { name: 'Kabocha', unit: '', qty: null },
+            { name: 'Kyoto Sweet Miso', unit: '', qty: null },
+            { name: 'Yuzukosho', unit: '', qty: null }
+        ]),
+        dish('Enhancement', [
+            { name: 'Shrimp', unit: 'each', qty: 1 },
+            { name: 'Pomme puree', unit: 'quart', qty: 1 }
+        ])
+    ];
+
+    const stationId = 1000;
+    const status = {};
+    const dishObjs = [];
+
+    dishes.forEach(d => {
+        dishObjs.push(d.obj);
+        d.obj.ingredients.forEach((ing, i) => {
+            const par = d.parData[i];
+            const parUnit = par.unit || '';
+            const parQty = par.qty || null;
+            const depth = par.depth || null;
+            const parLevel = parQty && parUnit ? `${parQty} ${parUnit}` : '';
+            status[ing.id] = {
+                low: false, priority: null, parLevel,
+                parQty, parUnit, parDepth: depth, parNotes: '', completed: false
+            };
+        });
+    });
+
+    return { id: stationId, name: 'SEAFOOD PREP-LIST', dishes: dishObjs, status, expanded: true };
+}
+
 function loadData() {
+    // One-time reset for SEAFOOD data load (Build 130)
+    const dataVersion = localStorage.getItem('aqueous_data_version');
+    if (dataVersion !== '130') {
+        localStorage.removeItem('aqueous_stations');
+        localStorage.removeItem('aqueous_globalIngredients');
+        localStorage.removeItem('aqueous_dayChecklists');
+        localStorage.removeItem('aqueous_completedHistory');
+        localStorage.removeItem('aqueous_mlDayStates');
+        localStorage.removeItem('aqueous_activityLog');
+        localStorage.removeItem('aqueous_prep_times');
+        localStorage.removeItem('aqueous_taskTemplates');
+        localStorage.removeItem('aqueous_ingredient_defaults');
+        localStorage.removeItem('aqueous_history');
+        activityLog = [];
+        dayChecklists = {};
+        completedHistory = {};
+        history = [];
+        prepTimes = {};
+        taskTemplates = {};
+        ingredientDefaults = {};
+        localStorage.setItem('aqueous_data_version', '130');
+    }
+
     const saved = localStorage.getItem('aqueous_stations');
     if (saved) {
         stations = JSON.parse(saved);
     } else {
-        const defaultIngs = [
-            { id: 1, name: 'Fresno Chili' },
-            { id: 2, name: 'Lemongrass' },
-            { id: 3, name: 'Pistachio (sliced)' },
-            { id: 4, name: 'Paobon' },
-            { id: 5, name: 'Asparagus' },
-            { id: 6, name: 'Green Onions' },
-            { id: 7, name: 'Pistachio (ground)' },
-            { id: 8, name: 'Lemon' },
-            { id: 9, name: 'King Trumpet' },
-            { id: 10, name: 'Pavé' },
-            { id: 11, name: 'Broccoli' }
-        ];
-        stations = [{
-            id: Date.now(),
-            name: 'My Station',
-            dishes: [{ id: Date.now() + 1, name: 'General', sortOrder: 0, expanded: true, ingredients: defaultIngs }],
-            status: {}
-        }];
-        getAllIngredients(stations[0]).forEach(ing => {
-            stations[0].status[ing.id] = { low: false, priority: null, parLevel: '', completed: false };
-        });
+        stations = [buildSeafoodStation()];
         saveData(true);
     }
 
