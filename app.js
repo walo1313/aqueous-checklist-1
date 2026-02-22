@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 99;
+const APP_BUILD = 100;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1893,11 +1893,6 @@ function renderSummary(container) {
         return;
     }
 
-    const highTasks = allTasks.filter(t => t.status.priority === 'high');
-    const mediumTasks = allTasks.filter(t => t.status.priority === 'medium');
-    const lowTasks = allTasks.filter(t => t.status.priority === 'low');
-    const noPriority = allTasks.filter(t => !t.status.priority);
-
     const completedCount = allTasks.filter(t => t.status.completed).length;
     const totalCount = allTasks.length;
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -1934,18 +1929,31 @@ function renderSummary(container) {
         </div>`;
     }
 
-    if (highTasks.length > 0) {
-        html += renderSummaryGroup('Before Service', 'high', highTasks);
-    }
-    if (mediumTasks.length > 0) {
-        html += renderSummaryGroup('Necessary, Not Urgent', 'medium', mediumTasks);
-    }
-    if (lowTasks.length > 0) {
-        html += renderSummaryGroup('Backup for Next Days', 'low', lowTasks);
-    }
-    if (noPriority.length > 0) {
-        html += renderSummaryGroup('No Priority Set', 'none', noPriority);
-    }
+    // Group tasks by station
+    const stationGroups = {};
+    allTasks.forEach(task => {
+        if (!stationGroups[task.stationId]) {
+            stationGroups[task.stationId] = { name: task.stationName, tasks: [] };
+        }
+        stationGroups[task.stationId].tasks.push(task);
+    });
+
+    Object.entries(stationGroups).forEach(([stationId, group]) => {
+        const high = group.tasks.filter(t => t.status.priority === 'high');
+        const medium = group.tasks.filter(t => t.status.priority === 'medium');
+        const low = group.tasks.filter(t => t.status.priority === 'low');
+        const none = group.tasks.filter(t => !t.status.priority);
+
+        html += `<div class="summary-station-section">
+            <div class="summary-station-header">${group.name}</div>`;
+
+        if (high.length > 0) html += renderSummaryGroup('Before Service', 'high', high);
+        if (medium.length > 0) html += renderSummaryGroup('Necessary, Not Urgent', 'medium', medium);
+        if (low.length > 0) html += renderSummaryGroup('Backup for Next Days', 'low', low);
+        if (none.length > 0) html += renderSummaryGroup('No Priority Set', 'none', none);
+
+        html += '</div>';
+    });
 
     container.innerHTML = html;
 }
