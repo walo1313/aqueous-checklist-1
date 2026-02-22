@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 121;
+const APP_BUILD = 122;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1016,15 +1016,16 @@ function renderHome(container) {
                 <button class="home-tab-btn ${homeSubTab === 'stations' ? 'active' : ''}" onclick="switchHomeSubTab('stations')">Stations</button>
                 <button class="home-tab-btn ${homeSubTab === 'master' ? 'active' : ''}" onclick="switchHomeSubTab('master')">Master List</button>
             </div>
+            ${homeSubTab === 'master' ? `
             <div class="home-timer-row">
                 <button class="timer-toggle-btn ${timerOn ? 'on' : ''}" onclick="${timerOn ? 'clockOut()' : 'clockIn()'}">
-                    Start Prep
+                    Timer
                 </button>
-                <span class="countdown-label" id="countdownLabel">${timerOn ? '' : ''}</span>
+                <span class="countdown-label" id="countdownLabel"></span>
             </div>
             <div class="countdown-bar-container">
                 <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
-            </div>
+            </div>` : ''}
         </div>
         <div class="home-tab-content">${content}</div>`;
 
