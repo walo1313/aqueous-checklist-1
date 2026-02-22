@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 97;
+const APP_BUILD = 98;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -20,6 +20,7 @@ let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', w
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
 let ingredientDefaults = {}; // { "ingredientname": { qty: N, unit: "quart" } }
 let taskTemplates = {}; // { "ingredientname": { activeFixedSeconds, activeSecondsPerUnit, passiveFixedSeconds, passiveSecondsPerUnit, lastUpdatedAt, calibratedBy, templateVersion } }
+let globalIngredients = {}; // { [id]: { name, normKey } }
 
 // Mascot animation tracking
 let checkCount = 0;
@@ -154,6 +155,43 @@ function getIngredientBestTime(ingName) {
         if (total > 0 && (best === null || total < best)) best = total;
     });
     return best;
+}
+
+// ==================== DISH HELPERS ====================
+
+function getAllIngredients(station) {
+    if (station.dishes) {
+        const all = [];
+        station.dishes.forEach(dish => {
+            (dish.ingredients || []).forEach(ing => all.push(ing));
+        });
+        return all;
+    }
+    return station.ingredients || [];
+}
+
+function findDishForIngredient(station, ingredientId) {
+    if (!station.dishes) return null;
+    return station.dishes.find(dish =>
+        (dish.ingredients || []).some(ing => ing.id === ingredientId)
+    ) || null;
+}
+
+function getDefaultDish(station) {
+    if (!station.dishes || station.dishes.length === 0) return null;
+    return station.dishes[0];
+}
+
+function normalizeIngredientKey(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function registerGlobalIngredient(id, name) {
+    globalIngredients[id] = { name, normKey: normalizeIngredientKey(name) };
+}
+
+function saveGlobalIngredients() {
+    localStorage.setItem('aqueous_globalIngredients', JSON.stringify(globalIngredients));
 }
 
 // PWA Install
@@ -354,29 +392,62 @@ function loadData() {
     if (saved) {
         stations = JSON.parse(saved);
     } else {
+        const defaultIngs = [
+            { id: 1, name: 'Fresno Chili' },
+            { id: 2, name: 'Lemongrass' },
+            { id: 3, name: 'Pistachio (sliced)' },
+            { id: 4, name: 'Paobon' },
+            { id: 5, name: 'Asparagus' },
+            { id: 6, name: 'Green Onions' },
+            { id: 7, name: 'Pistachio (ground)' },
+            { id: 8, name: 'Lemon' },
+            { id: 9, name: 'King Trumpet' },
+            { id: 10, name: 'Pavé' },
+            { id: 11, name: 'Broccoli' }
+        ];
         stations = [{
             id: Date.now(),
             name: 'My Station',
-            ingredients: [
-                { id: 1, name: 'Fresno Chili' },
-                { id: 2, name: 'Lemongrass' },
-                { id: 3, name: 'Pistachio (sliced)' },
-                { id: 4, name: 'Paobon' },
-                { id: 5, name: 'Asparagus' },
-                { id: 6, name: 'Green Onions' },
-                { id: 7, name: 'Pistachio (ground)' },
-                { id: 8, name: 'Lemon' },
-                { id: 9, name: 'King Trumpet' },
-                { id: 10, name: 'Pavé' },
-                { id: 11, name: 'Broccoli' }
-            ],
+            dishes: [{ id: Date.now() + 1, name: 'General', sortOrder: 0, expanded: true, ingredients: defaultIngs }],
             status: {}
         }];
-        stations[0].ingredients.forEach(ing => {
+        getAllIngredients(stations[0]).forEach(ing => {
             stations[0].status[ing.id] = { low: false, priority: null, parLevel: '', completed: false };
         });
         saveData(true);
     }
+
+    // --- Migration: flat ingredients[] → dishes[] ---
+    let migrated = false;
+    stations.forEach(station => {
+        if (station.ingredients && !station.dishes) {
+            station.dishes = [{
+                id: Date.now() + Math.floor(Math.random() * 10000),
+                name: 'General',
+                sortOrder: 0,
+                expanded: true,
+                ingredients: station.ingredients
+            }];
+            delete station.ingredients;
+            migrated = true;
+        }
+    });
+
+    // Build globalIngredients from all stations/dishes
+    const savedGlobal = localStorage.getItem('aqueous_globalIngredients');
+    if (savedGlobal) {
+        globalIngredients = JSON.parse(savedGlobal);
+    }
+    stations.forEach(station => {
+        getAllIngredients(station).forEach(ing => {
+            if (!globalIngredients[ing.id]) {
+                registerGlobalIngredient(ing.id, ing.name);
+            }
+        });
+    });
+    saveGlobalIngredients();
+
+    if (migrated) saveData(true);
 
     const savedHistory = localStorage.getItem('aqueous_history');
     if (savedHistory) {
@@ -457,6 +528,7 @@ function saveSettings() {
 
 function saveData(silent) {
     localStorage.setItem('aqueous_stations', JSON.stringify(stations));
+    saveGlobalIngredients();
     markAllPanelsDirty();
     if (!silent) showToast('Saved');
 }
@@ -477,7 +549,7 @@ function processCarryOver() {
 
         // Carry over uncompleted items: increase priority to high
         stations.forEach(station => {
-            station.ingredients.forEach(ing => {
+            getAllIngredients(station).forEach(ing => {
                 const st = station.status[ing.id];
                 if (st && st.low && !st.completed) {
                     st.priority = 'high';
@@ -692,7 +764,7 @@ function renderHome(container) {
     let html = '';
     stations.forEach(station => {
         const lowCount = Object.values(station.status).filter(s => s.low).length;
-        const totalCount = station.ingredients.length;
+        const totalCount = getAllIngredients(station).length;
         const isExpanded = station.expanded !== false;
         const allDone = lowCount > 0 && lowCount === totalCount;
 
@@ -729,7 +801,7 @@ function renderHome(container) {
 
 function renderIngredients(station) {
     let html = '';
-    station.ingredients.forEach(ing => {
+    getAllIngredients(station).forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
@@ -844,12 +916,15 @@ function deleteIngredientFromHome(stationId, ingId) {
 
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
-    const ing = station.ingredients.find(i => i.id === ingId);
+    const ing = getAllIngredients(station).find(i => i.id === ingId);
     const name = ing ? ing.name : 'ingredient';
 
     if (!confirm(`Delete "${name}"?`)) return;
 
-    station.ingredients = station.ingredients.filter(i => i.id !== ingId);
+    const dish = findDishForIngredient(station, ingId);
+    if (dish) {
+        dish.ingredients = dish.ingredients.filter(i => i.id !== ingId);
+    }
     delete station.status[ingId];
     if (taskTimers[`${stationId}_${ingId}`]) {
         clearInterval(taskTimers[`${stationId}_${ingId}`].interval);
@@ -897,10 +972,11 @@ function confirmEditIngredientName(stationId, ingId) {
 
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
-    const ing = station.ingredients.find(i => i.id === ingId);
+    const ing = getAllIngredients(station).find(i => i.id === ingId);
     if (!ing) return;
 
     ing.name = newName;
+    registerGlobalIngredient(ing.id, newName);
     saveData(true);
 
     const modal = document.getElementById('modalEditIngredient');
@@ -1304,7 +1380,7 @@ function toggleIngExpand(stationId, ingredientId) {
         if (station && station.status[ingredientId]) {
             const st = station.status[ingredientId];
             if (!st.parQty && !st.parUnit) {
-                const ing = station.ingredients.find(i => i.id === ingredientId);
+                const ing = getAllIngredients(station).find(i => i.id === ingredientId);
                 if (ing) {
                     const defaults = ingredientDefaults[ing.name.toLowerCase()];
                     if (defaults) {
@@ -1433,7 +1509,7 @@ function updateParLevel(station, ingredientId) {
 
 function saveIngredientDefault(station, ingredientId) {
     const st = station.status[ingredientId];
-    const ing = station.ingredients.find(i => i.id === ingredientId);
+    const ing = getAllIngredients(station).find(i => i.id === ingredientId);
     if (!ing) return;
     const key = ing.name.toLowerCase();
     if (st.parQty || st.parUnit) {
@@ -1465,8 +1541,12 @@ function quickAddIngredient(stationId) {
     if (!station) return;
 
     const newIng = { id: Date.now(), name };
-    station.ingredients.push(newIng);
+    const dish = getDefaultDish(station);
+    if (dish) {
+        dish.ingredients.push(newIng);
+    }
     station.status[newIng.id] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
+    registerGlobalIngredient(newIng.id, name);
 
     saveData(true);
     rerenderStationBody(stationId);
@@ -1506,7 +1586,7 @@ function updateStationCount(stationId) {
     const el = document.getElementById(`stationCount-${stationId}`);
     if (!el) return;
     const lowCount = Object.values(station.status).filter(s => s.low).length;
-    const totalCount = station.ingredients.length;
+    const totalCount = getAllIngredients(station).length;
     el.textContent = `${lowCount}/${totalCount}`;
     el.classList.toggle('all-done', lowCount > 0 && lowCount === totalCount);
 }
@@ -1519,7 +1599,7 @@ function calculateFeasibility() {
     let taskBreakdown = [];
 
     stations.forEach(station => {
-        station.ingredients.forEach(ing => {
+        getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (!st || !st.low || st.completed) return;
             const est = getIngredientEstimate(ing.name, st.parQty, st.parUnit, st.parDepth);
@@ -1571,7 +1651,7 @@ function renderSummary(container) {
     let allTasks = [];
 
     stations.forEach(station => {
-        station.ingredients.forEach(ing => {
+        getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (st && st.low) {
                 allTasks.push({
@@ -1758,7 +1838,7 @@ function toggleCompleted(stationId, ingredientId) {
             if (t) { if (t.interval) clearInterval(t.interval); delete taskTimers[timerKey]; }
             const pLevel = station.status[ingredientId].priority || 'none';
             logActivity('task_complete', {
-                ingredient: station.ingredients.find(i => i.id === ingredientId)?.name || '',
+                ingredient: getAllIngredients(station).find(i => i.id === ingredientId)?.name || '',
                 station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
             });
             // Auto-clean: reset priority and low so dot disappears from Home
@@ -1866,7 +1946,7 @@ function forceUpdateTimerNotification() {
 
     Object.entries(blockTimers).forEach(([level, bt]) => {
         stations.forEach(station => {
-            station.ingredients.forEach(ing => {
+            getAllIngredients(station).forEach(ing => {
                 const st = station.status[ing.id];
                 if (!st || st.completed) return;
                 if ((st.priority || 'none') !== level) return;
@@ -2061,7 +2141,7 @@ function getBlockEstimateSeconds(level) {
     // Sum best times from completed logs for incomplete tasks in this block
     let totalEst = 0;
     stations.forEach(station => {
-        station.ingredients.forEach(ing => {
+        getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (!st || st.completed) return;
             if ((st.priority || 'none') !== level) return;
@@ -2076,7 +2156,7 @@ function blockHasTimingData(level) {
     // Check if ANY incomplete ingredient in this block has completed log data
     let has = false;
     stations.forEach(station => {
-        station.ingredients.forEach(ing => {
+        getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (!st || st.completed) return;
             if ((st.priority || 'none') !== level) return;
@@ -2172,7 +2252,7 @@ function checkBlockCompletion(level) {
     let allDone = true;
     let taskCount = 0;
     stations.forEach(station => {
-        station.ingredients.forEach(ing => {
+        getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (!st) return;
             if ((st.priority || 'none') !== level) return;
@@ -2209,7 +2289,7 @@ function showTaskCompleteConfirm(stationId, ingredientId) {
     const timerKey = `${stationId}_${ingredientId}`;
     const t = taskTimers[timerKey];
     const station = stations.find(s => s.id === stationId);
-    const ing = station ? station.ingredients.find(i => i.id === ingredientId) : null;
+    const ing = station ? getAllIngredients(station).find(i => i.id === ingredientId) : null;
     if (!ing) return;
 
     const ingName = ing.name;
@@ -2273,7 +2353,7 @@ function confirmTaskComplete(stationId, ingredientId) {
     const timerKey = `${stationId}_${ingredientId}`;
     const t = taskTimers[timerKey];
     const station = stations.find(s => s.id === stationId);
-    const ing = station ? station.ingredients.find(i => i.id === ingredientId) : null;
+    const ing = station ? getAllIngredients(station).find(i => i.id === ingredientId) : null;
 
     // Log time to prepTimes database if timer was running
     const tSec = getTimerSeconds(t);
@@ -2497,12 +2577,13 @@ function renderShare(container) {
 }
 
 function buildStationReport(station) {
-    if (station.ingredients.length === 0) return null;
+    const stationIngs = getAllIngredients(station);
+    if (stationIngs.length === 0) return null;
 
-    const lowItems = station.ingredients.filter(ing =>
+    const lowItems = stationIngs.filter(ing =>
         station.status[ing.id] && station.status[ing.id].low
     );
-    const okItems = station.ingredients.filter(ing =>
+    const okItems = stationIngs.filter(ing =>
         !station.status[ing.id] || !station.status[ing.id].low
     );
 
@@ -2671,12 +2752,13 @@ function buildFullReport() {
     msg += '\n';
 
     stations.forEach(station => {
-        if (station.ingredients.length === 0) return;
+        const stationIngs = getAllIngredients(station);
+        if (stationIngs.length === 0) return;
 
-        const lowItems = station.ingredients.filter(i =>
+        const lowItems = stationIngs.filter(i =>
             station.status[i.id] && station.status[i.id].low
         );
-        const okItems = station.ingredients.filter(i =>
+        const okItems = stationIngs.filter(i =>
             !station.status[i.id] || !station.status[i.id].low
         );
 
@@ -2725,9 +2807,10 @@ function nativeShareAll() {
 }
 
 function compressData(data) {
-    // Minify station data: include ALL ingredients, shorten keys
+    // Minify station data: include ALL ingredients across dishes, shorten keys
     const mini = data.map(s => {
-        const items = s.ingredients.map(i => {
+        const allIngs = getAllIngredients(s);
+        const items = allIngs.map(i => {
             const st = s.status[i.id] || {};
             const obj = { n: i.name };
             if (st.low) obj.l = 1;
@@ -2745,25 +2828,26 @@ function decompressData(encoded) {
     try {
         const mini = JSON.parse(decodeURIComponent(atob(encoded)));
         return mini.map(s => {
-            const station = {
-                id: Date.now() + Math.random() * 1000 | 0,
-                name: s.s,
-                ingredients: [],
-                status: {},
-                expanded: true
-            };
+            const ings = [];
+            const status = {};
             (s.i || []).forEach((item, idx) => {
-                const ingId = Date.now() + idx + Math.random() * 1000 | 0;
-                station.ingredients.push({ id: ingId, name: item.n });
+                const ingId = Date.now() + idx + Math.floor(Math.random() * 10000);
+                ings.push({ id: ingId, name: item.n });
                 const pMap = { h: 'high', m: 'medium', l: 'low' };
-                station.status[ingId] = {
+                status[ingId] = {
                     low: !!item.l,
                     priority: item.p ? pMap[item.p] : null,
                     parLevel: item.v || '',
                     completed: !!item.c
                 };
             });
-            return station;
+            return {
+                id: Date.now() + Math.floor(Math.random() * 10000),
+                name: s.s,
+                dishes: [{ id: Date.now() + Math.floor(Math.random() * 10000), name: 'General', sortOrder: 0, expanded: true, ingredients: ings }],
+                status,
+                expanded: true
+            };
         });
     } catch (e) {
         return null;
@@ -3125,7 +3209,7 @@ function calculateBlockGoals() {
     };
 
     stations.forEach(station => {
-        station.ingredients.forEach(ing => {
+        getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (!st || !st.low || st.completed) return;
             const p = st.priority || 'none';
@@ -3264,7 +3348,7 @@ function createStation() {
     stations.push({
         id: Date.now(),
         name: name,
-        ingredients: [],
+        dishes: [{ id: Date.now() + 1, name: 'General', sortOrder: 0, expanded: true, ingredients: [] }],
         status: {},
         expanded: true
     });
@@ -3287,13 +3371,14 @@ function showEditStationModal(stationId) {
 
 function renderEditIngredients(station) {
     const container = document.getElementById('editIngredientsList');
-    if (station.ingredients.length === 0) {
+    const allIngs = getAllIngredients(station);
+    if (allIngs.length === 0) {
         container.innerHTML = '<p class="empty-sub" style="padding:20px;text-align:center">No ingredients</p>';
         return;
     }
 
     container.innerHTML = '';
-    station.ingredients.forEach(ing => {
+    allIngs.forEach(ing => {
         const div = document.createElement('div');
         div.className = 'edit-ingredient-item';
         div.innerHTML = `
@@ -3312,8 +3397,12 @@ function addIngredient() {
     if (!station) return;
 
     const newIng = { id: Date.now(), name };
-    station.ingredients.push(newIng);
+    const dish = getDefaultDish(station);
+    if (dish) {
+        dish.ingredients.push(newIng);
+    }
     station.status[newIng.id] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
+    registerGlobalIngredient(newIng.id, name);
 
     input.value = '';
     renderEditIngredients(station);
@@ -3327,7 +3416,10 @@ function deleteIngredient(ingredientId) {
     const station = stations.find(s => s.id === editingStationId);
     if (!station) return;
 
-    station.ingredients = station.ingredients.filter(i => i.id !== ingredientId);
+    const dish = findDishForIngredient(station, ingredientId);
+    if (dish) {
+        dish.ingredients = dish.ingredients.filter(i => i.id !== ingredientId);
+    }
     delete station.status[ingredientId];
 
     renderEditIngredients(station);
@@ -3364,7 +3456,7 @@ function resetStation(stationId) {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
 
-    station.ingredients.forEach(ing => {
+    getAllIngredients(station).forEach(ing => {
         station.status[ing.id] = { low: false, priority: null, parLevel: '', completed: false };
     });
 
