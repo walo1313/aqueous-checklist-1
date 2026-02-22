@@ -1690,6 +1690,83 @@
             box-shadow: 0 0 12px var(--accent-glow);
         }
 
+        /* Master Ingredient List */
+        .master-ing-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 9998;
+            background: var(--bg);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .master-ing-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 0 0 80px;
+        }
+        .master-ing-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            position: sticky;
+            top: 0;
+            background: var(--bg);
+            z-index: 1;
+        }
+        .master-ing-list {
+            padding: 0 12px;
+        }
+        .master-ing-card {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 8px;
+            box-shadow: var(--neu-shadow-sm);
+        }
+        .master-ing-duplicate {
+            border-left: 3px solid var(--accent);
+        }
+        .master-ing-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .master-ing-locations {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .master-ing-location {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            background: var(--bg);
+            padding: 3px 8px;
+            border-radius: 6px;
+            box-shadow: var(--neu-inset);
+        }
+        .merge-btn {
+            border: none;
+            background: var(--accent);
+            color: white;
+            padding: 8px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 2px 6px var(--accent-glow);
+        }
+        .merge-btn:active { transform: scale(0.92); }
+        .master-ing-prep-note {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
         /* Context Menu */
         .context-menu-overlay {
             position: fixed;

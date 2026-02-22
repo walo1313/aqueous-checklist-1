@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 102;
+const APP_BUILD = 103;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -3597,6 +3597,126 @@ function calculateBlockGoals() {
 }
 
 
+// ==================== MASTER INGREDIENT LIST ====================
+
+const PREP_QUALIFIERS = ['sliced', 'diced', 'chopped', 'minced', 'julienned', 'brunoise', 'chiffonade', 'ground', 'crushed', 'grated', 'shaved', 'blanched', 'roasted', 'toasted', 'fried', 'pickled', 'marinated', 'smoked', 'dried', 'fresh', 'whole', 'halved', 'quartered'];
+
+function hasPreqQualifier(name) {
+    const lower = name.toLowerCase();
+    return PREP_QUALIFIERS.some(q => lower.includes(q));
+}
+
+function showMasterIngredientList() {
+    const existing = document.getElementById('masterIngOverlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'masterIngOverlay';
+    overlay.className = 'master-ing-overlay';
+
+    let content = `
+        <div class="master-ing-container">
+            <div class="master-ing-top">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('masterIngOverlay').remove()" style="padding:8px 16px;">← Back</button>
+                <span style="font-size:16px;font-weight:800;color:var(--text);">Master Ingredients</span>
+                <span style="width:60px;"></span>
+            </div>
+            <div class="master-ing-list">`;
+
+    // Group by normKey
+    const groups = {};
+    stations.forEach(station => {
+        (station.dishes || []).forEach(dish => {
+            (dish.ingredients || []).forEach(ing => {
+                const normKey = normalizeIngredientKey(ing.name);
+                if (!groups[normKey]) groups[normKey] = { name: ing.name, normKey, instances: [] };
+                groups[normKey].instances.push({
+                    id: ing.id,
+                    name: ing.name,
+                    stationName: station.name,
+                    dishName: dish.name,
+                    stationId: station.id,
+                    dishId: dish.id
+                });
+            });
+        });
+    });
+
+    const sortedGroups = Object.values(groups).sort((a, b) => a.name.localeCompare(b.name));
+    const dupeCount = sortedGroups.filter(g => g.instances.length > 1).length;
+
+    content += `<div style="padding:8px 16px;font-size:12px;color:var(--text-muted);font-weight:600;">${sortedGroups.length} unique ingredients${dupeCount > 0 ? ` · ${dupeCount} with duplicates` : ''}</div>`;
+
+    sortedGroups.forEach(group => {
+        const isDupe = group.instances.length > 1;
+        const hasPrepQ = hasPreqQualifier(group.name);
+        const locations = group.instances.map(inst =>
+            `<span class="master-ing-location">${inst.stationName} › ${inst.dishName}</span>`
+        ).join('');
+
+        content += `
+            <div class="master-ing-card ${isDupe ? 'master-ing-duplicate' : ''}">
+                <div class="master-ing-name">${group.name}</div>
+                <div class="master-ing-locations">${locations}</div>
+                ${isDupe && !hasPrepQ ? `
+                    <button class="merge-btn squishy" onclick="handleClick(); mergeIngredients('${group.normKey}')">
+                        Merge ${group.instances.length} instances
+                    </button>
+                ` : ''}
+                ${isDupe && hasPrepQ ? `
+                    <span class="master-ing-prep-note">Has prep qualifier — merge skipped</span>
+                ` : ''}
+            </div>`;
+    });
+
+    content += '</div></div>';
+    overlay.innerHTML = content;
+    document.body.appendChild(overlay);
+}
+
+function mergeIngredients(normKey) {
+    // Find all instances with this normKey
+    const instances = [];
+    stations.forEach(station => {
+        (station.dishes || []).forEach(dish => {
+            (dish.ingredients || []).forEach(ing => {
+                if (normalizeIngredientKey(ing.name) === normKey) {
+                    instances.push({ ing, dish, station });
+                }
+            });
+        });
+    });
+
+    if (instances.length <= 1) { showToast('Nothing to merge'); return; }
+
+    // Use first instance as canonical
+    const canonical = instances[0];
+    const canonicalId = canonical.ing.id;
+    const canonicalName = canonical.ing.name;
+
+    // Merge: remove duplicates from other dishes, keep status data per station
+    for (let i = 1; i < instances.length; i++) {
+        const dup = instances[i];
+        // Remove from dish
+        dup.dish.ingredients = dup.dish.ingredients.filter(ing => ing.id !== dup.ing.id);
+        // Transfer status if it has data and canonical doesn't have it in that station
+        if (dup.station.status[dup.ing.id]) {
+            if (!dup.station.status[canonicalId]) {
+                dup.station.status[canonicalId] = dup.station.status[dup.ing.id];
+            }
+            delete dup.station.status[dup.ing.id];
+        }
+        // Remove from globalIngredients
+        delete globalIngredients[dup.ing.id];
+    }
+
+    saveData(true);
+    showToast(`Merged into "${canonicalName}"`);
+
+    // Refresh the list
+    showMasterIngredientList();
+}
+
 // ==================== HISTORY TAB ====================
 
 function getDateKey(d) {
@@ -3847,6 +3967,17 @@ function renderSettings(container) {
                     <span class="setting-desc">Manage your kitchen stations</span>
                 </div>
                 <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); showNewStationModal()">+ Add</button>
+            </div>
+        </div>
+
+        <div class="settings-group">
+            <div class="settings-group-title">Ingredients</div>
+            <div class="setting-row">
+                <div class="setting-info">
+                    <span class="setting-label">Master Ingredient List</span>
+                    <span class="setting-desc">View all ingredients, merge duplicates</span>
+                </div>
+                <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); showMasterIngredientList()">View</button>
             </div>
         </div>
 
