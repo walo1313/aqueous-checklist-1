@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 126;
+const APP_BUILD = 127;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -197,6 +197,11 @@ function formatTimeAmPm(timeStr) {
 
 function clockIn() {
     handleClick();
+    const totalSec = getCountdownTotalSeconds();
+    if (totalSec <= 0) {
+        showToast('No timing data');
+        return;
+    }
     const now = new Date();
     settings.shiftStart = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     settings.clockInTimestamp = now.getTime();
@@ -245,8 +250,17 @@ function confirmClockOut() {
 let countdownBarInterval = null;
 
 function getCountdownTotalSeconds() {
-    const f = calculateFeasibility();
-    return f ? f.totalActive : 0;
+    const day = getActiveDay();
+    const items = dayChecklists[day] || [];
+    let total = 0;
+    items.forEach(item => {
+        if (item.struck) return;
+        const est = getIngredientEstimate(item.name, item.parQty, item.parUnit, item.parDepth);
+        if (est) {
+            total += est.activeSeconds || est.totalSeconds || 0;
+        }
+    });
+    return total;
 }
 
 function startCountdownBar() {
@@ -2816,16 +2830,16 @@ function calculateFeasibility() {
     let status, message;
     if (prepWindowSec <= 0) {
         status = 'unknown';
-        message = 'Set Shift Start & Service time above';
+        message = '';
     } else if (totalActive > prepWindowSec) {
-        status = 'weeds';
-        message = 'High risk — likely In the Weeds';
+        status = 'behind';
+        message = 'Over time';
     } else if (totalActive > prepWindowSec * 0.8) {
         status = 'tight';
-        message = 'Tight window — schedule carefully';
+        message = 'Tight';
     } else {
-        status = 'pocket';
-        message = "You're In the Pocket";
+        status = 'ahead';
+        message = 'On track';
     }
 
     const passiveWindowMinutes = Math.max(0, Math.floor(totalPassive / 60));
@@ -3462,9 +3476,8 @@ function checkBlockCompletion(level) {
 
     logActivity('block_complete', { level, label, seconds, goal, status });
 
-    const msgs = { behind: 'Behind', ontime: 'On Time', ahead: 'Ahead!' };
-    const icons = { behind: '\u23F0', ontime: '\u2705', ahead: '\uD83C\uDFC6' };
-    showToast(`${label}: ${icons[status]} ${msgs[status]}`);
+    const msgs = { behind: 'Behind', ontime: 'On Time', ahead: 'Ahead' };
+    showToast(`${label}: ${msgs[status] || 'Done'}`);
     refreshSummaryPanel();
 }
 
@@ -4644,56 +4657,48 @@ function renderHistoryTab(container) {
     });
     html += '</div>';
 
-    const entries = activityLog.filter(e => e.type === 'block_complete' && e.timestamp && e.timestamp.startsWith(historySelectedDate));
+    // Collect task_complete entries for selected date
+    const taskEntries = activityLog.filter(e => e.type === 'task_complete' && e.timestamp && e.timestamp.startsWith(historySelectedDate));
 
-    if (entries.length === 0) {
+    // Group by station
+    const byStation = {};
+    taskEntries.forEach(e => {
+        const d = e.data || {};
+        const sName = d.station || 'Unknown';
+        if (!byStation[sName]) byStation[sName] = [];
+        byStation[sName].push(d);
+    });
+
+    const stationNames = Object.keys(byStation);
+
+    if (stationNames.length === 0) {
         html += `<div class="history-day-status">
             <div class="history-day-label">No Data</div>
-            <div class="history-day-sub">No block timers completed this day</div>
+            <div class="history-day-sub">No completed tasks this day</div>
         </div>`;
         container.innerHTML = html;
         return;
     }
 
-    let totalGoal = 0;
-    let totalActual = 0;
-    entries.forEach(e => {
-        const d = e.data || {};
-        totalGoal += d.goal || 0;
-        totalActual += (d.goal || 0) - (d.seconds || 0);
-    });
-    const dayDiff = totalGoal - totalActual;
-    let dayLabel, dayStatusClass;
-    if (dayDiff < -15) { dayLabel = 'In the Weeds'; dayStatusClass = 'behind'; }
-    else if (dayDiff > 15) { dayLabel = 'In the Pocket'; dayStatusClass = 'ahead'; }
-    else { dayLabel = 'On Pace'; dayStatusClass = 'ontime'; }
-    const totalGoalStr = formatTime(Math.abs(totalGoal));
-    const totalActualStr = formatTime(Math.abs(totalActual));
-
+    // Summary card
+    const totalTasks = taskEntries.length;
     html += `<div class="history-day-status">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div class="history-day-label">${stations.length > 0 ? stations[0].name : 'Station'}</div>
-            <span class="history-block-badge ${dayStatusClass}">${dayLabel}</span>
-        </div>
-        <div class="history-day-sub">Goal: ${totalGoalStr} &bull; Actual: ${totalActualStr}</div>
+        <div class="history-day-label">${totalTasks} task${totalTasks !== 1 ? 's' : ''} completed</div>
+        <div class="history-day-sub">${stationNames.length} station${stationNames.length !== 1 ? 's' : ''}</div>
     </div>`;
 
-    entries.forEach(e => {
-        const d = e.data || {};
-        const statusLabels = { behind: 'In the Weeds', ontime: 'On Pace', ahead: 'In the Pocket' };
-        const statusClass = d.status || 'ontime';
-        const goalSec = d.goal || 0;
-        const actualSec = goalSec - (d.seconds || 0);
-        const goalStr = formatTime(Math.abs(goalSec));
-        const actualStr = formatTime(Math.abs(actualSec));
-
-        html += `<div class="history-block-card">
-            <div class="history-block-info">
-                <div class="history-block-name">${d.label || d.level || 'Block'}</div>
-                <div class="history-block-time">Goal: ${goalStr} &bull; Actual: ${actualStr}</div>
-            </div>
-            <span class="history-block-badge ${statusClass}">${statusLabels[statusClass] || 'On Time'}</span>
-        </div>`;
+    // Cards per station → ingredients
+    stationNames.forEach(sName => {
+        const items = byStation[sName];
+        html += `<div class="history-block-card" style="flex-direction:column;align-items:stretch;gap:8px;">
+            <div class="history-block-name" style="color:var(--accent);">${sName}</div>`;
+        items.forEach(d => {
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;">
+                <span>${d.ingredient || 'Item'}</span>
+                <span style="color:var(--text-muted);font-size:11px;">${d.quantity ? d.quantity + ' qty' : '✓'}</span>
+            </div>`;
+        });
+        html += `</div>`;
     });
 
     container.innerHTML = html;
