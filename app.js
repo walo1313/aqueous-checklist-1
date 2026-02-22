@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 130;
+const APP_BUILD = 131;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -61,7 +61,7 @@ function debounce(key, fn, delay) {
 
 // ==================== UNIT CONVERSIONS ====================
 
-const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1 };
+const UNIT_TO_OZ = { quart: 32, pint: 16, cup: 8, oz: 1, 'sq btl': 12 };
 const PAN_UNITS = ['1/9pan', '1/6pan', '1/3pan', '1/2pan', 'fullpan'];
 const PAN_OZ = {
     '1/9pan': { 2: 16, 4: 38, 6: 58 },
@@ -71,7 +71,7 @@ const PAN_OZ = {
     'fullpan': { 2: 212, 4: 448, 6: 660 }
 };
 const UNIT_TO_G = { kg: 1000, lb: 453.592, g: 1 };
-const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz'];
+const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz', 'sq btl'];
 const WEIGHT_UNITS = ['kg', 'lb', 'g'];
 const COUNT_UNITS = ['each', 'recipe'];
 
