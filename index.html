@@ -213,7 +213,7 @@
             z-index: 10;
             background: var(--bg);
             margin: 0 -20px;
-            padding: 8px 20px 4px;
+            padding: 8px 20px 6px;
         }
         .home-tab-switch {
             display: flex;
@@ -231,8 +231,8 @@
             border: none;
             background: transparent;
             padding: 12px 0;
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 15px;
+            font-weight: 800;
             color: var(--text-muted);
             border-radius: 11px;
             cursor: pointer;
@@ -246,6 +246,31 @@
             border: 1.5px solid rgba(255,106,26,0.25);
         }
         .home-tab-btn:active { transform: scale(0.95); }
+        .home-timer-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 8px;
+        }
+        .timer-toggle-btn {
+            border: none;
+            border-radius: 10px;
+            padding: 6px 16px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            background: var(--surface);
+            color: var(--text-muted);
+            box-shadow: var(--neu-shadow-sm);
+            -webkit-tap-highlight-color: transparent;
+            transition: all 0.15s;
+        }
+        .timer-toggle-btn.on {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 2px 8px rgba(255,106,26,0.3);
+        }
+        .timer-toggle-btn:active { transform: scale(0.93); }
 
         /* ===== MASTER LIST VIEW ===== */
         .ml-station-label {
@@ -1033,73 +1058,6 @@
         }
 
         /* ===== SUMMARY ===== */
-        .summary-header-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 16px;
-            box-shadow: var(--neu-shadow);
-            margin-bottom: 12px;
-        }
-        .summary-time-controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 14px;
-        }
-        .shift-block, .service-block {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            padding: 12px 8px;
-            background: var(--bg);
-            border-radius: 14px;
-            box-shadow: var(--neu-inset);
-        }
-        .shift-label {
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            color: var(--text-muted);
-        }
-        .shift-btn {
-            border: none;
-            border-radius: 10px;
-            padding: 8px 24px;
-            font-size: 16px;
-            font-weight: 900;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.15s;
-            -webkit-tap-highlight-color: transparent;
-            background: var(--surface);
-            color: var(--text-muted);
-            box-shadow: var(--neu-shadow-sm);
-        }
-        .shift-btn:active { transform: scale(0.92); }
-        .shift-btn.on {
-            background: var(--accent);
-            color: white;
-            box-shadow: 0 2px 10px var(--accent-glow);
-        }
-        .shift-time {
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--text);
-            font-variant-numeric: tabular-nums;
-            cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .shift-time:active { opacity: 0.6; }
-        .service-time {
-            font-size: 22px;
-            font-weight: 900;
-            color: var(--text);
-            font-variant-numeric: tabular-nums;
-            cursor: pointer;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .service-time:active { opacity: 0.6; }
 
         /* Time Picker Overlay */
         .time-picker-overlay {
