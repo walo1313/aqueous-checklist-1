@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 123;
+const APP_BUILD = 124;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -328,7 +328,7 @@ function startPrepNotification() {
     clearPrepNotification();
     prepAlarmFired = false;
     updatePrepNotification();
-    prepNotifInterval = setInterval(updatePrepNotification, 30000);
+    prepNotifInterval = setInterval(updatePrepNotification, 1000);
 }
 
 function clearPrepNotification() {
