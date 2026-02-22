@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 108;
+const APP_BUILD = 109;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -31,6 +31,7 @@ const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 // Multi-task timer state: { "stationId_ingredientId": { seconds, interval, running, ingName, stationId, ingredientId } }
 let taskTimers = {};
 let blockTimers = {}; // { "high": { seconds, running, interval }, "_all": { ... } }
+let summaryStationCollapsed = {}; // { stationId: true/false }
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 // Wake Lock to keep screen on during timers
@@ -157,6 +158,33 @@ function getIngredientBestTime(ingName) {
         if (total > 0 && (best === null || total < best)) best = total;
     });
     return best;
+}
+
+function getUnitFamily(unit) {
+    if (VOLUME_UNITS.includes(unit)) return 'volume';
+    if (WEIGHT_UNITS.includes(unit)) return 'weight';
+    return 'other';
+}
+
+function shouldHideStopwatch(ingName) {
+    const pt = prepTimes[ingName.toLowerCase()];
+    if (!pt) return false;
+    return (pt.volumeCount || 0) >= 3 || (pt.weightCount || 0) >= 3;
+}
+
+function autoCalcPrepWindow() {
+    if (!settings.shiftStart || !settings.serviceTime) return;
+    const [sh, sm] = settings.shiftStart.split(':').map(Number);
+    const [eh, em] = settings.serviceTime.split(':').map(Number);
+    let diffMin = (eh * 60 + em) - (sh * 60 + sm);
+    if (diffMin < 0) diffMin += 24 * 60;
+    settings.prepWindowMinutes = diffMin;
+}
+
+function toggleSummaryStation(stationId) {
+    handleClick();
+    summaryStationCollapsed[stationId] = !summaryStationCollapsed[stationId];
+    refreshSummaryPanel();
 }
 
 // ==================== DISH HELPERS ====================
@@ -466,6 +494,23 @@ function loadData() {
     const savedPrepTimes = localStorage.getItem('aqueous_prep_times');
     if (savedPrepTimes) {
         prepTimes = JSON.parse(savedPrepTimes);
+        // Migration: backfill volumeCount/weightCount from activityLog
+        Object.keys(prepTimes).forEach(key => {
+            const pt = prepTimes[key];
+            if (pt.volumeCount === undefined) {
+                let vc = 0, wc = 0;
+                activityLog.forEach(entry => {
+                    if (entry.type !== 'task_complete' || !entry.data) return;
+                    if ((entry.data.ingredient || '').toLowerCase() !== key) return;
+                    if ((entry.data.seconds || 0) <= 0 && !(entry.data.activeSeconds > 0)) return;
+                    const fam = getUnitFamily(entry.data.unit);
+                    if (fam === 'volume') vc++;
+                    else if (fam === 'weight') wc++;
+                });
+                pt.volumeCount = Math.min(vc, 3);
+                pt.weightCount = Math.min(wc, 3);
+            }
+        });
     }
 
     const savedDefaults = localStorage.getItem('aqueous_ingredient_defaults');
@@ -2263,7 +2308,7 @@ function calculateFeasibility() {
     let status, message;
     if (prepWindowSec <= 0) {
         status = 'unknown';
-        message = 'Set prep window in Settings';
+        message = 'Set Shift Start & Service time above';
     } else if (totalActive > prepWindowSec) {
         status = 'weeds';
         message = 'High risk — likely In the Weeds';
@@ -2288,6 +2333,7 @@ function calculateFeasibility() {
 // ==================== SUMMARY VIEW ====================
 
 function renderSummary(container) {
+    autoCalcPrepWindow();
     let allTasks = [];
 
     stations.forEach(station => {
@@ -2318,19 +2364,31 @@ function renderSummary(container) {
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
     const today = new Date();
-    const summaryDateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    const summaryDateStr = today.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
     let html = `
         <div class="summary-header-card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                <span style="font-size:13px;font-weight:700;color:var(--text);">${summaryDateStr}</span>
+            <div class="summary-top-row">
+                <span class="summary-date">${summaryDateStr}</span>
+                <div class="summary-time-controls">
+                    <div class="summary-time-field">
+                        <label>Shift</label>
+                        <input type="time" value="${settings.shiftStart || ''}"
+                            onchange="settings.shiftStart = this.value || null; autoCalcPrepWindow(); saveSettings(); refreshSummaryPanel();">
+                    </div>
+                    <div class="summary-time-field">
+                        <label>Service</label>
+                        <input type="time" value="${settings.serviceTime || ''}"
+                            onchange="settings.serviceTime = this.value || null; autoCalcPrepWindow(); saveSettings(); refreshSummaryPanel();">
+                    </div>
+                </div>
             </div>
             <div class="progress-info">
-                <span class="progress-text">${completedCount}/${totalCount} tasks done</span>
+                <span class="progress-text">${completedCount}/${totalCount} done</span>
                 <span class="progress-percent">${progress}%</span>
             </div>
             <div class="progress-bar-container">
-                <div class="progress-bar ${progress >= 100 ? 'complete' : ''}" style="width: ${progress}%"></div>
+                <div class="progress-bar" style="width: ${progress}%"></div>
             </div>
         </div>`;
 
@@ -2343,9 +2401,6 @@ function renderSummary(container) {
             <div class="feasibility-stats">
                 Active: ${formatEstimate(feasibility.totalActive)} &bull; Passive: ${formatEstimate(feasibility.totalPassive)}
             </div>
-            ${feasibility.passiveWindowMinutes > 0 ? `
-            <div class="feasibility-passive-hint">~${feasibility.passiveWindowMinutes} min of passive time available for other tasks</div>
-            ` : ''}
         </div>`;
     }
 
@@ -2363,16 +2418,21 @@ function renderSummary(container) {
         const medium = group.tasks.filter(t => t.status.priority === 'medium');
         const low = group.tasks.filter(t => t.status.priority === 'low');
         const none = group.tasks.filter(t => !t.status.priority);
+        const isCollapsed = summaryStationCollapsed[stationId];
 
         html += `<div class="summary-station-section">
-            <div class="summary-station-header">${group.name}</div>`;
+            <div class="summary-station-header" onclick="toggleSummaryStation(${stationId})">
+                <span>${group.name}</span>
+                <span class="summary-expand-icon">${isCollapsed ? '+' : '\u2212'}</span>
+            </div>
+            <div class="summary-station-body${isCollapsed ? ' collapsed' : ''}">`;
 
         if (high.length > 0) html += renderSummaryGroup('Before Service', 'high', high);
         if (medium.length > 0) html += renderSummaryGroup('Necessary, Not Urgent', 'medium', medium);
         if (low.length > 0) html += renderSummaryGroup('Backup for Next Days', 'low', low);
         if (none.length > 0) html += renderSummaryGroup('No Priority Set', 'none', none);
 
-        html += '</div>';
+        html += '</div></div>';
     });
 
     container.innerHTML = html;
@@ -2381,10 +2441,33 @@ function renderSummary(container) {
 function renderSummaryGroup(title, level, tasks) {
     const colorClass = level === 'none' ? '' : `summary-${level}`;
 
+    // Block timer in title bar
+    const bt = blockTimers[level];
+    const hasData = blockHasTimingData(level);
+    let blockTimerHTML = '';
+    if (bt) {
+        const remaining = getBlockRemainingSeconds(bt);
+        const clockText = formatTime(Math.abs(remaining));
+        const overtimeClass = remaining < 0 ? ' overtime' : '';
+        blockTimerHTML = `
+            <div class="block-timer-row">
+                <span class="block-timer-clock${overtimeClass}" id="blockClock_${level}">${clockText}</span>
+                ${bt.running
+                    ? `<button class="block-timer-ctrl pause" onclick="event.stopPropagation(); handleClick(); pauseBlockTimer('${level}')">⏸</button>`
+                    : `<button class="block-timer-ctrl resume" onclick="event.stopPropagation(); handleClick(); resumeBlockTimer('${level}')">▶</button>`
+                }
+                <button class="block-timer-ctrl reset" onclick="event.stopPropagation(); handleClick(); resetBlockTimer('${level}')">✕</button>
+            </div>`;
+    } else if (hasData && level !== 'none') {
+        blockTimerHTML = `
+            <button class="block-timer-start" onclick="event.stopPropagation(); handleClick(); toggleBlockTimer('${level}')">⏱</button>`;
+    }
+
     let html = `
         <div class="summary-group ${colorClass}">
             <div class="summary-group-title">
                 <span>${title}</span>
+                ${blockTimerHTML}
             </div>`;
 
     tasks.forEach(task => {
@@ -2394,23 +2477,46 @@ function renderSummaryGroup(title, level, tasks) {
         const isPaused = timer && !timer.running && getTimerSeconds(timer) > 0;
         const hasTimer = isRunning || isPaused;
         const escapedName = task.ingredient.name.replace(/'/g, "\\'");
-
-        // Best time from completed logs (target display only)
         const bestTime = getIngredientBestTime(task.ingredient.name);
-        const bestBadge = bestTime ? `<span class="best-time-badge">${formatTime(bestTime)}</span>` : '';
+        const hideStopwatch = shouldHideStopwatch(task.ingredient.name);
 
-        // Par display
         const parTag = task.status.parQty && task.status.parUnit
             ? `<span class="par-tag">${formatParDisplay(task.status.parQty, task.status.parUnit, task.status.parDepth)}</span>`
             : (task.status.parLevel ? `<span class="par-tag">${task.status.parLevel}</span>` : '');
 
-        // Stopwatch button: always visible for incomplete tasks (record timing)
-        let stopwatchHTML = '';
+        // Right-aligned timer display
+        let timerDisplayHTML = '';
         if (!task.status.completed) {
-            stopwatchHTML = `
-                <button class="task-timer-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}" onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
-                    ⏱
-                </button>`;
+            if (hasTimer) {
+                // Active timer: show inline clock + controls
+                const elapsed = getTimerSeconds(timer);
+                let clockText, clockClass = '';
+                if (timer.bestGoalSeconds > 0) {
+                    const remaining = timer.bestGoalSeconds - elapsed;
+                    clockText = (remaining < 0 ? '-' : '') + formatTime(Math.abs(remaining));
+                    if (remaining < 0) clockClass = ' overtime';
+                } else {
+                    clockText = formatTime(elapsed);
+                }
+                timerDisplayHTML = `
+                    <span class="inline-item-clock${clockClass}" id="clock_${timerKey}">${clockText}</span>
+                    <button class="task-timer-btn mini ${isRunning ? 'active' : 'paused'}"
+                        onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">
+                        ${isRunning ? '⏸' : '▶'}
+                    </button>
+                    <button class="task-timer-btn mini reset"
+                        onclick="event.stopPropagation(); handleClick(); resetTaskTimer('${timerKey}')">✕</button>`;
+            } else if (hideStopwatch && bestTime) {
+                // AUTO MODE: enough logs, show auto countdown badge
+                timerDisplayHTML = `
+                    <span class="auto-timer-badge">⏱ ${formatTime(bestTime)}</span>`;
+            } else {
+                // Manual: show stopwatch button + best time if available
+                if (bestTime) timerDisplayHTML += `<span class="best-time-badge">${formatTime(bestTime)}</span>`;
+                timerDisplayHTML += `
+                    <button class="task-timer-btn ${isRunning ? 'active' : ''} ${isPaused ? 'paused' : ''}"
+                        onclick="event.stopPropagation(); handleClick(); toggleTaskTimer('${timerKey}', ${task.stationId}, ${task.ingredient.id}, '${escapedName}')">⏱</button>`;
+            }
         }
 
         html += `
@@ -2419,51 +2525,13 @@ function renderSummaryGroup(title, level, tasks) {
                     <input type="checkbox" class="neu-check"
                         ${task.status.completed ? 'checked' : ''}
                         onchange="toggleCompleted(${task.stationId}, ${task.ingredient.id})">
-                    <div class="summary-item-info">
-                        <span class="summary-item-name">${task.ingredient.name}</span>
-                        <span class="summary-item-station">${task.stationName}</span>
-                    </div>
+                    <span class="summary-item-name">${task.ingredient.name}</span>
                 </label>
                 <div class="summary-item-actions">
                     ${parTag}
-                    ${bestBadge}
-                    ${stopwatchHTML}
+                    ${timerDisplayHTML}
                 </div>
             </div>`;
-
-        // Inline timer row (shown when timer is active or paused)
-        if (hasTimer && !task.status.completed) {
-            const phaseLabel = timer.phase === 'active' ? 'Active'
-                             : timer.phase === 'passive' ? 'Passive' : '';
-            const phaseClass = timer.phase === 'active' ? 'phase-active'
-                             : timer.phase === 'passive' ? 'phase-passive' : '';
-            const elapsed = getTimerSeconds(timer);
-            let clockDisplay;
-            let clockOvertimeClass = '';
-            if (timer.bestGoalSeconds > 0) {
-                const remaining = timer.bestGoalSeconds - elapsed;
-                clockDisplay = (remaining < 0 ? '-' : '') + formatTime(Math.abs(remaining));
-                if (remaining < 0) clockOvertimeClass = 'overtime';
-            } else {
-                clockDisplay = formatTime(elapsed);
-            }
-            html += `
-                <div class="inline-timer-row" id="timer_${timerKey}">
-                    ${phaseLabel ? `<span class="phase-pill ${phaseClass}">${phaseLabel}</span>` : ''}
-                    <span class="inline-timer-clock ${clockOvertimeClass}" id="clock_${timerKey}">${clockDisplay}</span>
-                    <div class="inline-timer-controls">
-                        ${timer.phase === 'active' && timer.hasPassivePhase ? `
-                            <button class="inline-timer-btn next" onclick="handleClick(); nextTimerPhase('${timerKey}')">Next</button>
-                        ` : ''}
-                        ${isRunning ? `
-                            <button class="inline-timer-btn pause" onclick="handleClick(); pauseTaskTimer('${timerKey}')">⏸</button>
-                        ` : `
-                            <button class="inline-timer-btn resume" onclick="handleClick(); resumeTaskTimer('${timerKey}')">▶</button>
-                        `}
-                        <button class="inline-timer-btn reset" onclick="handleClick(); resetTaskTimer('${timerKey}')">✕</button>
-                    </div>
-                </div>`;
-        }
     });
 
     html += '</div>';
@@ -3024,7 +3092,7 @@ function confirmTaskComplete(stationId, ingredientId) {
         const secPerBaseUnit = baseQty > 0 ? activeForRate / baseQty : activeForRate;
 
         if (!prepTimes[key]) {
-            prepTimes[key] = { avgSecPerUnit: secPerBaseUnit, bestSecPerUnit: secPerBaseUnit, count: 1, baseUnit };
+            prepTimes[key] = { avgSecPerUnit: secPerBaseUnit, bestSecPerUnit: secPerBaseUnit, count: 1, baseUnit, volumeCount: 0, weightCount: 0 };
         } else {
             const pt = prepTimes[key];
             pt.avgSecPerUnit = ((pt.avgSecPerUnit * pt.count) + secPerBaseUnit) / (pt.count + 1);
@@ -3032,6 +3100,11 @@ function confirmTaskComplete(stationId, ingredientId) {
             pt.count++;
             if (pt.baseUnit === 'unit') pt.baseUnit = baseUnit;
         }
+        // Track per-family log count (capped at 3)
+        const family = getUnitFamily(unit);
+        const ptEntry = prepTimes[key];
+        if (family === 'volume') ptEntry.volumeCount = Math.min((ptEntry.volumeCount || 0) + 1, 3);
+        else if (family === 'weight') ptEntry.weightCount = Math.min((ptEntry.weightCount || 0) + 1, 3);
         savePrepTimes();
 
         const tmpl = taskTemplates[key];
@@ -4301,32 +4374,6 @@ function renderSettings(container) {
                 </div>
                 <button class="neu-toggle ${settings.sound ? 'active' : ''}"
                     onclick="toggleSetting('sound', this)"></button>
-            </div>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-group-title">Service Planning</div>
-            <div class="setting-row">
-                <div class="setting-info">
-                    <span class="setting-label">Service Start</span>
-                    <span class="setting-desc">When does service begin?</span>
-                </div>
-                <input type="time" class="form-control" value="${settings.serviceTime || ''}"
-                    onchange="settings.serviceTime = this.value || null; saveSettings(); markAllPanelsDirty();"
-                    style="width:100px;font-size:13px;text-align:center;border:none;background:var(--bg);border-radius:8px;box-shadow:var(--neu-inset);padding:6px 8px;">
-            </div>
-            <div class="setting-row">
-                <div class="setting-info">
-                    <span class="setting-label">Prep Window</span>
-                    <span class="setting-desc">Hours available before service</span>
-                </div>
-                <div style="display:flex;align-items:center;gap:4px;">
-                    <input type="number" class="form-control" value="${settings.prepWindowMinutes ? settings.prepWindowMinutes / 60 : ''}"
-                        placeholder="0" min="0.5" max="24" step="0.5"
-                        onchange="settings.prepWindowMinutes = parseFloat(this.value) * 60 || null; saveSettings(); markAllPanelsDirty();"
-                        style="width:60px;font-size:13px;text-align:center;border:none;background:var(--bg);border-radius:8px;box-shadow:var(--neu-inset);padding:6px 8px;">
-                    <span style="font-size:11px;color:var(--text-muted);">hrs</span>
-                </div>
             </div>
         </div>
 

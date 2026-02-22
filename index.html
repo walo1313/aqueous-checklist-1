@@ -983,9 +983,51 @@
         .summary-header-card {
             background: var(--surface);
             border-radius: var(--radius);
-            padding: 20px;
+            padding: 16px;
             box-shadow: var(--neu-shadow);
-            margin-bottom: 16px;
+            margin-bottom: 12px;
+        }
+        .summary-top-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 8px;
+        }
+        .summary-date {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+        }
+        .summary-time-controls {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+        .summary-time-field {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .summary-time-field label {
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+        }
+        .summary-time-field input[type="time"] {
+            width: 85px;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            border: none;
+            background: var(--bg);
+            border-radius: 8px;
+            box-shadow: var(--neu-inset);
+            padding: 5px 6px;
+            color: var(--text);
         }
 
         /* Feasibility Banner */
@@ -1051,26 +1093,39 @@
 
         .progress-bar {
             height: 100%;
-            background: var(--divider);
+            background: var(--success);
             border-radius: 4px;
             transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .progress-bar.complete {
-            background: var(--success);
-            box-shadow: 0 0 8px rgba(52, 168, 83, 0.3);
+            box-shadow: 0 0 6px rgba(52, 168, 83, 0.2);
         }
 
         .summary-station-section {
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
         .summary-station-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             font-size: 15px;
             font-weight: 800;
             color: var(--text);
             padding: 10px 4px 6px;
             border-bottom: 2px solid var(--accent);
-            margin-bottom: 10px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
         }
+        .summary-expand-icon {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--accent);
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .summary-station-body.collapsed { display: none; }
 
         .summary-group {
             background: var(--surface);
@@ -1174,20 +1229,50 @@
         .summary-check-label {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             cursor: pointer;
             flex: 1;
+            min-width: 0;
         }
 
-        .summary-item-info { display: flex; flex-direction: column; }
-        .summary-item-name { font-size: 13px; font-weight: 600; }
-        .summary-item-station { font-size: 10px; color: var(--text-muted); font-weight: 500; }
+        .summary-item-name { font-size: 13px; font-weight: 600; color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
         .summary-item-actions {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             flex-shrink: 0;
+        }
+        .inline-item-clock {
+            font-size: 14px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            color: var(--accent);
+            min-width: 44px;
+            text-align: right;
+        }
+        .inline-item-clock.overtime { color: #e53e3e; }
+        .task-timer-btn.mini {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            font-size: 12px;
+            min-height: 30px;
+        }
+        .task-timer-btn.mini.reset {
+            background: var(--surface);
+            color: var(--text-muted);
+            box-shadow: var(--neu-shadow-sm);
+        }
+        .auto-timer-badge {
+            font-size: 12px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--success);
+            background: rgba(52, 168, 83, 0.1);
+            padding: 4px 10px;
+            border-radius: 10px;
+            white-space: nowrap;
         }
 
         .task-timer-btn {
