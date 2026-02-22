@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 125;
+const APP_BUILD = 126;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1371,6 +1371,18 @@ function closeDay() {
     const list = dayChecklists[day] || [];
     const nextDay = getNextDayKey(day);
 
+    // Stop timer if running
+    if (settings.clockInTimestamp) {
+        settings.shiftStart = null;
+        settings.clockInTimestamp = null;
+        settings.prepWindowMinutes = null;
+        stopCountdownBar();
+        clearPrepNotification();
+    }
+
+    // Save snapshot to history before clearing
+    saveSnapshotToHistory(new Date().toDateString());
+
     list.filter(x => x.struck).forEach(item => {
         logActivity('task_complete', {
             ingredient: item.name,
@@ -1406,6 +1418,9 @@ function closeDay() {
     dayChecklists[day] = [];
     saveDayChecklists();
     saveData(true);
+    saveSettings();
+    refreshSummaryPanel();
+    panelDirty.history = true;
 
     closeTimePicker();
     setActiveDay(day === getTodayKey() ? null : nextDay);
