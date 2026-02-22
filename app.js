@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 107;
+const APP_BUILD = 108;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -935,13 +935,13 @@ function mlSwipeMove(e) {
     }
 
     e.preventDefault();
-    // Swipe LEFT only
-    const clampedDx = Math.min(0, dx);
+    // Swipe RIGHT only
+    const clampedDx = Math.max(0, dx);
     mlSwipeState.currentX = touch.clientX;
     mlSwipeState.row.style.transform = `translateX(${clampedDx}px)`;
     mlSwipeState.row.style.transition = 'none';
 
-    const pct = Math.abs(clampedDx) / mlSwipeState.width;
+    const pct = clampedDx / mlSwipeState.width;
     mlSwipeState.row.classList.toggle('ml-swipe-delete', pct > 0.35);
 }
 
@@ -960,16 +960,15 @@ function mlSwipeEnd() {
         return;
     }
 
-    const dx = Math.min(0, (mlSwipeState.currentX || mlSwipeState.startX) - mlSwipeState.startX);
     // Recalculate from row's current transform
     const transform = row.style.transform;
-    const match = transform && transform.match(/translateX\((-?[\d.]+)px\)/);
+    const match = transform && transform.match(/translateX\(([\d.]+)px\)/);
     const actualDx = match ? parseFloat(match[1]) : 0;
-    const pct = Math.abs(actualDx) / mlSwipeState.width;
+    const pct = actualDx / mlSwipeState.width;
 
     if (pct > 0.35) {
         row.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        row.style.transform = `translateX(-${mlSwipeState.width}px)`;
+        row.style.transform = `translateX(${mlSwipeState.width}px)`;
         row.style.opacity = '0';
         const { stationId, ingredientId } = mlSwipeState;
         mlSwipeState = null;
