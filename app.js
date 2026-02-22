@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 104;
+const APP_BUILD = 105;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -16,6 +16,7 @@ let stations = [];
 let editingStationId = null;
 let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
 let homeSubTab = localStorage.getItem('aqueous_homeSubTab') || 'stations';
+let mlDayStates = {}; // { "YYYY-MM-DD_stationId_ingId": { struck: bool, done: bool, priority: str, name: str, parQty, parUnit, parDepth, stationName } }
 let history = [];
 let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
@@ -297,6 +298,7 @@ function dismissInstall() {
 
 function initApp() {
     loadData();
+    mlLoadDayStates();
     processCarryOver();
     updateHeader();
 
@@ -824,17 +826,216 @@ function renderStationsView() {
     return html;
 }
 
+// ── Master List Day States ──
+
+function mlGetDateKey() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function mlLoadDayStates() {
+    const dateKey = mlGetDateKey();
+    const saved = localStorage.getItem('aqueous_mlDayStates');
+    if (saved) {
+        const all = JSON.parse(saved);
+        // Only keep today's entries
+        mlDayStates = {};
+        Object.entries(all).forEach(([k, v]) => {
+            if (k.startsWith(dateKey + '_')) mlDayStates[k] = v;
+        });
+    } else {
+        mlDayStates = {};
+    }
+}
+
+function mlSaveDayStates() {
+    // Prune: only save today's keys
+    const dateKey = mlGetDateKey();
+    const toSave = {};
+    Object.entries(mlDayStates).forEach(([k, v]) => {
+        if (k.startsWith(dateKey + '_')) toSave[k] = v;
+    });
+    localStorage.setItem('aqueous_mlDayStates', JSON.stringify(toSave));
+}
+
+function mlStateKey(stationId, ingredientId) {
+    return `${mlGetDateKey()}_${stationId}_${ingredientId}`;
+}
+
+function mlGetState(stationId, ingredientId) {
+    return mlDayStates[mlStateKey(stationId, ingredientId)] || null;
+}
+
+function mlSetState(stationId, ingredientId, patch) {
+    const key = mlStateKey(stationId, ingredientId);
+    if (!mlDayStates[key]) mlDayStates[key] = { struck: false, done: false };
+    Object.assign(mlDayStates[key], patch);
+    mlSaveDayStates();
+}
+
+// ── Master List Interactions ──
+
+let mlSwipeState = null;
+
+function mlToggleStrike(stationId, ingredientId) {
+    handleClick();
+    const ds = mlGetState(stationId, ingredientId);
+    const isStruck = ds ? ds.struck : false;
+    mlSetState(stationId, ingredientId, { struck: !isStruck });
+    const row = document.getElementById(`ml-${stationId}-${ingredientId}`);
+    if (row) {
+        row.classList.toggle('ml-struck', !isStruck);
+    }
+}
+
+function mlSwipeStart(e, stationId, ingredientId) {
+    const touch = e.touches ? e.touches[0] : e;
+    const row = document.getElementById(`ml-${stationId}-${ingredientId}`);
+    if (!row) return;
+    const slider = row.querySelector('.ml-row-slider');
+    if (!slider) return;
+
+    mlSwipeState = {
+        stationId,
+        ingredientId,
+        startX: touch.clientX,
+        currentX: touch.clientX,
+        row,
+        slider,
+        width: row.offsetWidth,
+        committed: false
+    };
+
+    document.addEventListener('touchmove', mlSwipeMove, { passive: false });
+    document.addEventListener('touchend', mlSwipeEnd);
+    document.addEventListener('touchcancel', mlSwipeEnd);
+}
+
+function mlSwipeMove(e) {
+    if (!mlSwipeState) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    mlSwipeState.currentX = touch.clientX;
+    const dx = Math.max(0, mlSwipeState.currentX - mlSwipeState.startX);
+    mlSwipeState.slider.style.transform = `translateX(${dx}px)`;
+    mlSwipeState.slider.style.transition = 'none';
+
+    const pct = dx / mlSwipeState.width;
+    if (pct > 0.4) {
+        mlSwipeState.row.classList.add('ml-swipe-commit');
+    } else {
+        mlSwipeState.row.classList.remove('ml-swipe-commit');
+    }
+}
+
+function mlSwipeEnd() {
+    if (!mlSwipeState) return;
+    document.removeEventListener('touchmove', mlSwipeMove);
+    document.removeEventListener('touchend', mlSwipeEnd);
+    document.removeEventListener('touchcancel', mlSwipeEnd);
+
+    const dx = Math.max(0, mlSwipeState.currentX - mlSwipeState.startX);
+    const pct = dx / mlSwipeState.width;
+
+    if (pct > 0.4) {
+        // Commit done
+        mlSwipeState.slider.style.transition = 'transform 0.2s ease';
+        mlSwipeState.slider.style.transform = `translateX(${mlSwipeState.width}px)`;
+        const { stationId, ingredientId } = mlSwipeState;
+        mlSwipeState = null;
+        setTimeout(() => mlCommitDone(stationId, ingredientId), 200);
+    } else {
+        // Spring back
+        mlSwipeState.slider.style.transition = 'transform 0.25s ease';
+        mlSwipeState.slider.style.transform = 'translateX(0)';
+        mlSwipeState.row.classList.remove('ml-swipe-commit');
+        mlSwipeState = null;
+    }
+}
+
+function mlCommitDone(stationId, ingredientId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const st = station.status[ingredientId];
+    const ing = getAllIngredients(station).find(i => i.id === ingredientId);
+
+    // Store done state with item metadata for the "Done Today" section
+    mlSetState(stationId, ingredientId, {
+        done: true,
+        struck: false,
+        priority: st ? st.priority : null,
+        name: ing ? ing.name : '',
+        stationName: station.name,
+        parQty: st ? st.parQty : null,
+        parUnit: st ? st.parUnit : null,
+        parDepth: st ? st.parDepth : null
+    });
+
+    // Log activity
+    logActivity('task_complete', {
+        ingredient: ing ? ing.name : '',
+        station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
+    });
+
+    // Auto-clean the station data
+    if (st) {
+        const pLevel = st.priority || 'none';
+        st.completed = false;
+        st.priority = null;
+        st.low = false;
+        saveData(true);
+        animateMascot();
+        checkBlockCompletion(pLevel);
+        refreshSummaryPanel();
+    }
+
+    panelDirty.home = true;
+    renderPanel('home');
+}
+
+function mlUndoDone(stationId, ingredientId) {
+    handleClick();
+    const key = mlStateKey(stationId, ingredientId);
+    const ds = mlDayStates[key];
+    if (!ds) return;
+
+    // Restore the item in station data
+    const station = stations.find(s => s.id === stationId);
+    if (station && station.status[ingredientId]) {
+        const st = station.status[ingredientId];
+        st.priority = ds.priority || 'high';
+        st.low = true;
+        st.completed = false;
+        saveData(true);
+        refreshSummaryPanel();
+    }
+
+    // Remove done state
+    delete mlDayStates[key];
+    mlSaveDayStates();
+
+    panelDirty.home = true;
+    renderPanel('home');
+    showToast('Restored');
+}
+
+let mlDoneSectionExpanded = false;
+
+// ── Master List Render ──
+
 function renderMasterListView() {
+    mlLoadDayStates();
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    // Collect all active items (items with priority / low flag)
+    // Collect all active items (items with priority / low flag, and not done today)
     const stationGroups = [];
     stations.forEach(station => {
         const items = [];
         getAllIngredients(station).forEach(ing => {
             const st = station.status[ing.id];
             if (!st || !st.low || !st.priority) return;
+            const ds = mlGetState(station.id, ing.id);
+            if (ds && ds.done) return; // skip done-today items from active list
             items.push({
                 stationId: station.id,
                 ingredientId: ing.id,
@@ -843,11 +1044,10 @@ function renderMasterListView() {
                 parQty: st.parQty,
                 parUnit: st.parUnit,
                 parDepth: st.parDepth,
-                completed: st.completed
+                struck: ds ? ds.struck : false
             });
         });
         if (items.length > 0) {
-            // Sort within station: priority order then alpha
             const priOrder = { high: 0, medium: 1, low: 2 };
             items.sort((a, b) => {
                 const pa = priOrder[a.priority] ?? 3;
@@ -859,6 +1059,26 @@ function renderMasterListView() {
         }
     });
 
+    // Collect done-today items
+    const doneItems = [];
+    Object.entries(mlDayStates).forEach(([key, ds]) => {
+        if (!ds.done) return;
+        const parts = key.split('_');
+        if (parts.length < 3) return;
+        const stationId = parseInt(parts[1]);
+        const ingredientId = parseInt(parts[2]);
+        doneItems.push({
+            stationId,
+            ingredientId,
+            name: ds.name || '?',
+            priority: ds.priority || 'high',
+            stationName: ds.stationName || '',
+            parQty: ds.parQty,
+            parUnit: ds.parUnit,
+            parDepth: ds.parDepth
+        });
+    });
+
     let html = `
         <div class="master-list-header">
             <div class="master-list-title">MASTER</div>
@@ -866,7 +1086,7 @@ function renderMasterListView() {
             <div class="master-list-sub">Compiled list of tasks in progress</div>
         </div>`;
 
-    if (stationGroups.length === 0) {
+    if (stationGroups.length === 0 && doneItems.length === 0) {
         html += `
             <div class="empty-state">
                 <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">All clear</p>
@@ -875,64 +1095,75 @@ function renderMasterListView() {
         return html;
     }
 
+    // Active items
     stationGroups.forEach(group => {
         html += `<div class="ml-station-label">${group.name}</div>`;
         group.items.forEach(item => {
-            const dotClass = `priority-dot ${item.priority}`;
-            const qtyDisplay = item.parQty && item.parUnit
-                ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
-                : (item.parQty ? `${item.parQty}` : '');
-            html += `
-            <div class="ml-row" id="ml-${item.stationId}-${item.ingredientId}">
-                <span class="${dotClass}"></span>
-                <span class="ml-name">${item.name}</span>
-                ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
-                <button class="ml-check-btn squishy" onclick="handleClick(); masterListComplete(${item.stationId}, ${item.ingredientId})">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                </button>
-            </div>`;
+            html += mlRenderRow(item, false);
         });
     });
+
+    // Done Today section
+    if (doneItems.length > 0) {
+        html += `
+        <div class="ml-done-section">
+            <div class="ml-done-header" onclick="mlToggleDoneSection()">
+                <span class="ml-done-toggle">${mlDoneSectionExpanded ? '▾' : '▸'}</span>
+                <span class="ml-done-title">Done Today</span>
+                <span class="ml-done-count">${doneItems.length}</span>
+            </div>
+            <div class="ml-done-body ${mlDoneSectionExpanded ? '' : 'collapsed'}">`;
+        doneItems.forEach(item => {
+            html += mlRenderRow(item, true);
+        });
+        html += '</div></div>';
+    }
 
     return html;
 }
 
-function masterListComplete(stationId, ingredientId) {
-    const station = stations.find(s => s.id === stationId);
-    if (!station || !station.status[ingredientId]) return;
+function mlRenderRow(item, isDone) {
+    const dotClass = `priority-dot ${item.priority}`;
+    const qtyDisplay = item.parQty && item.parUnit
+        ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
+        : (item.parQty ? `${item.parQty}` : '');
+    const struckClass = item.struck ? ' ml-struck' : '';
 
-    const st = station.status[ingredientId];
-    const pLevel = st.priority || 'none';
-
-    // Log activity
-    logActivity('task_complete', {
-        ingredient: getAllIngredients(station).find(i => i.id === ingredientId)?.name || '',
-        station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
-    });
-
-    // Auto-clean: same behavior as toggleCompleted
-    st.completed = false;
-    st.priority = null;
-    st.low = false;
-    saveData(true);
-    animateMascot();
-    checkBlockCompletion(pLevel);
-    refreshSummaryPanel();
-
-    // Animate row out then re-render
-    const row = document.getElementById(`ml-${stationId}-${ingredientId}`);
-    if (row) {
-        row.style.transition = 'opacity 0.25s, transform 0.25s';
-        row.style.opacity = '0';
-        row.style.transform = 'translateX(40px)';
-        setTimeout(() => {
-            panelDirty.home = true;
-            renderPanel('home');
-        }, 250);
-    } else {
-        panelDirty.home = true;
-        renderPanel('home');
+    if (isDone) {
+        return `
+        <div class="ml-row ml-row-done" id="ml-${item.stationId}-${item.ingredientId}">
+            <span class="${dotClass}" style="opacity:0.4;"></span>
+            <span class="ml-name" style="text-decoration:line-through;opacity:0.5;">${item.name}</span>
+            ${qtyDisplay ? `<span class="ml-qty" style="opacity:0.4;">${qtyDisplay}</span>` : ''}
+            <button class="ml-undo-btn squishy" onclick="event.stopPropagation(); mlUndoDone(${item.stationId}, ${item.ingredientId})">
+                Undo
+            </button>
+        </div>`;
     }
+
+    return `
+    <div class="ml-row${struckClass}" id="ml-${item.stationId}-${item.ingredientId}">
+        <div class="ml-row-bg">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            <span>Done</span>
+        </div>
+        <div class="ml-row-slider"
+             onclick="mlToggleStrike(${item.stationId}, ${item.ingredientId})"
+             ontouchstart="mlSwipeStart(event, ${item.stationId}, ${item.ingredientId})">
+            <span class="${dotClass}"></span>
+            <span class="ml-name">${item.name}</span>
+            ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
+        </div>
+    </div>`;
+}
+
+function mlToggleDoneSection() {
+    handleClick();
+    mlDoneSectionExpanded = !mlDoneSectionExpanded;
+    const body = document.querySelector('.ml-done-body');
+    const toggle = document.querySelector('.ml-done-toggle');
+    if (body) body.classList.toggle('collapsed', !mlDoneSectionExpanded);
+    if (toggle) toggle.textContent = mlDoneSectionExpanded ? '▾' : '▸';
 }
 
 function renderIngredients(station) {

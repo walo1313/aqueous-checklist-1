@@ -272,6 +272,27 @@
             margin-bottom: 4px;
         }
         .ml-row {
+            position: relative;
+            min-height: 54px;
+            border-radius: var(--radius);
+            margin-bottom: 6px;
+            overflow: hidden;
+        }
+        .ml-row-bg {
+            position: absolute;
+            inset: 0;
+            background: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-left: 18px;
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            border-radius: var(--radius);
+        }
+        .ml-row-slider {
+            position: relative;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -280,9 +301,14 @@
             background: var(--surface);
             border-radius: var(--radius);
             box-shadow: var(--neu-shadow-sm);
-            margin-bottom: 6px;
-            transition: opacity 0.25s, transform 0.25s;
+            z-index: 1;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: pan-y;
+            transition: transform 0.25s ease;
         }
+        .ml-row-slider:active { background: var(--bg); }
         .ml-row .priority-dot {
             flex-shrink: 0;
         }
@@ -291,6 +317,7 @@
             font-size: 16px;
             font-weight: 700;
             color: var(--text);
+            transition: all 0.15s;
         }
         .ml-qty {
             font-size: 13px;
@@ -298,27 +325,79 @@
             color: var(--text-secondary);
             white-space: nowrap;
             flex-shrink: 0;
+            transition: opacity 0.15s;
         }
-        .ml-check-btn {
-            width: 44px;
-            height: 44px;
-            border: none;
-            border-radius: 12px;
-            background: var(--bg);
-            box-shadow: var(--neu-shadow-sm);
+        /* Struck state */
+        .ml-row.ml-struck .ml-name {
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
+        .ml-row.ml-struck .ml-qty {
+            opacity: 0.4;
+        }
+        /* Swipe commit threshold visual */
+        .ml-row.ml-swipe-commit .ml-row-bg {
+            background: #2E7D32;
+        }
+        /* Done Today section */
+        .ml-done-section {
+            margin-top: 20px;
+        }
+        .ml-done-header {
             display: flex;
             align-items: center;
-            justify-content: center;
+            gap: 8px;
+            padding: 10px 4px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .ml-done-toggle {
+            font-size: 12px;
+            color: var(--text-muted);
+            width: 14px;
+        }
+        .ml-done-title {
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+        .ml-done-count {
+            font-size: 11px;
+            font-weight: 700;
+            background: var(--bg);
+            color: var(--text-muted);
+            padding: 2px 8px;
+            border-radius: 10px;
+            box-shadow: var(--neu-inset);
+        }
+        .ml-done-body.collapsed { display: none; }
+        .ml-row-done {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            min-height: 44px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+            margin-bottom: 6px;
+        }
+        .ml-undo-btn {
+            border: none;
+            background: var(--bg);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--accent);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 6px 14px;
+            border-radius: 8px;
             cursor: pointer;
             flex-shrink: 0;
-            color: var(--text-muted);
-            transition: all 0.15s;
         }
-        .ml-check-btn:active {
-            box-shadow: var(--neu-inset);
-            transform: scale(0.85);
-            color: var(--accent);
-        }
+        .ml-undo-btn:active { box-shadow: var(--neu-inset); transform: scale(0.9); }
 
         /* ===== GLASS CARDS ===== */
         .glass-card {
