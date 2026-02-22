@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 132;
+const APP_BUILD = 133;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -489,6 +489,21 @@ function getAllIngredients(station) {
     return station.ingredients || [];
 }
 
+function getUniqueIngredientCount() {
+    const names = new Set();
+    stations.forEach(station => {
+        getAllIngredients(station).forEach(ing => {
+            names.add(ing.name.toLowerCase().trim());
+        });
+    });
+    return names.size;
+}
+
+function updateGlobalCount() {
+    const el = document.getElementById('globalIngCount');
+    if (el) el.textContent = getUniqueIngredientCount();
+}
+
 function findDishForIngredient(station, ingredientId) {
     if (!station.dishes) return null;
     return station.dishes.find(dish =>
@@ -623,6 +638,7 @@ function initApp() {
     cleanOldCompletedHistory();
     if (!dayChecklists[getActiveDay()]) dayChecklists[getActiveDay()] = [];
     updateHeader();
+    updateGlobalCount();
 
     // Check URL params (e.g. opened from notification)
     const urlParams = new URLSearchParams(window.location.search);
@@ -2281,12 +2297,13 @@ function renderDishIngredients(station, dish) {
         html += `
         <div class="ingredient ${st.low ? 'low' : ''} ${hasPri ? 'has-priority priority-' + st.priority : ''} ${isExpanded ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
             <div class="ingredient-header"
+                 onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
                  oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
                 ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
                 ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
-                <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
+                <span class="ingredient-name" onclick="inlineEditIngName(event, ${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
                 ${!isExpanded && taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
@@ -2711,6 +2728,7 @@ function deleteIngredientFromHome(stationId, ingId) {
 
     saveData(true);
     rerenderStationBody(stationId);
+    updateGlobalCount();
     showToast(`${name} deleted`);
 }
 
@@ -2755,13 +2773,74 @@ function confirmEditIngredientName(stationId, ingId) {
 
     ing.name = newName;
     registerGlobalIngredient(ing.id, newName);
+    updateDayChecklistName(stationId, ingId, newName);
     saveData(true);
 
     const modal = document.getElementById('modalEditIngredient');
     if (modal) modal.remove();
 
     rerenderStationBody(stationId);
+    updateGlobalCount();
     showToast(`Renamed to ${newName}`);
+}
+
+// ==================== INLINE INGREDIENT NAME EDIT ====================
+
+function inlineEditIngName(event, stationId, ingId) {
+    event.stopPropagation();
+    const span = event.target;
+    if (span.tagName === 'INPUT') return;
+
+    const currentName = span.textContent;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentName;
+    input.className = 'inline-ing-edit';
+    input.style.cssText = 'font-size:13px;font-weight:600;border:none;border-bottom:2px solid var(--accent);background:transparent;color:var(--text);outline:none;width:100%;padding:0;margin:0;';
+
+    span.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let saved = false;
+    function save() {
+        if (saved) return;
+        saved = true;
+        const newName = input.value.trim();
+        if (newName && newName !== currentName) {
+            const station = stations.find(s => s.id === stationId);
+            if (station) {
+                const ing = getAllIngredients(station).find(i => i.id === ingId);
+                if (ing) {
+                    ing.name = newName;
+                    registerGlobalIngredient(ing.id, newName);
+                    updateDayChecklistName(stationId, ingId, newName);
+                    saveData(true);
+                    updateGlobalCount();
+                }
+            }
+        }
+        rerenderStationBody(stationId);
+    }
+
+    input.addEventListener('blur', save);
+    input.addEventListener('keydown', function(e) {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+        if (e.key === 'Escape') { saved = true; rerenderStationBody(stationId); }
+    });
+}
+
+function updateDayChecklistName(stationId, ingId, newName) {
+    Object.keys(dayChecklists).forEach(day => {
+        const list = dayChecklists[day] || [];
+        list.forEach(item => {
+            if (item.stationId === stationId && item.ingredientId === ingId) {
+                item.name = newName;
+            }
+        });
+    });
+    saveDayChecklists();
 }
 
 // ==================== CALIBRATION WORKFLOW ====================
@@ -3339,6 +3418,7 @@ function quickAddIngredient(stationId, dishId) {
 
     saveData(true);
     rerenderStationBody(stationId);
+    updateGlobalCount();
     showToast(`${name} added`);
 
     setTimeout(() => {
@@ -5381,6 +5461,7 @@ function addIngredient() {
     input.value = '';
     renderEditIngredients(station);
     saveData(true);
+    updateGlobalCount();
     showToast('Ingredient added');
 }
 
@@ -5398,6 +5479,7 @@ function deleteIngredient(ingredientId) {
 
     renderEditIngredients(station);
     saveData(true);
+    updateGlobalCount();
 }
 
 function saveEditStation() {
@@ -5421,6 +5503,7 @@ function deleteStation() {
     saveData(true);
     closeModal('modalEditStation');
     renderCurrentView();
+    updateGlobalCount();
     showToast('Station deleted');
 }
 
