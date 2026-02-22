@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 112;
+const APP_BUILD = 113;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -182,18 +182,55 @@ function autoCalcPrepWindow() {
 }
 
 function formatTimeAmPm(timeStr) {
-    if (!timeStr) return { h: '--', m: '--', ampm: '' };
+    if (!timeStr) return null;
     const [hh, mm] = timeStr.split(':').map(Number);
     const ampm = hh >= 12 ? 'PM' : 'AM';
     const h12 = hh === 0 ? 12 : (hh > 12 ? hh - 12 : hh);
-    return { h: String(h12), m: String(mm).padStart(2, '0'), ampm };
+    return `${h12}:${String(mm).padStart(2, '0')} ${ampm}`;
+}
+
+function clockIn() {
+    handleClick();
+    const now = new Date();
+    settings.shiftStart = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    autoCalcPrepWindow();
+    saveSettings();
+    refreshSummaryPanel();
+    showToast('Clocked in');
+}
+
+function clockOut() {
+    handleClick();
+    // Confirm before ending shift
+    const overlay = document.createElement('div');
+    overlay.className = 'time-picker-overlay';
+    overlay.innerHTML = `
+        <div class="time-picker-panel">
+            <div class="tp-title">End Shift?</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin:16px 0 24px;line-height:1.4;">Clock out and clear shift time?</p>
+            <div class="tp-actions">
+                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">Cancel</button>
+                <button class="tp-btn tp-save" onclick="confirmClockOut()">Clock Out</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
+}
+
+function confirmClockOut() {
+    settings.shiftStart = null;
+    settings.prepWindowMinutes = null;
+    saveSettings();
+    closeTimePicker();
+    refreshSummaryPanel();
+    showToast('Clocked out');
 }
 
 function openTimePicker(field) {
     handleClick();
     const current = settings[field] || '12:00';
     let [hh, mm] = current.split(':').map(Number);
-    const label = field === 'shiftStart' ? 'Shift Start' : 'Service Start';
+    const label = field === 'shiftStart' ? 'Shift Start' : 'Service';
 
     const overlay = document.createElement('div');
     overlay.className = 'time-picker-overlay';
@@ -2449,21 +2486,23 @@ function renderSummary(container) {
     const totalCount = allTasks.length;
     const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-    const shiftT = formatTimeAmPm(settings.shiftStart);
-    const serviceT = formatTimeAmPm(settings.serviceTime);
-    const shiftDisplay = settings.shiftStart ? `${shiftT.h}:${shiftT.m} ${shiftT.ampm}` : 'Set';
-    const serviceDisplay = settings.serviceTime ? `${serviceT.h}:${serviceT.m} ${serviceT.ampm}` : 'Set';
+    const shiftOn = !!settings.shiftStart;
+    const shiftDisplay = formatTimeAmPm(settings.shiftStart);
+    const serviceDisplay = formatTimeAmPm(settings.serviceTime);
 
     let html = `
         <div class="summary-header-card">
             <div class="summary-time-controls">
-                <div class="stp-tap" onclick="openTimePicker('shiftStart')">
-                    <span class="stp-label">SHIFT</span>
-                    <span class="stp-time">${shiftDisplay}</span>
+                <div class="shift-block ${shiftOn ? 'on' : ''}">
+                    <span class="shift-label">SHIFT</span>
+                    <button class="shift-btn ${shiftOn ? 'on' : ''}" onclick="${shiftOn ? 'clockOut()' : 'clockIn()'}">
+                        ${shiftOn ? 'ON' : 'OFF'}
+                    </button>
+                    ${shiftOn ? `<span class="shift-time" onclick="openTimePicker('shiftStart')">${shiftDisplay}</span>` : ''}
                 </div>
-                <div class="stp-tap" onclick="openTimePicker('serviceTime')">
-                    <span class="stp-label">SERVICE</span>
-                    <span class="stp-time">${serviceDisplay}</span>
+                <div class="service-block">
+                    <span class="shift-label">SERVICE</span>
+                    <span class="service-time" onclick="openTimePicker('serviceTime')">${serviceDisplay || 'Set'}</span>
                 </div>
             </div>
             <div class="progress-info">
