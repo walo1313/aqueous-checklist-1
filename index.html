@@ -207,6 +207,13 @@
         }
 
         /* ===== HOME SUB-TAB SWITCH ===== */
+        .home-tab-sticky {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--bg);
+            padding: 8px 0 4px;
+        }
         .home-tab-switch {
             display: flex;
             gap: 0;
@@ -214,7 +221,9 @@
             border-radius: 14px;
             box-shadow: var(--neu-inset);
             padding: 4px;
-            margin-bottom: 16px;
+        }
+        .home-tab-content {
+            padding-top: 8px;
         }
         .home-tab-btn {
             flex: 1;
@@ -238,27 +247,11 @@
         .home-tab-btn:active { transform: scale(0.95); }
 
         /* ===== MASTER LIST VIEW ===== */
-        .master-list-header {
-            text-align: center;
-            padding: 4px 0 10px;
-        }
-        .master-list-title {
-            font-size: 26px;
-            font-weight: 900;
-            letter-spacing: 4px;
-            color: var(--text);
-        }
-        .master-list-date {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
         .ml-station-label {
             font-size: 13px;
             font-weight: 800;
             color: var(--accent);
-            padding: 12px 4px 4px;
+            padding: 10px 4px 4px;
         }
         .ml-row {
             display: flex;
@@ -273,7 +266,7 @@
             cursor: pointer;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: pan-x;
+            touch-action: pan-y;
             transition: transform 0.25s ease, opacity 0.25s ease;
         }
         .ml-row:active { background: var(--bg); }
@@ -298,11 +291,12 @@
             opacity: 0.45;
         }
         .ml-row.ml-struck .ml-qty { opacity: 0.35; }
+        .ml-row.ml-swipe-active { background: rgba(255,106,26,0.08); }
         .ml-row.ml-swipe-delete {
-            background: #C62828;
+            background: var(--accent);
         }
         .ml-row.ml-swipe-delete .ml-name,
-        .ml-row.ml-swipe-delete .ml-qty,
+        .ml-row.ml-swipe-delete .ml-qty { color: white; opacity: 0.9; }
         .ml-row.ml-swipe-delete .priority-dot { opacity: 0.5; }
 
         /* ===== GLASS CARDS ===== */

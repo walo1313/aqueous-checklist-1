@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 106;
+const APP_BUILD = 107;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -762,19 +762,21 @@ function switchHomeSubTab(tab) {
 }
 
 function renderHome(container) {
-    let html = `
-        <div class="home-tab-switch">
-            <button class="home-tab-btn ${homeSubTab === 'stations' ? 'active' : ''}" onclick="switchHomeSubTab('stations')">Stations</button>
-            <button class="home-tab-btn ${homeSubTab === 'master' ? 'active' : ''}" onclick="switchHomeSubTab('master')">Master List</button>
-        </div>`;
-
+    let content = '';
     if (homeSubTab === 'master') {
-        html += renderMasterListView();
+        content = renderMasterListView();
     } else {
-        html += renderStationsView();
+        content = renderStationsView();
     }
 
-    container.innerHTML = html;
+    container.innerHTML = `
+        <div class="home-tab-sticky">
+            <div class="home-tab-switch">
+                <button class="home-tab-btn ${homeSubTab === 'stations' ? 'active' : ''}" onclick="switchHomeSubTab('stations')">Stations</button>
+                <button class="home-tab-btn ${homeSubTab === 'master' ? 'active' : ''}" onclick="switchHomeSubTab('master')">Master List</button>
+            </div>
+        </div>
+        <div class="home-tab-content">${content}</div>`;
 
     if (homeSubTab === 'stations') {
         expandedIngs.forEach(key => {
@@ -883,19 +885,32 @@ function mlToggleStrike(stationId, ingredientId) {
 }
 
 function mlSwipeStart(e, stationId, ingredientId) {
+    if (mlSwipeState) return;
     const touch = e.touches ? e.touches[0] : e;
     const row = document.getElementById(`ml-${stationId}-${ingredientId}`);
     if (!row) return;
 
-    mlSwipeState = {
+    // Long-press gate: start a timer, only activate swipe after 250ms hold
+    const pending = {
         stationId,
         ingredientId,
         startX: touch.clientX,
-        currentX: touch.clientX,
+        startY: touch.clientY,
         row,
-        width: row.offsetWidth
+        width: row.offsetWidth,
+        activated: false,
+        cancelled: false,
+        timer: null
     };
 
+    pending.timer = setTimeout(() => {
+        if (!pending.cancelled) {
+            pending.activated = true;
+            row.classList.add('ml-swipe-active');
+        }
+    }, 250);
+
+    mlSwipeState = pending;
     document.addEventListener('touchmove', mlSwipeMove, { passive: false });
     document.addEventListener('touchend', mlSwipeEnd);
     document.addEventListener('touchcancel', mlSwipeEnd);
@@ -903,41 +918,74 @@ function mlSwipeStart(e, stationId, ingredientId) {
 
 function mlSwipeMove(e) {
     if (!mlSwipeState) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - mlSwipeState.startX;
+    const dy = touch.clientY - mlSwipeState.startY;
+
+    // If user moves vertically before activation, cancel swipe and allow scroll
+    if (!mlSwipeState.activated) {
+        if (Math.abs(dy) > 8) {
+            mlSwipeState.cancelled = true;
+            clearTimeout(mlSwipeState.timer);
+            mlCleanupListeners();
+            mlSwipeState = null;
+            return;
+        }
+        return; // Not activated yet, don't move anything
+    }
+
     e.preventDefault();
-    mlSwipeState.currentX = e.touches[0].clientX;
-    // Swipe LEFT only: dx is negative displacement clamped to [-(width), 0]
-    const dx = Math.min(0, mlSwipeState.currentX - mlSwipeState.startX);
-    mlSwipeState.row.style.transform = `translateX(${dx}px)`;
+    // Swipe LEFT only
+    const clampedDx = Math.min(0, dx);
+    mlSwipeState.currentX = touch.clientX;
+    mlSwipeState.row.style.transform = `translateX(${clampedDx}px)`;
     mlSwipeState.row.style.transition = 'none';
 
-    const pct = Math.abs(dx) / mlSwipeState.width;
+    const pct = Math.abs(clampedDx) / mlSwipeState.width;
     mlSwipeState.row.classList.toggle('ml-swipe-delete', pct > 0.35);
 }
 
 function mlSwipeEnd() {
     if (!mlSwipeState) return;
-    document.removeEventListener('touchmove', mlSwipeMove);
-    document.removeEventListener('touchend', mlSwipeEnd);
-    document.removeEventListener('touchcancel', mlSwipeEnd);
+    clearTimeout(mlSwipeState.timer);
+    mlCleanupListeners();
 
-    const dx = Math.min(0, mlSwipeState.currentX - mlSwipeState.startX);
-    const pct = Math.abs(dx) / mlSwipeState.width;
+    const row = mlSwipeState.row;
+    const wasActivated = mlSwipeState.activated;
+
+    if (!wasActivated) {
+        // Never activated — treat as a normal tap
+        row.classList.remove('ml-swipe-active');
+        mlSwipeState = null;
+        return;
+    }
+
+    const dx = Math.min(0, (mlSwipeState.currentX || mlSwipeState.startX) - mlSwipeState.startX);
+    // Recalculate from row's current transform
+    const transform = row.style.transform;
+    const match = transform && transform.match(/translateX\((-?[\d.]+)px\)/);
+    const actualDx = match ? parseFloat(match[1]) : 0;
+    const pct = Math.abs(actualDx) / mlSwipeState.width;
 
     if (pct > 0.35) {
-        // Slide off left + delete
-        mlSwipeState.row.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-        mlSwipeState.row.style.transform = `translateX(-${mlSwipeState.width}px)`;
-        mlSwipeState.row.style.opacity = '0';
+        row.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        row.style.transform = `translateX(-${mlSwipeState.width}px)`;
+        row.style.opacity = '0';
         const { stationId, ingredientId } = mlSwipeState;
         mlSwipeState = null;
         setTimeout(() => mlDeleteItem(stationId, ingredientId), 220);
     } else {
-        // Spring back
-        mlSwipeState.row.style.transition = 'transform 0.25s ease';
-        mlSwipeState.row.style.transform = 'translateX(0)';
-        mlSwipeState.row.classList.remove('ml-swipe-delete');
+        row.style.transition = 'transform 0.25s ease';
+        row.style.transform = 'translateX(0)';
+        row.classList.remove('ml-swipe-delete', 'ml-swipe-active');
         mlSwipeState = null;
     }
+}
+
+function mlCleanupListeners() {
+    document.removeEventListener('touchmove', mlSwipeMove);
+    document.removeEventListener('touchend', mlSwipeEnd);
+    document.removeEventListener('touchcancel', mlSwipeEnd);
 }
 
 function mlDeleteItem(stationId, ingredientId) {
@@ -976,8 +1024,6 @@ function mlDeleteItem(stationId, ingredientId) {
 
 function renderMasterListView() {
     mlLoadDayStates();
-    const today = new Date();
-    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
     // Collect active items grouped by station
     const stationGroups = [];
@@ -1009,21 +1055,15 @@ function renderMasterListView() {
         }
     });
 
-    let html = `
-        <div class="master-list-header">
-            <div class="master-list-title">MASTER</div>
-            <div class="master-list-date">${dateStr}</div>
-        </div>`;
-
     if (stationGroups.length === 0) {
-        html += `
+        return `
             <div class="empty-state">
                 <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">All clear</p>
                 <p class="empty-sub">No active tasks — set priorities in Stations</p>
             </div>`;
-        return html;
     }
 
+    let html = '';
     stationGroups.forEach(group => {
         html += `<div class="ml-station-label">${group.name}</div>`;
         group.items.forEach(item => {
