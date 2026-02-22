@@ -532,6 +532,9 @@
             transition: all 0.2s ease-in-out;
             border-left: 4px solid transparent;
             position: relative;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
         }
 
         .ingredient.low {
@@ -576,6 +579,18 @@
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
+        }
+
+        .ing-time-badge {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .ing-time-badge.no-time {
+            color: var(--text-muted);
+            opacity: 0.5;
         }
 
         /* Custom Checkbox - Neumorphic */

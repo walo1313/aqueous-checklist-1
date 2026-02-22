@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 134;
+const APP_BUILD = 135;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -119,8 +119,18 @@ function getBlockRemainingSeconds(bt) {
 function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
     const key = ingName.toLowerCase();
 
-    // Check task templates first (active/passive calibrated data)
+    // Check task templates first (manual or calibrated data)
     const tmpl = taskTemplates[key];
+    if (tmpl && tmpl.manualSeconds > 0) {
+        return {
+            activeSeconds: tmpl.manualSeconds,
+            passiveSeconds: 0,
+            totalSeconds: tmpl.manualSeconds,
+            bestPerDisplayUnit: 0,
+            displayUnit: parUnit,
+            hasTemplate: true
+        };
+    }
     if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) {
         const baseQty = convertToBase(parQty || 1, parUnit || 'each', parDepth);
         const activeTotal = (tmpl.activeFixedSeconds || 0) + Math.round((tmpl.activeSecondsPerUnit || 0) * baseQty);
@@ -179,6 +189,17 @@ function shouldHideStopwatch(ingName) {
 function ingredientHasTimingData(ingName) {
     const key = ingName.toLowerCase();
     return !!prepTimes[key] || !!taskTemplates[key];
+}
+
+function getIngTimingBadge(ingName, st) {
+    const sec = getTimeForMasterList(ingName, st.parQty, st.parUnit, st.parDepth);
+    if (sec && sec > 0) {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        const display = m > 0 ? (s > 0 ? `${m}m${s}s` : `${m}m`) : `${s}s`;
+        return `<span class="ing-time-badge">${display}</span>`;
+    }
+    return '';
 }
 
 function autoCalcPrepWindow() {
@@ -2304,11 +2325,11 @@ function renderDishIngredients(station, dish) {
                  onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
-                 oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
+                 oncontextmenu="event.preventDefault(); event.stopPropagation(); showTimingModal(${station.id}, ${ing.id}, '${escapedIngName}')">
                 ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
                 ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
                 <span class="ingredient-name" onclick="inlineEditIngName(event, ${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
-                ${!isExpanded && taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
+                ${!isExpanded ? getIngTimingBadge(ing.name, st) : ''}
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
                 <div class="smart-qty-row">
@@ -2364,18 +2385,11 @@ const expandedIngs = new Set();
 let dragState = null;
 
 function startLongPress(event, stationId, ingId, ingName) {
-    const station = stations.find(s => s.id === stationId);
-    const hasManyDishes = station && station.dishes && station.dishes.length > 1;
-
     longPressTimer = setTimeout(() => {
         longPressTimer = null;
         if (navigator.vibrate) navigator.vibrate(30);
-        if (hasManyDishes) {
-            startIngredientDrag(stationId, ingId, ingName, event);
-        } else {
-            showIngredientContextMenu(event, stationId, ingId, ingName);
-        }
-    }, 500);
+        showTimingModal(stationId, ingId, ingName);
+    }, 600);
 }
 
 function cancelLongPress() {
@@ -2855,6 +2869,132 @@ function getCalibrationTimerSeconds(timer) {
     if (!timer) return 0;
     if (timer.running) return timer.pausedElapsed + Math.floor((Date.now() - timer.startedAt) / 1000);
     return timer.pausedElapsed;
+}
+
+// ==================== TIMING MODAL (Long Press) ====================
+
+function showTimingModal(stationId, ingId, ingName) {
+    const existing = document.getElementById('modalTimingEdit');
+    if (existing) existing.remove();
+
+    const key = ingName.toLowerCase();
+    const tmpl = taskTemplates[key];
+    const bestLog = getIngredientBestTime(ingName);
+
+    let currentSeconds = 0;
+    if (tmpl && tmpl.manualSeconds > 0) {
+        currentSeconds = tmpl.manualSeconds;
+    } else if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) {
+        currentSeconds = (tmpl.activeFixedSeconds || 0) + (tmpl.passiveFixedSeconds || 0);
+    } else if (bestLog && bestLog > 0) {
+        currentSeconds = bestLog;
+    }
+
+    const isMinutes = currentSeconds >= 60;
+    const displayVal = isMinutes ? Math.round(currentSeconds / 60) : currentSeconds;
+    const unit = isMinutes ? 'min' : 'sec';
+
+    const modal = document.createElement('div');
+    modal.id = 'modalTimingEdit';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;max-width:320px;">
+            <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:16px;">${ingName}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:16px;">Set prep timing</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px;">
+                <input type="number" id="timingValueInput" class="smart-qty-input"
+                    value="${displayVal || ''}" placeholder="0" min="0" step="1" inputmode="numeric"
+                    style="width:90px;font-size:28px;text-align:center;font-weight:800;">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <button class="timing-unit-btn ${unit === 'min' ? 'active' : ''}" id="timingUnitMin"
+                        onclick="setTimingUnit('min')"
+                        style="padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;
+                        background:${unit === 'min' ? 'var(--accent-tint)' : 'var(--surface)'};
+                        color:${unit === 'min' ? 'var(--accent)' : 'var(--text-muted)'};
+                        box-shadow:${unit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">min</button>
+                    <button class="timing-unit-btn ${unit === 'sec' ? 'active' : ''}" id="timingUnitSec"
+                        onclick="setTimingUnit('sec')"
+                        style="padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;
+                        background:${unit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)'};
+                        color:${unit === 'sec' ? 'var(--accent)' : 'var(--text-muted)'};
+                        box-shadow:${unit === 'sec' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">sec</button>
+                </div>
+            </div>
+            ${currentSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Current: ${formatTime(currentSeconds)}</div>` : ''}
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
+                ${currentSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearIngTiming(${stationId}, ${ingId}, '${ingName.replace(/'/g, "\\'")}')">Clear</button>` : ''}
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveIngTiming(${stationId}, ${ingId}, '${ingName.replace(/'/g, "\\'")}')">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    modal.dataset.timingUnit = unit;
+
+    setTimeout(() => {
+        const input = document.getElementById('timingValueInput');
+        if (input) { input.focus(); input.select(); }
+    }, 150);
+}
+
+function setTimingUnit(unit) {
+    const modal = document.getElementById('modalTimingEdit');
+    if (!modal) return;
+    modal.dataset.timingUnit = unit;
+
+    const minBtn = document.getElementById('timingUnitMin');
+    const secBtn = document.getElementById('timingUnitSec');
+    if (minBtn) {
+        minBtn.style.background = unit === 'min' ? 'var(--accent-tint)' : 'var(--surface)';
+        minBtn.style.color = unit === 'min' ? 'var(--accent)' : 'var(--text-muted)';
+        minBtn.style.boxShadow = unit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)';
+    }
+    if (secBtn) {
+        secBtn.style.background = unit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)';
+        secBtn.style.color = unit === 'sec' ? 'var(--accent)' : 'var(--text-muted)';
+        secBtn.style.boxShadow = unit === 'sec' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)';
+    }
+}
+
+function saveIngTiming(stationId, ingId, ingName) {
+    const input = document.getElementById('timingValueInput');
+    const modal = document.getElementById('modalTimingEdit');
+    const val = input ? parseFloat(input.value) : 0;
+    const unit = modal ? modal.dataset.timingUnit : 'min';
+
+    if (!val || val <= 0) { showToast('Enter a time value'); return; }
+
+    const seconds = unit === 'min' ? Math.round(val * 60) : Math.round(val);
+    const key = ingName.toLowerCase();
+
+    taskTemplates[key] = {
+        activeFixedSeconds: seconds,
+        activeSecondsPerUnit: 0,
+        passiveFixedSeconds: 0,
+        passiveSecondsPerUnit: 0,
+        manualSeconds: seconds,
+        lastUpdatedAt: Date.now(),
+        calibratedBy: 'manual',
+        templateVersion: 1
+    };
+    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
+
+    if (modal) modal.remove();
+    rerenderStationBody(stationId);
+    panelDirty.home = true;
+    showToast(`${ingName}: ${formatTime(seconds)}`);
+}
+
+function clearIngTiming(stationId, ingId, ingName) {
+    const key = ingName.toLowerCase();
+    delete taskTemplates[key];
+    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
+
+    const modal = document.getElementById('modalTimingEdit');
+    if (modal) modal.remove();
+    rerenderStationBody(stationId);
+    panelDirty.home = true;
+    showToast(`${ingName}: timing cleared`);
 }
 
 function startCalibration(stationId, ingredientId, ingName) {
