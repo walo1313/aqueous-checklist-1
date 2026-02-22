@@ -280,24 +280,41 @@
             transition: all 0.15s;
         }
         .ml-qty {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent);
             white-space: nowrap;
             flex-shrink: 0;
+            background: rgba(255, 106, 26, 0.1);
+            padding: 3px 8px;
+            border-radius: 8px;
             transition: opacity 0.15s;
+        }
+        .ml-time {
+            font-size: 11px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--text-muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+            background: var(--bg);
+            padding: 3px 8px;
+            border-radius: 8px;
+            box-shadow: var(--neu-inset);
         }
         .ml-row.ml-struck .ml-name {
             text-decoration: line-through;
             opacity: 0.45;
         }
         .ml-row.ml-struck .ml-qty { opacity: 0.35; }
+        .ml-row.ml-struck .ml-time { opacity: 0.35; }
         .ml-row.ml-swipe-active { background: rgba(255,106,26,0.08); }
         .ml-row.ml-swipe-delete {
             background: var(--accent);
         }
         .ml-row.ml-swipe-delete .ml-name,
-        .ml-row.ml-swipe-delete .ml-qty { color: white; opacity: 0.9; }
+        .ml-row.ml-swipe-delete .ml-qty,
+        .ml-row.ml-swipe-delete .ml-time { color: white; opacity: 0.9; }
         .ml-row.ml-swipe-delete .priority-dot { opacity: 0.5; }
 
         /* ===== GLASS CARDS ===== */
@@ -831,6 +848,42 @@
             transform: translateY(-50%);
             color: var(--text-muted);
             opacity: 0.4;
+        }
+
+        /* Log Expandable Blocks */
+        .logs-block-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text);
+            padding: 10px 4px 6px;
+            border-bottom: 2px solid var(--accent);
+            margin-bottom: 8px;
+            margin-top: 12px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .logs-block-body.collapsed { display: none; }
+        .logs-missing-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            margin-bottom: 4px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+        }
+        .logs-missing-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .logs-missing-station {
+            font-size: 10px;
+            color: var(--text-muted);
         }
 
         /* Log Detail */

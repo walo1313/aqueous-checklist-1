@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 116;
+const APP_BUILD = 117;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -32,6 +32,7 @@ const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 let taskTimers = {};
 let blockTimers = {}; // { "high": { seconds, running, interval }, "_all": { ... } }
 let summaryStationCollapsed = {}; // { stationId: true/false }
+let logsBlockCollapsed = { withData: false, missingData: true };
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 // Wake Lock to keep screen on during timers
@@ -170,6 +171,11 @@ function shouldHideStopwatch(ingName) {
     const pt = prepTimes[ingName.toLowerCase()];
     if (!pt) return false;
     return (pt.volumeCount || 0) >= 3 || (pt.weightCount || 0) >= 3;
+}
+
+function ingredientHasTimingData(ingName) {
+    const key = ingName.toLowerCase();
+    return !!prepTimes[key] || !!taskTemplates[key];
 }
 
 function autoCalcPrepWindow() {
@@ -1247,6 +1253,13 @@ function mlDeleteItem(stationId, ingredientId) {
 
 // ── Master List Render ──
 
+function getTimeForMasterList(ingName, parQty, parUnit, parDepth) {
+    const est = getIngredientEstimate(ingName, parQty, parUnit, parDepth);
+    if (est && est.totalSeconds > 0) return est.totalSeconds;
+    const best = getIngredientBestTime(ingName);
+    return (best && best > 0) ? best : null;
+}
+
 function renderMasterListView() {
     mlLoadDayStates();
 
@@ -1265,7 +1278,8 @@ function renderMasterListView() {
                 parQty: st.parQty,
                 parUnit: st.parUnit,
                 parDepth: st.parDepth,
-                struck: mlIsStruck(station.id, ing.id)
+                struck: mlIsStruck(station.id, ing.id),
+                timeEstimate: getTimeForMasterList(ing.name, st.parQty, st.parUnit, st.parDepth)
             });
         });
         if (items.length > 0) {
@@ -1305,6 +1319,9 @@ function mlRenderRow(item) {
         ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
         : (item.parQty ? `${item.parQty}` : '');
     const struckClass = item.struck ? ' ml-struck' : '';
+    const timePill = item.timeEstimate
+        ? `<span class="ml-time">${formatTime(item.timeEstimate)}</span>`
+        : '';
 
     return `
     <div class="ml-row${struckClass}" id="ml-${item.stationId}-${item.ingredientId}"
@@ -1313,6 +1330,7 @@ function mlRenderRow(item) {
         <span class="${dotClass}"></span>
         <span class="ml-name">${item.name}</span>
         ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
+        ${timePill}
     </div>`;
 }
 
@@ -3778,61 +3796,121 @@ function copyToClipboard(text) {
 
 let logDetailIngredient = null;
 
+function toggleLogsBlock(blockKey) {
+    handleClick();
+    logsBlockCollapsed[blockKey] = !logsBlockCollapsed[blockKey];
+    panelDirty.logs = true;
+    renderPanel('logs');
+}
+
 function renderLogs(container) {
-    if (activityLog.length === 0) {
+    // Collect ALL unique ingredients from all stations
+    const allIngredients = [];
+    const seen = new Set();
+    stations.forEach(station => {
+        getAllIngredients(station).forEach(ing => {
+            const key = ing.name.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            allIngredients.push({ name: ing.name, station: station.name });
+        });
+    });
+
+    if (allIngredients.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">📝</div>
-                <p>No prep logs yet</p>
-                <p class="empty-sub">Complete tasks with timers to build your history</p>
+                <p>No ingredients yet</p>
+                <p class="empty-sub">Add ingredients to your stations first</p>
             </div>`;
         return;
     }
 
-    // Build unique ingredient map
-    const ingredientMap = {};
+    // Build log count map from activityLog
+    const logMap = {};
     activityLog.forEach(entry => {
         if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
         const d = entry.data;
         const key = d.ingredient;
-        if (!ingredientMap[key]) {
-            ingredientMap[key] = { name: key, station: d.station || '', count: 0, bestSecPerUnit: Infinity, lastTimestamp: entry.timestamp };
+        if (!logMap[key]) logMap[key] = { count: 0, lastTimestamp: entry.timestamp };
+        logMap[key].count++;
+        if (entry.timestamp > logMap[key].lastTimestamp) logMap[key].lastTimestamp = entry.timestamp;
+    });
+
+    // Partition
+    const withData = [];
+    const missingData = [];
+    allIngredients.forEach(ing => {
+        if (ingredientHasTimingData(ing.name)) {
+            const lm = logMap[ing.name];
+            const bestTime = getIngredientBestTime(ing.name);
+            withData.push({
+                name: ing.name,
+                station: ing.station,
+                count: lm ? lm.count : 0,
+                bestTime,
+                lastTimestamp: lm ? lm.lastTimestamp : ''
+            });
+        } else {
+            missingData.push(ing);
         }
-        const m = ingredientMap[key];
-        m.count++;
-        if (d.secPerUnit > 0 && d.secPerUnit < m.bestSecPerUnit) m.bestSecPerUnit = d.secPerUnit;
-        if (entry.timestamp > m.lastTimestamp) { m.lastTimestamp = entry.timestamp; m.station = d.station || m.station; }
     });
 
-    const ingredients = Object.values(ingredientMap).sort((a, b) => b.lastTimestamp.localeCompare(a.lastTimestamp));
+    // Sort withData by most recent first
+    withData.sort((a, b) => (b.lastTimestamp || '').localeCompare(a.lastTimestamp || ''));
 
-    if (ingredients.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">📝</div>
-                <p>No prep logs yet</p>
-                <p class="empty-sub">Complete tasks with timers to build your history</p>
-            </div>`;
-        return;
+    let html = '';
+
+    // Block 1: With Timing Data
+    html += `
+        <div class="logs-block-header" onclick="toggleLogsBlock('withData')">
+            <span>With Timing Data (${withData.length})</span>
+            <span class="summary-expand-icon">${logsBlockCollapsed.withData ? '+' : '\u2212'}</span>
+        </div>
+        <div class="logs-block-body${logsBlockCollapsed.withData ? ' collapsed' : ''}">`;
+
+    if (withData.length === 0) {
+        html += `<div style="padding:12px 4px;font-size:12px;color:var(--text-muted);">No timing data yet — complete tasks with timers</div>`;
+    } else {
+        withData.forEach(ing => {
+            const escapedName = ing.name.replace(/'/g, "\\'");
+            const hasLogs = ing.count > 0;
+            html += `
+            <button class="log-ingredient-card" ${hasLogs ? `onclick="handleClick(); openLogDetail('${escapedName}')"` : ''} ${!hasLogs ? 'style="cursor:default;"' : ''}>
+                <div class="log-ing-top">
+                    <span class="log-ing-name">${ing.name}</span>
+                    <span class="log-ing-count">${ing.count > 0 ? ing.count + ' log' + (ing.count !== 1 ? 's' : '') : 'template'}</span>
+                </div>
+                <div class="log-ing-bottom">
+                    <span class="log-ing-station">${ing.station}</span>
+                    ${ing.bestTime ? `<span class="log-ing-best">${formatTime(ing.bestTime)}</span>` : ''}
+                </div>
+                ${hasLogs ? '<svg class="log-ing-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>' : ''}
+            </button>`;
+        });
     }
+    html += `</div>`;
 
-    let html = `
-        <div style="font-size:11px;color:var(--text-muted);font-weight:600;padding:0 4px 10px;letter-spacing:0.3px;">${ingredients.length} ingredient${ingredients.length !== 1 ? 's' : ''} tracked</div>`;
+    // Block 2: Missing Timing Data
+    html += `
+        <div class="logs-block-header" onclick="toggleLogsBlock('missingData')">
+            <span>Missing Timing Data (${missingData.length})</span>
+            <span class="summary-expand-icon">${logsBlockCollapsed.missingData ? '+' : '\u2212'}</span>
+        </div>
+        <div class="logs-block-body${logsBlockCollapsed.missingData ? ' collapsed' : ''}">`;
 
-    ingredients.forEach(ing => {
-        const escapedName = ing.name.replace(/'/g, "\\'");
-        html += `
-        <button class="log-ingredient-card" onclick="handleClick(); openLogDetail('${escapedName}')">
-            <div class="log-ing-top">
-                <span class="log-ing-name">${ing.name}</span>
-                <span class="log-ing-count">${ing.count} log${ing.count !== 1 ? 's' : ''}</span>
-            </div>
-            <div class="log-ing-bottom">
-                <span class="log-ing-station">${ing.station}</span>
-            </div>
-            <svg class="log-ing-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>`;
-    });
+    if (missingData.length === 0) {
+        html += `<div style="padding:12px 4px;font-size:12px;color:var(--text-muted);">All ingredients have timing data!</div>`;
+    } else {
+        missingData.forEach(ing => {
+            html += `
+            <div class="logs-missing-card">
+                <span class="logs-missing-name">${ing.name}</span>
+                <span class="logs-missing-station">${ing.station}</span>
+            </div>`;
+        });
+    }
+    html += `</div>`;
 
     container.innerHTML = html;
 }
