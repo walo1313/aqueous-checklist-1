@@ -206,6 +206,120 @@
             overflow: visible;
         }
 
+        /* ===== HOME SUB-TAB SWITCH ===== */
+        .home-tab-switch {
+            display: flex;
+            gap: 0;
+            background: var(--bg);
+            border-radius: 14px;
+            box-shadow: var(--neu-inset);
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+        .home-tab-btn {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 12px 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-muted);
+            border-radius: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .home-tab-btn.active {
+            background: var(--surface);
+            color: var(--accent);
+            box-shadow: var(--neu-shadow-sm);
+            border: 1.5px solid rgba(255,106,26,0.25);
+        }
+        .home-tab-btn:active { transform: scale(0.95); }
+
+        /* ===== MASTER LIST VIEW ===== */
+        .master-list-header {
+            text-align: center;
+            padding: 8px 0 16px;
+        }
+        .master-list-title {
+            font-size: 28px;
+            font-weight: 900;
+            letter-spacing: 4px;
+            color: var(--text);
+        }
+        .master-list-date {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .master-list-sub {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-top: 4px;
+            opacity: 0.7;
+        }
+        .ml-station-label {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            padding: 14px 4px 6px;
+            border-bottom: 1.5px solid var(--accent);
+            margin-bottom: 4px;
+        }
+        .ml-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 12px;
+            min-height: 54px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+            margin-bottom: 6px;
+            transition: opacity 0.25s, transform 0.25s;
+        }
+        .ml-row .priority-dot {
+            flex-shrink: 0;
+        }
+        .ml-name {
+            flex: 1;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .ml-qty {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .ml-check-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 12px;
+            background: var(--bg);
+            box-shadow: var(--neu-shadow-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            color: var(--text-muted);
+            transition: all 0.15s;
+        }
+        .ml-check-btn:active {
+            box-shadow: var(--neu-inset);
+            transform: scale(0.85);
+            color: var(--accent);
+        }
+
         /* ===== GLASS CARDS ===== */
         .glass-card {
             background: var(--glass);

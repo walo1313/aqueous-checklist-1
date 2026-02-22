@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 103;
+const APP_BUILD = 104;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -15,6 +15,7 @@ function updateLastSync() {
 let stations = [];
 let editingStationId = null;
 let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
+let homeSubTab = localStorage.getItem('aqueous_homeSubTab') || 'stations';
 let history = [];
 let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
@@ -750,15 +751,45 @@ function refreshSummaryPanel() {
 
 // ==================== HOME VIEW ====================
 
+function switchHomeSubTab(tab) {
+    handleClick();
+    homeSubTab = tab;
+    localStorage.setItem('aqueous_homeSubTab', tab);
+    panelDirty.home = true;
+    renderPanel('home');
+}
+
 function renderHome(container) {
+    let html = `
+        <div class="home-tab-switch">
+            <button class="home-tab-btn ${homeSubTab === 'stations' ? 'active' : ''}" onclick="switchHomeSubTab('stations')">Stations</button>
+            <button class="home-tab-btn ${homeSubTab === 'master' ? 'active' : ''}" onclick="switchHomeSubTab('master')">Master List</button>
+        </div>`;
+
+    if (homeSubTab === 'master') {
+        html += renderMasterListView();
+    } else {
+        html += renderStationsView();
+    }
+
+    container.innerHTML = html;
+
+    if (homeSubTab === 'stations') {
+        expandedIngs.forEach(key => {
+            const ctrl = document.getElementById(`ing-ctrl-${key}`);
+            if (ctrl) ctrl.classList.add('open');
+        });
+    }
+}
+
+function renderStationsView() {
     if (stations.length === 0) {
-        container.innerHTML = `
+        return `
             <div class="empty-state">
                 <div class="empty-state-icon">📋</div>
                 <p>No stations created</p>
                 <p class="empty-sub">Go to Settings ⚙️ to add a station</p>
             </div>`;
-        return;
     }
 
     let html = '';
@@ -790,13 +821,118 @@ function renderHome(container) {
             </div>
         </div>`;
     });
+    return html;
+}
 
-    container.innerHTML = html;
-    // Restore expand states
-    expandedIngs.forEach(key => {
-        const ctrl = document.getElementById(`ing-ctrl-${key}`);
-        if (ctrl) ctrl.classList.add('open');
+function renderMasterListView() {
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+    // Collect all active items (items with priority / low flag)
+    const stationGroups = [];
+    stations.forEach(station => {
+        const items = [];
+        getAllIngredients(station).forEach(ing => {
+            const st = station.status[ing.id];
+            if (!st || !st.low || !st.priority) return;
+            items.push({
+                stationId: station.id,
+                ingredientId: ing.id,
+                name: ing.name,
+                priority: st.priority,
+                parQty: st.parQty,
+                parUnit: st.parUnit,
+                parDepth: st.parDepth,
+                completed: st.completed
+            });
+        });
+        if (items.length > 0) {
+            // Sort within station: priority order then alpha
+            const priOrder = { high: 0, medium: 1, low: 2 };
+            items.sort((a, b) => {
+                const pa = priOrder[a.priority] ?? 3;
+                const pb = priOrder[b.priority] ?? 3;
+                if (pa !== pb) return pa - pb;
+                return a.name.localeCompare(b.name);
+            });
+            stationGroups.push({ name: station.name, items });
+        }
     });
+
+    let html = `
+        <div class="master-list-header">
+            <div class="master-list-title">MASTER</div>
+            <div class="master-list-date">${dateStr}</div>
+            <div class="master-list-sub">Compiled list of tasks in progress</div>
+        </div>`;
+
+    if (stationGroups.length === 0) {
+        html += `
+            <div class="empty-state">
+                <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">All clear</p>
+                <p class="empty-sub">No active tasks — set priorities in Stations</p>
+            </div>`;
+        return html;
+    }
+
+    stationGroups.forEach(group => {
+        html += `<div class="ml-station-label">${group.name}</div>`;
+        group.items.forEach(item => {
+            const dotClass = `priority-dot ${item.priority}`;
+            const qtyDisplay = item.parQty && item.parUnit
+                ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
+                : (item.parQty ? `${item.parQty}` : '');
+            html += `
+            <div class="ml-row" id="ml-${item.stationId}-${item.ingredientId}">
+                <span class="${dotClass}"></span>
+                <span class="ml-name">${item.name}</span>
+                ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
+                <button class="ml-check-btn squishy" onclick="handleClick(); masterListComplete(${item.stationId}, ${item.ingredientId})">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+            </div>`;
+        });
+    });
+
+    return html;
+}
+
+function masterListComplete(stationId, ingredientId) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+
+    const st = station.status[ingredientId];
+    const pLevel = st.priority || 'none';
+
+    // Log activity
+    logActivity('task_complete', {
+        ingredient: getAllIngredients(station).find(i => i.id === ingredientId)?.name || '',
+        station: station.name, seconds: 0, quantity: 0, secPerUnit: 0
+    });
+
+    // Auto-clean: same behavior as toggleCompleted
+    st.completed = false;
+    st.priority = null;
+    st.low = false;
+    saveData(true);
+    animateMascot();
+    checkBlockCompletion(pLevel);
+    refreshSummaryPanel();
+
+    // Animate row out then re-render
+    const row = document.getElementById(`ml-${stationId}-${ingredientId}`);
+    if (row) {
+        row.style.transition = 'opacity 0.25s, transform 0.25s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(40px)';
+        setTimeout(() => {
+            panelDirty.home = true;
+            renderPanel('home');
+        }, 250);
+    } else {
+        panelDirty.home = true;
+        renderPanel('home');
+    }
 }
 
 function renderIngredients(station) {
@@ -1921,7 +2057,12 @@ function rerenderStationBody(stationId) {
 }
 
 function rerenderHomePanel() {
-    stations.forEach(s => rerenderStationBody(s.id));
+    if (homeSubTab === 'master') {
+        panelDirty.home = true;
+        renderPanel('home');
+    } else {
+        stations.forEach(s => rerenderStationBody(s.id));
+    }
 }
 
 function updateStationCount(stationId) {
@@ -3967,17 +4108,6 @@ function renderSettings(container) {
                     <span class="setting-desc">Manage your kitchen stations</span>
                 </div>
                 <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); showNewStationModal()">+ Add</button>
-            </div>
-        </div>
-
-        <div class="settings-group">
-            <div class="settings-group-title">Ingredients</div>
-            <div class="setting-row">
-                <div class="setting-info">
-                    <span class="setting-label">Master Ingredient List</span>
-                    <span class="setting-desc">View all ingredients, merge duplicates</span>
-                </div>
-                <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); showMasterIngredientList()">View</button>
             </div>
         </div>
 
