@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 131;
+const APP_BUILD = 132;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -73,7 +73,9 @@ const PAN_OZ = {
 const UNIT_TO_G = { kg: 1000, lb: 453.592, g: 1 };
 const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz', 'sq btl'];
 const WEIGHT_UNITS = ['kg', 'lb', 'g'];
-const COUNT_UNITS = ['each', 'recipe'];
+const COUNT_UNITS = ['each', 'recipe', 'order', 'bag', 'block', 'batch', 'case', 'jar', 'portion', 'orders'];
+const CONTAINER_UNITS = ['hotel pan', '10 qt', '22 qt'];
+const TASK_UNITS = ['(task)'];
 
 function getBaseUnit(unit) {
     if (VOLUME_UNITS.includes(unit) || PAN_UNITS.includes(unit)) return 'oz';
@@ -808,10 +810,430 @@ function buildSeafoodStation() {
     return { id: stationId, name: 'SEAFOOD PREP-LIST', dishes: dishObjs, status, expanded: true };
 }
 
+function buildSauteStation() {
+    let nextId = 2000;
+    const id = () => nextId++;
+
+    function dish(name, ings) {
+        const dishId = id();
+        const ingredients = ings.map(i => ({ id: id(), name: i.name }));
+        return { obj: { id: dishId, name, sortOrder: 0, expanded: true, ingredients }, parData: ings };
+    }
+
+    const dishes = [
+        dish('Lobster Cappuccino', [
+            { name: 'Lobster Bisque', unit: 'recipe', qty: 1 },
+            { name: 'Croissant', unit: 'each', qty: 1 },
+            { name: 'Crème Fraîche foam', unit: 'recipe', qty: 1 },
+            { name: 'Lobster meat', unit: 'bag', qty: 1 },
+            { name: 'Smoked paprika', unit: 'cup', qty: 1 }
+        ]),
+        dish('Branzino', [
+            { name: 'Branzino', unit: 'each', qty: 1 },
+            { name: 'Mixed Rice (120gr)', unit: 'order', qty: 1 },
+            { name: 'Bubu Arare', unit: 'cup', qty: 1 },
+            { name: 'Szechuan Pepper', unit: 'recipe', qty: 1 },
+            { name: 'Julienne bell peppers', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Julienne apple', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Mix green', unit: '1/3pan', qty: 1, depth: 4 },
+            { name: 'Pickled red onion', unit: '1/9pan', qty: 1, depth: 4 }
+        ]),
+        dish('Lobster Mac & Cheese', [
+            { name: 'Heavy cream', unit: 'quart', qty: 1 },
+            { name: 'Pasta', unit: '1/3pan', qty: 1, depth: 4 },
+            { name: 'Lobster meat', unit: 'bag', qty: 1 },
+            { name: 'Shredded cheese', unit: 'bag', qty: 1 }
+        ]),
+        dish('Nemacolin Honey Carrots', [
+            { name: 'Honey', unit: 'sq btl', qty: 1 },
+            { name: 'Pink pepper', unit: '1/9pan', qty: 1, depth: 4 },
+            { name: 'Baby Carrots', unit: '1/6pan', qty: 1, depth: 4 }
+        ])
+    ];
+
+    const stationId = 2000;
+    const status = {};
+    const dishObjs = [];
+    dishes.forEach(d => {
+        dishObjs.push(d.obj);
+        d.obj.ingredients.forEach((ing, i) => {
+            const par = d.parData[i];
+            const parUnit = par.unit || '';
+            const parQty = par.qty || null;
+            const depth = par.depth || null;
+            const parLevel = parQty && parUnit ? `${parQty} ${parUnit}` : '';
+            status[ing.id] = {
+                low: false, priority: null, parLevel,
+                parQty, parUnit, parDepth: depth, parNotes: '', completed: false
+            };
+        });
+    });
+
+    return { id: stationId, name: 'SAUTE', dishes: dishObjs, status, expanded: true };
+}
+
+function buildSushiStation() {
+    let nextId = 3000;
+    const id = () => nextId++;
+
+    const items = [
+        { name: 'Hamachi Slice', unit: 'order', qty: 1 },
+        { name: 'Salmon Tartare', unit: 'recipe', qty: 1 },
+        { name: 'King Crab Mix', unit: 'recipe', qty: 1 },
+        { name: 'Spicy Tuna', unit: 'recipe', qty: 1 },
+        { name: 'Lobster mix', unit: 'recipe', qty: 1 },
+        { name: 'Seabass for tempura', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Ahi Tuna Slice', unit: 'block', qty: 1 },
+        { name: 'Ora King Salmon Slice', unit: 'block', qty: 1 },
+        { name: 'Smoked paprika aioli', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Orange Tobiko', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Yuzu Tobiko', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Ikura', unit: 'each', qty: 1 },
+        { name: 'Serrano thin slice', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Micro Cilantro (Cilantro)', unit: 'cup', qty: 1 },
+        { name: 'Avocado', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Jalapeno Julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Chive fine chop', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Wagyu A5', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Takuan Julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Caviar', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Kizami wasabi', unit: 'cup', qty: 1 },
+        { name: 'Green Onion fine chop', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Micro Herb', unit: 'cup', qty: 1 },
+        { name: 'Yuzu Shoyu', unit: 'sq btl', qty: 1 },
+        { name: 'Kimchi Aioli', unit: 'sq btl', qty: 1 },
+        { name: 'Sun-dried Tomato Pesto', unit: 'recipe', qty: 1 },
+        { name: 'Yuzu kosho aioli', unit: 'sq btl', qty: 1 },
+        { name: 'Crème Fraiche', unit: 'sq btl', qty: 1 },
+        { name: 'Sweet Shoyu', unit: 'sq btl', qty: 1 },
+        { name: 'Aka yuzu kosho aioli', unit: 'recipe', qty: 1 },
+        { name: 'Sriracha', unit: 'sq btl', qty: 1 },
+        { name: 'Temaki Nori', unit: 'sq btl', qty: 1 },
+        { name: 'Sushi Rice', unit: 'recipe', qty: 1 },
+        { name: 'Crispy Sushi Rice', unit: 'each', qty: 1 },
+        { name: 'Pickled shiso relish', unit: 'pint', qty: 1 },
+        { name: 'Toasted Sesame seeds', unit: 'cup', qty: 1 },
+        { name: 'Wasabi', unit: 'recipe', qty: 1 },
+        { name: 'Sushi Ginger', unit: '1/9pan', qty: 1, depth: 4 }
+    ];
+
+    const stationId = 3000;
+    const dishId = id();
+    const ingredients = items.map(i => ({ id: id(), name: i.name }));
+    const status = {};
+    ingredients.forEach((ing, i) => {
+        const par = items[i];
+        const parUnit = par.unit || '';
+        const parQty = par.qty || null;
+        const depth = par.depth || null;
+        const parLevel = parQty && parUnit ? `${parQty} ${parUnit}` : '';
+        status[ing.id] = {
+            low: false, priority: null, parLevel,
+            parQty, parUnit, parDepth: depth, parNotes: '', completed: false
+        };
+    });
+
+    const dish = { id: dishId, name: 'Items', sortOrder: 0, expanded: true, ingredients };
+    return { id: stationId, name: 'SUSHI', dishes: [dish], status, expanded: true };
+}
+
+function buildAmberBarStation() {
+    let nextId = 4000;
+    const id = () => nextId++;
+
+    const items = [
+        { name: 'Rainbow Carrots', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Mini Sweet Pepper', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Cucumber', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Micro Crudites Mix', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Celery', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Asparagus', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Classic hummus', unit: 'quart', qty: 1 },
+        { name: 'Tzatziki', unit: 'recipe', qty: 1 },
+        { name: 'Dehydrated Black Olive', unit: 'pint', qty: 1 },
+        { name: 'Grilled pita', unit: 'bag', qty: 1 },
+        { name: 'Dry Salami', unit: 'each', qty: 1 },
+        { name: 'Hot Sopressata', unit: 'each', qty: 1 },
+        { name: 'Italian Salami', unit: 'each', qty: 1 },
+        { name: 'Prosciutto', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Parmigiano Reggiano', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Cheddar', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Brie', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Stilton', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Apricot Jam', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Grape', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Candied nuts', unit: 'quart', qty: 1 },
+        { name: 'GF Grissini (3 EA)', unit: 'order', qty: 1 },
+        { name: 'Artichokes', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Salsa verde', unit: 'recipe', qty: 1 },
+        { name: 'Pecorino', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Lemon Wedge', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Yuzu aioli', unit: 'recipe', qty: 1 },
+        { name: 'Romesco sauce', unit: 'recipe', qty: 1 },
+        { name: 'Red bell pepper brunoise', unit: 'cup', qty: 1 },
+        { name: 'Spring roll order (2 each)', unit: 'order', qty: 1 },
+        { name: 'Micro herbs', unit: 'cup', qty: 1 },
+        { name: 'Fennel saved for salad', unit: 'quart', qty: 1 },
+        { name: 'Pickled fresno', unit: 'quart', qty: 1 },
+        { name: 'Red chili sauce', unit: 'recipe', qty: 1 },
+        { name: 'Kabocha crisp', unit: 'quart', qty: 1 },
+        { name: 'Kabocha sous vide', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Sage Crisps', unit: 'pint', qty: 1 },
+        { name: 'Kabocha bisque', unit: 'recipe', qty: 1 },
+        { name: 'Yellow tomato', unit: 'each', qty: 1 },
+        { name: 'Balsamic pearls', unit: 'jar', qty: 1 },
+        { name: 'Basil-citrus vinaigrette', unit: 'recipe', qty: 1 },
+        { name: 'Burrata', unit: 'each', qty: 1 },
+        { name: 'Yuzu glaze', unit: 'recipe', qty: 1 },
+        { name: 'Yuzu syrup', unit: 'recipe', qty: 1 },
+        { name: 'Basil baby leaf', unit: 'cup', qty: 1 },
+        { name: 'Little gem lettuce', unit: '1/3pan', qty: 1, depth: 4 },
+        { name: 'Radicchio', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Focaccia croutons', unit: 'quart', qty: 1 },
+        { name: 'Parmigiano reggiano', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Crispy prosciutto', unit: 'quart', qty: 1 },
+        { name: 'Cherry Tomatoes', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Caesar dressing', unit: 'recipe', qty: 1 },
+        { name: 'Sushi rice', unit: 'recipe', qty: 1 },
+        { name: 'Tuna', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Furikake', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Mango', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Tosaka nori', unit: 'quart', qty: 1 },
+        { name: 'Edamame', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Cucumber (poke)', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Avocado', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Seaweed salad', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Kimchi aioli', unit: 'recipe', qty: 1 },
+        { name: 'Chicken broth', unit: 'recipe', qty: 1 },
+        { name: 'Chashu chicken', unit: 'each', qty: 1 },
+        { name: 'Sous vide Corn', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Shimeji mushrooms', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Black Fungus', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Bamboo shoots', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Chicken Chicharron', unit: 'quart', qty: 1 },
+        { name: 'Crispy Shallot', unit: 'pint', qty: 1 },
+        { name: 'Black garlic oil', unit: 'pint', qty: 1 },
+        { name: 'Roasted garlic oil', unit: 'pint', qty: 1 },
+        { name: 'Sesame chili oil', unit: 'sq btl', qty: 1 },
+        { name: 'Lime Wedge', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Scallions', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Tamago egg', unit: 'each', qty: 1 },
+        { name: 'Allen bros beef patty (2 EACH)', unit: 'order', qty: 1 },
+        { name: 'American cheese', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Brioche bun', unit: 'each', qty: 1 },
+        { name: 'Black bean patty', unit: 'recipe', qty: 1 },
+        { name: 'Amber aioli', unit: 'recipe', qty: 1 },
+        { name: 'Caramelized onion', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Tomato sliced', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Arugula', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Fries', unit: 'hotel pan', qty: 1 },
+        { name: 'Korean BBQ short rib', unit: 'order', qty: 1 },
+        { name: 'Gochujang butter', unit: 'recipe', qty: 1 },
+        { name: 'Mozzarella cheese shredded', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Kimchi aioli (sandwich)', unit: 'recipe', qty: 1 },
+        { name: 'Kimchi Julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Sourdough', unit: 'order', qty: 1 },
+        { name: 'Wagyu brisket', unit: 'order', qty: 1 },
+        { name: 'Sweet-soy glaze', unit: 'recipe', qty: 1 },
+        { name: 'Pickled cabbage', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Cucumber (bao)', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Pickled Mini sweet pepper', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Bao bun (4 each)', unit: 'order', qty: 1 },
+        { name: 'Cherry tomatoes pickled', unit: 'quart', qty: 1 },
+        { name: 'Milk bread', unit: 'order', qty: 1 },
+        { name: 'Katsu sando sauce', unit: 'sq btl', qty: 1 },
+        { name: 'Kappa pickle brunoise', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Pork katsu', unit: 'order', qty: 1 },
+        { name: 'Shaved little gem', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Kappa pickle', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Lemongrass Rice (200 GR)', unit: 'pint', qty: 1 },
+        { name: 'Chicken Sousvide dinner', unit: 'each', qty: 1 },
+        { name: 'Baby Bokchoy', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Asparagus (stir-fry)', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Yellow bell pepper julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Red bell pepper julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Yellow onion julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Snow peas', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Ginger fine julienne', unit: 'cup', qty: 1 },
+        { name: 'Garlic slice', unit: 'cup', qty: 1 },
+        { name: 'Stir-fry sauce', unit: 'recipe', qty: 1 },
+        { name: 'Scallion', unit: 'cup', qty: 1 },
+        { name: 'Elotes (8 pz)', unit: 'order', qty: 1 },
+        { name: 'Yuzu kosho aioli', unit: 'recipe', qty: 1 },
+        { name: 'Lime cream', unit: 'recipe', qty: 1 },
+        { name: 'Togarashi aioli', unit: 'recipe', qty: 1 },
+        { name: 'Lime wedge', unit: '1/9pan', qty: 1, depth: 4 }
+    ];
+
+    const stationId = 4000;
+    const dishId = id();
+    const ingredients = items.map(i => ({ id: id(), name: i.name }));
+    const status = {};
+    ingredients.forEach((ing, i) => {
+        const par = items[i];
+        const parUnit = par.unit || '';
+        const parQty = par.qty || null;
+        const depth = par.depth || null;
+        const parLevel = parQty && parUnit ? `${parQty} ${parUnit}` : '';
+        status[ing.id] = {
+            low: false, priority: null, parLevel,
+            parQty, parUnit, parDepth: depth, parNotes: '', completed: false
+        };
+    });
+
+    const dish = { id: dishId, name: 'Items', sortOrder: 0, expanded: true, ingredients };
+    return { id: stationId, name: 'AMBER BAR', dishes: [dish], status, expanded: true };
+}
+
+function buildGardeMangerStation() {
+    let nextId = 5000;
+    const id = () => nextId++;
+
+    const items = [
+        { name: 'Smoked Salmon Mousse', unit: 'recipe', qty: 1 },
+        { name: 'Ossetra caviar', unit: 'each', qty: 1 },
+        { name: 'Red onion', unit: 'cup', qty: 1 },
+        { name: 'Chives', unit: 'cup', qty: 1 },
+        { name: 'Egg White', unit: 'each', qty: 1 },
+        { name: 'Egg Yolk', unit: 'each', qty: 1 },
+        { name: 'Potato Chips', unit: 'order', qty: 1 },
+        { name: 'Sour Cream', unit: 'sq btl', qty: 1 },
+        { name: 'Gremolata', unit: 'pint', qty: 1 },
+        { name: 'Sliced meat', unit: 'each', qty: 1 },
+        { name: 'Arugula', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Cucumber', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Parmesan cheese', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Tortilla strips', unit: 'quart', qty: 1 },
+        { name: 'Cucumber julienne', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Pickled carrot', unit: 'recipe', qty: 1 },
+        { name: 'Watermelon', unit: 'each', qty: 1 },
+        { name: 'Watermelon citrus ponzu', unit: 'recipe', qty: 1 },
+        { name: 'Pickled onion', unit: 'recipe', qty: 1 },
+        { name: 'Peach marinated', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Plum marinated', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'White balsamic dressing', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Burrata cheese', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Mint', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Prosciutto', unit: 'recipe', qty: 1 },
+        { name: 'Matcha mayo', unit: 'recipe', qty: 1 },
+        { name: 'Tempura-togarashi crumbs', unit: 'pint', qty: 1 },
+        { name: 'Ginger Brunoise', unit: 'cup', qty: 1 },
+        { name: 'Scallions', unit: 'cup', qty: 1 },
+        { name: 'Tuna diced', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Shrimp u-8 (6)', unit: 'bag', qty: 1 },
+        { name: 'Greens', unit: '1/3pan', qty: 1, depth: 4 },
+        { name: 'Orange segments', unit: 'each', qty: 1 },
+        { name: 'Lemon', unit: 'each', qty: 1 },
+        { name: 'Lime', unit: 'each', qty: 1 },
+        { name: 'Horseradish quenelle', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Aqueous cocktail sauce', unit: 'recipe', qty: 1 },
+        { name: 'Oysters (6)', unit: 'each', qty: 1 },
+        { name: 'Romaine', unit: 'hotel pan', qty: 1 },
+        { name: 'Lemon-togarashi croutons', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Creamy parmesan dressing', unit: 'recipe', qty: 1 },
+        { name: 'Roasted broccoli', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Grana Padano', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Apple', unit: 'each', qty: 1 },
+        { name: 'Lobster sous vide (1)', unit: 'each', qty: 1 },
+        { name: 'Scallops', unit: 'each', qty: 1 },
+        { name: 'Sashimi (3 oz)', unit: 'portion', qty: 1 },
+        { name: 'Crab claws', unit: 'bag', qty: 1 },
+        { name: 'Lump crab', unit: 'each', qty: 1 },
+        { name: 'Garlic Oil', unit: 'quart', qty: 1 },
+        { name: 'Bamboo leaves', unit: 'each', qty: 1 },
+        { name: 'Butter plates', unit: 'each', qty: 1 },
+        { name: 'Cookies', unit: 'recipe', qty: 1 },
+        { name: 'Jam', unit: 'recipe', qty: 1 }
+    ];
+
+    const stationId = 5000;
+    const dishId = id();
+    const ingredients = items.map(i => ({ id: id(), name: i.name }));
+    const status = {};
+    ingredients.forEach((ing, i) => {
+        const par = items[i];
+        const parUnit = par.unit || '';
+        const parQty = par.qty || null;
+        const depth = par.depth || null;
+        const parLevel = parQty && parUnit ? `${parQty} ${parUnit}` : '';
+        status[ing.id] = {
+            low: false, priority: null, parLevel,
+            parQty, parUnit, parDepth: depth, parNotes: '', completed: false
+        };
+    });
+
+    const dish = { id: dishId, name: 'Items', sortOrder: 0, expanded: true, ingredients };
+    return { id: stationId, name: 'GARDE MANGER', dishes: [dish], status, expanded: true };
+}
+
+function buildOvernightStation() {
+    let nextId = 6000;
+    const id = () => nextId++;
+
+    const items = [
+        { name: 'Crack Eggs', unit: '10 qt', qty: 1 },
+        { name: 'Plate Fruit', unit: 'each', qty: 1 },
+        { name: 'Pancake Mix', unit: 'recipe', qty: 1 },
+        { name: 'Cut Fruit', unit: 'hotel pan', qty: 1 },
+        { name: 'Carrots Shredded', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Cucumber', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Orange Segments', unit: 'each', qty: 1 },
+        { name: 'Cherry Tomatoes', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Baby Gem Lettuce', unit: 'hotel pan', qty: 1 },
+        { name: 'Mix Greens', unit: '1/3pan', qty: 1, depth: 4 },
+        { name: 'Parmesan Cheese', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Caesar Dressing', unit: 'recipe', qty: 1 },
+        { name: 'Italian Dressing', unit: 'recipe', qty: 1 },
+        { name: 'Blue Cheese Dressing', unit: 'recipe', qty: 1 },
+        { name: 'White Balsamic Dressing', unit: 'recipe', qty: 1 },
+        { name: 'Ranch Dressing', unit: 'recipe', qty: 1 },
+        { name: 'Yuzu Ponzu', unit: 'recipe', qty: 1 },
+        { name: 'Cocktail Sauce', unit: 'recipe', qty: 1 },
+        { name: 'Butter Mold', unit: 'each', qty: 1 },
+        { name: 'Scoop Cookies', unit: 'batch', qty: 1 },
+        { name: 'Clean Lobster', unit: 'each', qty: 1 },
+        { name: 'Clean King Crab', unit: 'batch', qty: 1 },
+        { name: 'Focaccia for Croutons', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Scrub Oysters', unit: 'case', qty: 1 },
+        { name: 'Cook Pasta', unit: 'quart', qty: 1 },
+        { name: 'Lobster Stock', unit: 'recipe', qty: 1 },
+        { name: 'Blanch Baby Carrots', unit: '1/6pan', qty: 1, depth: 4 },
+        { name: 'Snow Peas', unit: '1/9pan', qty: 1, depth: 4 },
+        { name: 'Peel Potato', unit: '22 qt', qty: 1 },
+        { name: 'Open Filet', unit: 'each', qty: 1 },
+        { name: 'Hummus', unit: 'recipe', qty: 1 },
+        { name: 'Asparagus', unit: 'orders', qty: 1 },
+        { name: 'Blanch Fries Gluten Free', unit: 'case', qty: 1 },
+        { name: 'Mirepoix', unit: 'hotel pan', qty: 1 },
+        { name: 'Change Oil', unit: '(task)', qty: null },
+        { name: 'Wash Frier', unit: '(task)', qty: null },
+        { name: 'Shari-Zu', unit: 'recipe', qty: 1 }
+    ];
+
+    const stationId = 6000;
+    const dishId = id();
+    const ingredients = items.map(i => ({ id: id(), name: i.name }));
+    const status = {};
+    ingredients.forEach((ing, i) => {
+        const par = items[i];
+        const parUnit = par.unit || '';
+        const parQty = par.qty || null;
+        const depth = par.depth || null;
+        const parLevel = parQty && parUnit ? `${parQty} ${parUnit}` : '';
+        status[ing.id] = {
+            low: false, priority: null, parLevel,
+            parQty, parUnit, parDepth: depth, parNotes: '', completed: false
+        };
+    });
+
+    const dish = { id: dishId, name: 'Items', sortOrder: 0, expanded: true, ingredients };
+    return { id: stationId, name: 'OVERNIGHT', dishes: [dish], status, expanded: true };
+}
+
 function loadData() {
-    // One-time reset for SEAFOOD data load (Build 130)
+    // One-time reset for all stations data load (Build 132)
     const dataVersion = localStorage.getItem('aqueous_data_version');
-    if (dataVersion !== '130') {
+    if (dataVersion !== '132') {
         localStorage.removeItem('aqueous_stations');
         localStorage.removeItem('aqueous_globalIngredients');
         localStorage.removeItem('aqueous_dayChecklists');
@@ -829,14 +1251,21 @@ function loadData() {
         prepTimes = {};
         taskTemplates = {};
         ingredientDefaults = {};
-        localStorage.setItem('aqueous_data_version', '130');
+        localStorage.setItem('aqueous_data_version', '132');
     }
 
     const saved = localStorage.getItem('aqueous_stations');
     if (saved) {
         stations = JSON.parse(saved);
     } else {
-        stations = [buildSeafoodStation()];
+        stations = [
+            buildSeafoodStation(),
+            buildSauteStation(),
+            buildSushiStation(),
+            buildAmberBarStation(),
+            buildGardeMangerStation(),
+            buildOvernightStation()
+        ];
         saveData(true);
     }
 
@@ -1888,6 +2317,12 @@ function renderDishIngredients(station, dish) {
                         </optgroup>
                         <optgroup label="Count">
                             ${COUNT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </optgroup>
+                        <optgroup label="Containers">
+                            ${CONTAINER_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                        </optgroup>
+                        <optgroup label="Task">
+                            ${TASK_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
                         </optgroup>
                     </select>
                 </div>
