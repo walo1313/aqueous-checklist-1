@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 127;
+const APP_BUILD = 128;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -197,9 +197,8 @@ function formatTimeAmPm(timeStr) {
 
 function clockIn() {
     handleClick();
-    const totalSec = getCountdownTotalSeconds();
-    if (totalSec <= 0) {
-        showToast('No timing data');
+    if (!allItemsHaveTiming()) {
+        showToast('All items need timing data');
         return;
     }
     const now = new Date();
@@ -255,12 +254,20 @@ function getCountdownTotalSeconds() {
     let total = 0;
     items.forEach(item => {
         if (item.struck) return;
-        const est = getIngredientEstimate(item.name, item.parQty, item.parUnit, item.parDepth);
-        if (est) {
-            total += est.activeSeconds || est.totalSeconds || 0;
-        }
+        const t = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
+        if (t && t > 0) total += t;
     });
     return total;
+}
+
+function allItemsHaveTiming() {
+    const day = getActiveDay();
+    const items = dayChecklists[day] || [];
+    if (items.length === 0) return false;
+    return items.every(item => {
+        const t = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
+        return t && t > 0;
+    });
 }
 
 function startCountdownBar() {
@@ -1239,7 +1246,7 @@ function migrateMlDayStates() {
                 parUnit: st.parUnit,
                 parDepth: st.parDepth,
                 struck: wasStruck,
-                timeEstimate: null
+                timeEstimate: getTimeForMasterList(ing.name, st.parQty, st.parUnit, st.parDepth)
             });
         });
     });
@@ -1640,9 +1647,11 @@ function mlRenderRow(item) {
         ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
         : (item.parQty ? `${item.parQty}` : '');
     const struckClass = item.struck ? ' ml-struck' : '';
-    const timePill = item.timeEstimate
-        ? `<span class="ml-time">${formatTime(item.timeEstimate)}</span>`
-        : '';
+    // Always compute timing fresh
+    const freshTime = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
+    const timePill = freshTime
+        ? `<span class="ml-time">${formatTime(freshTime)}</span>`
+        : `<span class="ml-time" style="color:var(--high);">no time</span>`;
 
     return `
     <div class="ml-row${struckClass}" id="ml-${item.stationId}-${item.ingredientId}"
