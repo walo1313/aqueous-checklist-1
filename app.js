@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 98;
+const APP_BUILD = 99;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -800,8 +800,41 @@ function renderHome(container) {
 }
 
 function renderIngredients(station) {
+    if (!station.dishes || station.dishes.length === 0) return '';
+    const singleDish = station.dishes.length === 1;
     let html = '';
-    getAllIngredients(station).forEach(ing => {
+    station.dishes.forEach(dish => {
+        const dishIngs = dish.ingredients || [];
+        const dishLow = dishIngs.filter(ing => station.status[ing.id] && station.status[ing.id].low).length;
+        const dishTotal = dishIngs.length;
+        const isDishExpanded = dish.expanded !== false;
+        if (singleDish) {
+            html += renderDishIngredients(station, dish);
+        } else {
+            html += `
+            <div class="dish-folder" data-station-id="${station.id}" data-dish-id="${dish.id}">
+                <div class="dish-header" onclick="toggleDish(${station.id}, ${dish.id})"
+                     oncontextmenu="event.preventDefault(); event.stopPropagation(); showDishContextMenu(event, ${station.id}, ${dish.id})">
+                    <span class="dish-toggle">${isDishExpanded ? '▾' : '▸'}</span>
+                    <span class="dish-name">${dish.name}</span>
+                    <span class="dish-count">${dishLow}/${dishTotal}</span>
+                </div>
+                <div class="dish-body ${isDishExpanded ? '' : 'collapsed'}">
+                    ${renderDishIngredients(station, dish)}
+                    <div class="dish-quick-add">
+                        <input type="text" class="quick-add-input" id="quickAdd_${station.id}_${dish.id}" placeholder="Add to ${dish.name}..." onkeydown="if(event.key==='Enter'){quickAddIngredient(${station.id}, ${dish.id})}">
+                        <button class="quick-add-btn" onclick="quickAddIngredient(${station.id}, ${dish.id})">+</button>
+                    </div>
+                </div>
+            </div>`;
+        }
+    });
+    return html;
+}
+
+function renderDishIngredients(station, dish) {
+    let html = '';
+    (dish.ingredients || []).forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
 
         const escapedIngName = ing.name.replace(/'/g, "\\'");
@@ -908,6 +941,184 @@ function showIngredientContextMenu(event, stationId, ingId, ingName) {
         </div>`;
     document.body.appendChild(menu);
     menu.onclick = function(e) { if (e.target === menu) menu.remove(); };
+}
+
+// ==================== DISH MANAGEMENT ====================
+
+function toggleDish(stationId, dishId) {
+    handleClick();
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const dish = station.dishes.find(d => d.id === dishId);
+    if (!dish) return;
+    dish.expanded = !dish.expanded;
+    saveData(true);
+    rerenderStationBody(stationId);
+}
+
+function showNewDishModal(stationId) {
+    const existing = document.getElementById('modalNewDish');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalNewDish';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">New Dish</div>
+            <div class="form-group">
+                <input type="text" id="newDishName" class="form-control" placeholder="Dish name" style="text-align:center;font-size:16px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalNewDish').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); createDish(${stationId})">Create</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(() => {
+        const input = document.getElementById('newDishName');
+        if (input) input.focus();
+    }, 150);
+}
+
+function createDish(stationId) {
+    const input = document.getElementById('newDishName');
+    const name = input ? input.value.trim() : '';
+    if (!name) { showToast('Enter a dish name'); return; }
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+
+    const newDish = {
+        id: Date.now(),
+        name: name,
+        sortOrder: station.dishes.length,
+        expanded: true,
+        ingredients: []
+    };
+    station.dishes.push(newDish);
+    saveData(true);
+
+    const modal = document.getElementById('modalNewDish');
+    if (modal) modal.remove();
+
+    rerenderStationBody(stationId);
+    showToast(`${name} created`);
+}
+
+function showDishContextMenu(event, stationId, dishId) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const existing = document.getElementById('dishContextMenu');
+    if (existing) existing.remove();
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const dish = station.dishes.find(d => d.id === dishId);
+    if (!dish) return;
+
+    const menu = document.createElement('div');
+    menu.id = 'dishContextMenu';
+    menu.className = 'context-menu-overlay';
+    menu.innerHTML = `
+        <div class="context-menu">
+            <div class="context-menu-title">${dish.name}</div>
+            <button class="context-menu-item" onclick="promptRenameDish(${stationId}, ${dishId})">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Rename
+            </button>
+            <button class="context-menu-item delete" onclick="deleteDish(${stationId}, ${dishId})">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                Delete Dish
+            </button>
+        </div>`;
+    document.body.appendChild(menu);
+    menu.onclick = function(e) { if (e.target === menu) menu.remove(); };
+}
+
+function promptRenameDish(stationId, dishId) {
+    const menu = document.getElementById('dishContextMenu');
+    if (menu) menu.remove();
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const dish = station.dishes.find(d => d.id === dishId);
+    if (!dish) return;
+
+    const existing = document.getElementById('modalRenameDish');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalRenameDish';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;">
+            <div class="modal-header">Rename Dish</div>
+            <div class="form-group">
+                <input type="text" id="renameDishInput" class="form-control" value="${dish.name}" style="text-align:center;font-size:16px;">
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalRenameDish').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); renameDish(${stationId}, ${dishId})">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(() => {
+        const input = document.getElementById('renameDishInput');
+        if (input) { input.focus(); input.select(); }
+    }, 150);
+}
+
+function renameDish(stationId, dishId) {
+    const input = document.getElementById('renameDishInput');
+    const newName = input ? input.value.trim() : '';
+    if (!newName) { showToast('Enter a name'); return; }
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const dish = station.dishes.find(d => d.id === dishId);
+    if (!dish) return;
+
+    dish.name = newName;
+    saveData(true);
+
+    const modal = document.getElementById('modalRenameDish');
+    if (modal) modal.remove();
+
+    rerenderStationBody(stationId);
+    showToast(`Renamed to ${newName}`);
+}
+
+function deleteDish(stationId, dishId) {
+    const menu = document.getElementById('dishContextMenu');
+    if (menu) menu.remove();
+
+    const station = stations.find(s => s.id === stationId);
+    if (!station) return;
+    const dish = station.dishes.find(d => d.id === dishId);
+    if (!dish) return;
+
+    if (station.dishes.length <= 1) {
+        showToast('Cannot delete the only dish');
+        return;
+    }
+
+    const ingCount = (dish.ingredients || []).length;
+    if (ingCount > 0) {
+        if (!confirm(`Move ${ingCount} ingredient${ingCount > 1 ? 's' : ''} to "${station.dishes[0].id === dishId ? station.dishes[1].name : station.dishes[0].name}" and delete "${dish.name}"?`)) return;
+        const targetDish = station.dishes.find(d => d.id !== dishId);
+        dish.ingredients.forEach(ing => targetDish.ingredients.push(ing));
+    } else {
+        if (!confirm(`Delete "${dish.name}"?`)) return;
+    }
+
+    station.dishes = station.dishes.filter(d => d.id !== dishId);
+    saveData(true);
+    rerenderStationBody(stationId);
+    showToast(`${dish.name} deleted`);
 }
 
 function deleteIngredientFromHome(stationId, ingId) {
@@ -1519,20 +1730,29 @@ function saveIngredientDefault(station, ingredientId) {
 }
 
 function stationFooter(stationId) {
+    const station = stations.find(s => s.id === stationId);
+    const singleDish = station && station.dishes && station.dishes.length === 1;
+    const defaultDishId = station && station.dishes && station.dishes[0] ? station.dishes[0].id : 0;
     return `
-        <div class="quick-add-row">
-            <input type="text" class="quick-add-input" id="quickAdd_${stationId}" placeholder="Add ingredient..." onkeydown="if(event.key==='Enter'){quickAddIngredient(${stationId})}">
-            <button class="quick-add-btn" onclick="quickAddIngredient(${stationId})">+</button>
-        </div>
-        <button class="btn btn-outline" onclick="resetStation(${stationId})">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-            Clear Checklist
-        </button>`;
+        ${singleDish ? `<div class="quick-add-row">
+            <input type="text" class="quick-add-input" id="quickAdd_${stationId}_${defaultDishId}" placeholder="Add ingredient..." onkeydown="if(event.key==='Enter'){quickAddIngredient(${stationId}, ${defaultDishId})}">
+            <button class="quick-add-btn" onclick="quickAddIngredient(${stationId}, ${defaultDishId})">+</button>
+        </div>` : ''}
+        <div class="station-footer-actions">
+            <button class="btn btn-outline dish-add-btn" onclick="handleClick(); showNewDishModal(${stationId})">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                New Dish
+            </button>
+            <button class="btn btn-outline" onclick="resetStation(${stationId})">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
+                Clear Checklist
+            </button>
+        </div>`;
 }
 
-function quickAddIngredient(stationId) {
+function quickAddIngredient(stationId, dishId) {
     handleClick();
-    const input = document.getElementById(`quickAdd_${stationId}`);
+    const input = document.getElementById(`quickAdd_${stationId}_${dishId}`);
     if (!input) return;
     const name = input.value.trim();
     if (!name) { showToast('Enter an ingredient name'); return; }
@@ -1540,11 +1760,11 @@ function quickAddIngredient(stationId) {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
 
+    const dish = dishId ? station.dishes.find(d => d.id === dishId) : getDefaultDish(station);
+    if (!dish) return;
+
     const newIng = { id: Date.now(), name };
-    const dish = getDefaultDish(station);
-    if (dish) {
-        dish.ingredients.push(newIng);
-    }
+    dish.ingredients.push(newIng);
     station.status[newIng.id] = { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
     registerGlobalIngredient(newIng.id, name);
 
@@ -1553,7 +1773,7 @@ function quickAddIngredient(stationId) {
     showToast(`${name} added`);
 
     setTimeout(() => {
-        const newInput = document.getElementById(`quickAdd_${stationId}`);
+        const newInput = document.getElementById(`quickAdd_${stationId}_${dishId}`);
         if (newInput) newInput.focus();
     }, 50);
 }
