@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 144;
+const APP_BUILD = 145;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2146,10 +2146,11 @@ function closeDay() {
         }
     });
 
-    // Carry over non-struck items to next day with high priority
+    // Carry over non-struck items to next day with escalated priority (one level up)
+    const escalatePriority = (pri) => pri === 'low' ? 'medium' : 'high';
     const carryOver = list.filter(x => !x.struck).map(item => ({
         ...item,
-        priority: 'high',
+        priority: escalatePriority(item.priority),
         struck: false
     }));
 
