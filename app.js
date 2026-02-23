@@ -1995,6 +1995,7 @@ function syncItemToChecklist(stationId, ingredientId) {
             parQty: st.parQty,
             parUnit: st.parUnit,
             parDepth: st.parDepth,
+            parNotes: st.parNotes || '',
             struck: idx >= 0 ? list[idx].struck : false,
             timeEstimate: getTimeForMasterList(ing.name, st.parQty, st.parUnit, st.parDepth)
         };
@@ -2004,6 +2005,7 @@ function syncItemToChecklist(stationId, ingredientId) {
         if (idx >= 0) list.splice(idx, 1);
     }
     saveDayChecklists();
+    panelDirty.home = true;
 }
 
 function setActiveDay(dateKey) {
@@ -2354,7 +2356,10 @@ function mlRenderRow(item) {
          ontouchend="mlRowLongPressCancel()" ontouchmove="mlRowLongPressCancel()"
          oncontextmenu="event.preventDefault(); showTimingEditor('${escapedName}')">
         <span class="${dotClass}"></span>
-        <span class="ml-name">${item.name}</span>
+        <div class="ml-name-col">
+            <span class="ml-name">${item.name}</span>
+            ${item.parNotes ? `<span class="ml-notes">${item.parNotes}</span>` : ''}
+        </div>
         ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
         ${timePill}
     </div>`;
@@ -3628,6 +3633,7 @@ function setParQty(stationId, ingredientId, value) {
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
 }
 
 function setParUnit(stationId, ingredientId, value) {
@@ -3666,6 +3672,7 @@ function applyParUnit(stationId, ingredientId, value) {
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
     rerenderStationBody(stationId);
 }
 
@@ -3696,6 +3703,7 @@ function setParDepth(stationId, ingredientId, value) {
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
     rerenderStationBody(stationId);
 }
 
@@ -3704,6 +3712,7 @@ function setParNotes(stationId, ingredientId, value) {
     if (!station || !station.status[ingredientId]) return;
     station.status[ingredientId].parNotes = value;
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
 }
 
 function adjustParQty(stationId, ingredientId, delta) {
@@ -3715,6 +3724,7 @@ function adjustParQty(stationId, ingredientId, delta) {
     updateParLevel(station, ingredientId);
     saveIngredientDefault(station, ingredientId);
     saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
     rerenderStationBody(stationId);
 }
 

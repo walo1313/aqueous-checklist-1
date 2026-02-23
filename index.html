@@ -338,12 +338,26 @@
         }
         .ml-row:active { background: var(--bg); }
         .ml-row .priority-dot { flex-shrink: 0; }
-        .ml-name {
+        .ml-name-col {
             flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .ml-name {
             font-size: 15px;
             font-weight: 700;
             color: var(--text);
             transition: all 0.15s;
+        }
+        .ml-notes {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-muted);
+            line-height: 1.2;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
         .ml-qty {
             font-size: 11px;
@@ -379,6 +393,7 @@
             background: var(--accent);
         }
         .ml-row.ml-swipe-delete .ml-name,
+        .ml-row.ml-swipe-delete .ml-notes,
         .ml-row.ml-swipe-delete .ml-qty,
         .ml-row.ml-swipe-delete .ml-time { color: white; opacity: 0.9; }
         .ml-row.ml-swipe-delete .priority-dot { opacity: 0.5; }
