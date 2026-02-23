@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 147;
+const APP_BUILD = 148;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1759,10 +1759,6 @@ function renderPanel(view) {
         fab.style.display = 'flex';
         fab.textContent = homeStationPickerOpen ? '\u00d7' : '+';
         fab.classList.toggle('fab-close', homeStationPickerOpen);
-    } else if (view === 'tools' && toolsSubTab === 'stations') {
-        fab.style.display = 'flex';
-        fab.textContent = '+';
-        fab.classList.remove('fab-close');
     } else {
         fab.style.display = 'none';
     }
@@ -1863,11 +1859,7 @@ function renderHome(container) {
 
 function handleFabClick() {
     handleClick();
-    if (currentView === 'home') {
-        toggleHomeStationPicker();
-    } else {
-        showNewStationModal();
-    }
+    toggleHomeStationPicker();
 }
 
 function toggleHomeStationPicker() {
@@ -1949,8 +1941,6 @@ function renderTools(container) {
         </div>
         <div style="padding:0 20px 100px;">${content}</div>`;
 
-    // Show FAB only on Stations sub-tab
-    document.getElementById('fab').style.display = toolsSubTab === 'stations' ? 'flex' : 'none';
 }
 
 // ==================== LIBRARY VIEW ====================
