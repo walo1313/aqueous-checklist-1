@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 140;
+const APP_BUILD = 141;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -142,10 +142,12 @@ function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
         return { totalSeconds: Math.max(Math.round(tmpl[targetFamily].secPerBaseUnit * baseQty), 1), hasTemplate: true, family: targetFamily };
     }
 
-    // Fallback: other family refSeconds
-    const otherFamily = targetFamily === 'volume' ? 'weight' : 'volume';
-    if (tmpl[otherFamily] && tmpl[otherFamily].refSeconds > 0) {
-        return { totalSeconds: tmpl[otherFamily].refSeconds, hasTemplate: true, family: otherFamily, approximate: true };
+    // Fallback: try other families' refSeconds
+    const allFamilies = ['volume', 'weight', 'count'].filter(f => f !== targetFamily);
+    for (const otherFamily of allFamilies) {
+        if (tmpl[otherFamily] && tmpl[otherFamily].refSeconds > 0) {
+            return { totalSeconds: tmpl[otherFamily].refSeconds, hasTemplate: true, family: otherFamily, approximate: true };
+        }
     }
 
     // Legacy V2 flat format
@@ -199,16 +201,17 @@ function shouldHideStopwatch(ingName) {
 
 function ingredientHasTimingData(ingName) {
     const f = getIngTimingFamilies(ingName);
-    return f.volume || f.weight;
+    return f.volume || f.weight || f.count;
 }
 
 function getIngTimingFamilies(ingName) {
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
-    if (!tmpl) return { volume: false, weight: false };
+    if (!tmpl) return { volume: false, weight: false, count: false };
     return {
         volume: !!(tmpl.volume && tmpl.volume.secPerBaseUnit > 0),
-        weight: !!(tmpl.weight && tmpl.weight.secPerBaseUnit > 0)
+        weight: !!(tmpl.weight && tmpl.weight.secPerBaseUnit > 0),
+        count: !!(tmpl.count && tmpl.count.secPerBaseUnit > 0)
     };
 }
 
@@ -1771,7 +1774,7 @@ function renderHome(container) {
         const missingTimingCount = dayItems.filter(item => {
             const fam = getTimingFamily(item.parUnit);
             const ingFam = getIngTimingFamilies(item.name);
-            return !ingFam[fam] && fam !== 'count';
+            return !ingFam[fam];
         }).length;
         if (missingTimingCount > 0) {
             timerGateHtml = `<span class="timer-gate-msg">${missingTimingCount} missing timing</span>`;
@@ -2335,7 +2338,7 @@ function mlRenderRow(item) {
     const freshTime = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
 
     let timePill;
-    if (!hasFamilyTiming && family !== 'count') {
+    if (!hasFamilyTiming) {
         const swKey = `${item.stationId}-${item.ingredientId}`;
         const isRunning = mlStopwatches[swKey];
         if (isRunning) {
@@ -3003,9 +3006,10 @@ function showTimingEditor(ingName) {
     const escapedName = ingName.replace(/'/g, "\\'");
     const families = getIngTimingFamilies(ingName);
 
-    // Pick initial family: volume if has volume data, else weight if has weight, else volume default
+    // Pick initial family: prefer family that has data, else volume default
     let initFamily = 'volume';
-    if (families.weight && !families.volume) initFamily = 'weight';
+    if (families.count && !families.volume && !families.weight) initFamily = 'count';
+    else if (families.weight && !families.volume) initFamily = 'weight';
 
     const modal = document.createElement('div');
     modal.id = 'modalTimingEdit';
@@ -3026,10 +3030,11 @@ function renderTimingEditorContent(modal, ingName, family) {
     const families = getIngTimingFamilies(ingName);
 
     // Get existing data for selected family
-    let refQty = 1, refUnit = family === 'weight' ? 'lb' : 'pint', refSeconds = 0;
+    const defaultUnit = family === 'weight' ? 'lb' : family === 'count' ? 'each' : 'pint';
+    let refQty = 1, refUnit = defaultUnit, refSeconds = 0;
     if (tmpl && tmpl[family]) {
         refQty = tmpl[family].refQty || 1;
-        refUnit = tmpl[family].refUnit || (family === 'weight' ? 'lb' : 'pint');
+        refUnit = tmpl[family].refUnit || defaultUnit;
         refSeconds = tmpl[family].refSeconds || 0;
     }
 
@@ -3037,7 +3042,7 @@ function renderTimingEditorContent(modal, ingName, family) {
     const m = Math.floor((refSeconds % 3600) / 60);
     const s = refSeconds % 60;
 
-    const allUnits = family === 'weight' ? WEIGHT_UNITS : [...VOLUME_UNITS, ...PAN_UNITS, ...CONTAINER_UNITS];
+    const allUnits = family === 'weight' ? WEIGHT_UNITS : family === 'count' ? [...COUNT_UNITS, ...TASK_UNITS] : [...VOLUME_UNITS, ...PAN_UNITS, ...CONTAINER_UNITS];
     const unitOpts = allUnits.map(u => `<option value="${u}" ${refUnit === u ? 'selected' : ''}>${u}</option>`).join('');
 
     modal.dataset.family = family;
@@ -3051,6 +3056,9 @@ function renderTimingEditorContent(modal, ingName, family) {
                 </button>
                 <button class="te-fam-btn ${family === 'weight' ? 'active' : ''}" onclick="teSetFamily('weight')">
                     Weight ${families.weight ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
+                </button>
+                <button class="te-fam-btn ${family === 'count' ? 'active' : ''}" onclick="teSetFamily('count')">
+                    Each ${families.count ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
                 </button>
             </div>
             <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Reference unit</div>
@@ -3098,15 +3106,30 @@ function saveTimingFromEditor(ingName) {
     const m = parseInt(document.getElementById('tmM').value) || 0;
     const s = parseInt(document.getElementById('tmS').value) || 0;
     const totalSec = h * 3600 + m * 60 + s;
-    if (totalSec <= 0) { showToast('Enter a time'); return; }
-
     const family = modal.dataset.family || 'volume';
+    const key = ingName.toLowerCase();
+
+    // If 0:0:0, clear the timing for this family
+    if (totalSec <= 0) {
+        const tmpl = taskTemplates[key];
+        if (tmpl && tmpl[family]) {
+            delete tmpl[family];
+            if (!tmpl.volume && !tmpl.weight && !tmpl.count) delete taskTemplates[key];
+        }
+        saveTaskTemplates();
+        modal.remove();
+        panelDirty.logs = true;
+        panelDirty.home = true;
+        renderPanel('logs');
+        showToast(`${ingName}: ${family} timing cleared`);
+        return;
+    }
+
     const refQty = parseFloat(document.getElementById('editRefQty').value) || 1;
     const refUnit = document.getElementById('editRefUnit').value;
     const depth = PAN_UNITS.includes(refUnit) ? 4 : null;
     const baseQty = convertToBase(refQty, refUnit, depth);
     const secPerBase = baseQty > 0 ? totalSec / baseQty : 0;
-    const key = ingName.toLowerCase();
 
     if (!taskTemplates[key]) taskTemplates[key] = { templateVersion: 3 };
     taskTemplates[key][family] = {
@@ -3135,7 +3158,7 @@ function clearTimingFamily(ingName) {
     if (tmpl && tmpl[family]) {
         delete tmpl[family];
         // If no families left, remove entire template
-        if (!tmpl.volume && !tmpl.weight) delete taskTemplates[key];
+        if (!tmpl.volume && !tmpl.weight && !tmpl.count) delete taskTemplates[key];
     }
     saveTaskTemplates();
 
@@ -5285,15 +5308,17 @@ function renderLogs(container) {
         return;
     }
 
-    // Count volume/weight coverage
-    let volCount = 0, wtCount = 0;
+    // Count volume/weight/each coverage
+    let volCount = 0, wtCount = 0, eachCount = 0;
     uniqueNames.forEach(key => {
         const f = getIngTimingFamilies(key);
         if (f.volume) volCount++;
         if (f.weight) wtCount++;
+        if (f.count) eachCount++;
     });
     const volPct = total > 0 ? Math.round(volCount / total * 100) : 0;
     const wtPct = total > 0 ? Math.round(wtCount / total * 100) : 0;
+    const eachPct = total > 0 ? Math.round(eachCount / total * 100) : 0;
 
     // Progress dashboard
     let html = `
@@ -5307,6 +5332,11 @@ function renderLogs(container) {
                 <span class="logs-prog-label">Weight</span>
                 <div class="logs-prog-bar"><div class="logs-prog-fill" style="width:${wtPct}%"></div></div>
                 <span class="logs-prog-count">${wtCount}/${total}</span>
+            </div>
+            <div class="logs-progress-row">
+                <span class="logs-prog-label">Each</span>
+                <div class="logs-prog-bar"><div class="logs-prog-fill" style="width:${eachPct}%"></div></div>
+                <span class="logs-prog-count">${eachCount}/${total}</span>
             </div>
         </div>`;
 
@@ -5372,6 +5402,7 @@ function renderLogs(container) {
                         <div class="log-timing-indicators">
                             <span class="timing-dot ${families.volume ? 'active' : ''}">V</span>
                             <span class="timing-dot ${families.weight ? 'active' : ''}">W</span>
+                            <span class="timing-dot ${families.count ? 'active' : ''}">E</span>
                         </div>
                     </div>
                     ${refInfo ? `<div class="log-ing-bottom"><span class="log-ing-station">${refInfo}</span></div>` : ''}
