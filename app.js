@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 150;
+const APP_BUILD = 151;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -3336,47 +3336,77 @@ function getCalibrationTimerSeconds(timer) {
     return timer.pausedElapsed;
 }
 
-// ==================== TIMING EDITOR (Simplified Qty + Time) ====================
+// ==================== TIMING EDITOR (Slide-Up Panel) ====================
 
-function showTimingEditor(ingName, mlItem) {
-    const existing = document.getElementById('modalTimingEdit');
-    if (existing) existing.remove();
-
-    const modal = document.createElement('div');
-    modal.id = 'modalTimingEdit';
-    modal.className = 'modal show';
-    modal.dataset.ingName = ingName;
-
-    if (mlItem) {
-        modal.dataset.stationId = mlItem.stationId || '';
-        modal.dataset.ingredientId = mlItem.ingredientId || '';
-        modal.dataset.mlQty = mlItem.parQty || '';
-        modal.dataset.mlUnit = mlItem.parUnit || '';
-        modal.dataset.mlDepth = mlItem.parDepth || '';
-        modal.dataset.originalQty = mlItem.parQty || '';
+function closeTimingEditor() {
+    const overlay = document.getElementById('teOverlay');
+    const panel = document.getElementById('tePanel');
+    if (panel) {
+        panel.classList.remove('show');
     }
-
-    if (mlItem && mlItem.parUnit) {
-        renderTimingQtyTime(modal, ingName);
-    } else {
-        renderTimingUnitPicker(modal, ingName);
+    if (overlay) {
+        overlay.classList.remove('show');
     }
-
-    document.body.appendChild(modal);
-    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(function() {
+        if (overlay) overlay.remove();
+        if (panel) panel.remove();
+    }, 300);
 }
 
-function renderTimingQtyTime(modal, ingName) {
+function showTimingEditor(ingName, mlItem) {
+    closeTimingEditor();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'teOverlay';
+    overlay.className = 'te-overlay';
+
+    const panel = document.createElement('div');
+    panel.id = 'tePanel';
+    panel.className = 'te-panel';
+    panel.dataset.ingName = ingName;
+
+    if (mlItem) {
+        panel.dataset.stationId = mlItem.stationId || '';
+        panel.dataset.ingredientId = mlItem.ingredientId || '';
+        panel.dataset.mlQty = mlItem.parQty || '';
+        panel.dataset.mlUnit = mlItem.parUnit || '';
+        panel.dataset.mlDepth = mlItem.parDepth || '';
+        panel.dataset.originalQty = mlItem.parQty || '';
+    }
+
+    // Block context menu on entire panel
+    panel.addEventListener('contextmenu', function(e) { e.preventDefault(); });
+
+    if (mlItem && mlItem.parUnit) {
+        renderTimingQtyTime(panel, ingName);
+    } else {
+        renderTimingUnitPicker(panel, ingName);
+    }
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(panel);
+
+    // Tap overlay = close without saving
+    overlay.onclick = function() { closeTimingEditor(); };
+
+    // Animate in
+    requestAnimationFrame(function() {
+        overlay.classList.add('show');
+        panel.classList.add('show');
+    });
+}
+
+function renderTimingQtyTime(panel, ingName) {
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
     const escapedName = ingName.replace(/'/g, "\\'");
 
-    const parUnit = modal.dataset.mlUnit;
-    const parDepth = parseInt(modal.dataset.mlDepth) || null;
-    const parQty = parseFloat(modal.dataset.mlQty) || 1;
+    const parUnit = panel.dataset.mlUnit;
+    const parDepth = parseInt(panel.dataset.mlDepth) || null;
+    const parQty = parseFloat(panel.dataset.mlQty) || 1;
     const family = getTimingFamily(parUnit);
 
-    modal.dataset.family = family;
+    panel.dataset.family = family;
 
     let refSeconds = 0;
     if (tmpl && tmpl[family] && tmpl[family].secPerBaseUnit > 0) {
@@ -3386,95 +3416,99 @@ function renderTimingQtyTime(modal, ingName) {
         refSeconds = tmpl[family].refSeconds;
     }
 
-    const h = Math.floor(refSeconds / 3600);
-    const m = Math.floor((refSeconds % 3600) / 60);
-    const s = refSeconds % 60;
+    const totalMin = Math.floor(refSeconds / 60);
+    const sec = refSeconds % 60;
 
-    const unitLabel = PAN_UNITS.includes(parUnit)
-        ? `${parDepth || 4}" ${parUnit}`
-        : parUnit;
+    // Build unit options with current unit selected
+    const allUnits = [
+        { label: 'Weight', units: WEIGHT_UNITS },
+        { label: 'Volume', units: VOLUME_UNITS },
+        { label: 'Pans', units: PAN_UNITS },
+        { label: 'Count', units: COUNT_UNITS },
+        { label: 'Containers', units: CONTAINER_UNITS },
+        { label: 'Task', units: TASK_UNITS }
+    ];
+    let unitOptions = '';
+    allUnits.forEach(function(group) {
+        const opts = group.units.map(function(u) {
+            const sel = u === parUnit ? ' selected' : '';
+            return '<option value="' + u + '"' + sel + '>' + u + '</option>';
+        }).join('');
+        unitOptions += '<optgroup label="' + group.label + '">' + opts + '</optgroup>';
+    });
 
-    modal.innerHTML = `
-        <div class="modal-content" style="text-align:center;max-width:340px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">${ingName}</div>
-            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Edit Timing</div>
+    panel.innerHTML = `
+        <div class="te-handle"></div>
+        <div class="te-name" oncontextmenu="event.preventDefault()">${ingName}</div>
+        <div class="te-subtitle">Edit Timing</div>
 
-            <div class="te-section-label">QUANTITY</div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;">
-                <input type="number" id="teQtyInput" class="smart-qty-input"
-                    value="${parQty}" min="0.1" step="1" inputmode="decimal"
-                    style="width:70px;font-size:18px;text-align:center;"
-                    oninput="debounce('teQty', function(){ teQtyChanged('${escapedName}'); }, 300)">
-                <span style="font-size:14px;font-weight:700;color:var(--text);">${unitLabel}</span>
+        <div class="te-section-label">QUANTITY & UNIT</div>
+        <div class="te-row">
+            <input type="number" id="teQtyInput" class="te-qty-input"
+                value="${parQty}" min="0.1" step="1" inputmode="decimal"
+                oncontextmenu="event.stopPropagation()"
+                oninput="debounce('teQty', function(){ teQtyChanged('${escapedName}'); }, 300)">
+            <select id="teUnitSelect" class="te-unit-select"
+                onchange="teUnitChanged('${escapedName}')">
+                ${unitOptions}
+            </select>
+        </div>
+
+        <div class="te-section-label">TIME</div>
+        <div class="te-time-row">
+            <div class="te-time-col">
+                <input type="number" id="tmM" class="te-time-input" min="0" max="999" value="${totalMin}" inputmode="numeric"
+                    oncontextmenu="event.stopPropagation()">
+                <span class="te-time-label">min</span>
             </div>
-
-            <div class="te-section-label">TIME</div>
-            <div class="timing-hms">
-                <div class="timing-hms-col">
-                    <input type="number" id="tmH" min="0" max="23" value="${h}" inputmode="numeric">
-                    <span class="timing-hms-label">h</span>
-                </div>
-                <span class="timing-hms-sep">:</span>
-                <div class="timing-hms-col">
-                    <input type="number" id="tmM" min="0" max="59" value="${m}" inputmode="numeric">
-                    <span class="timing-hms-label">m</span>
-                </div>
-                <span class="timing-hms-sep">:</span>
-                <div class="timing-hms-col">
-                    <input type="number" id="tmS" min="0" max="59" value="${s}" inputmode="numeric">
-                    <span class="timing-hms-label">s</span>
-                </div>
+            <span class="te-time-sep">:</span>
+            <div class="te-time-col">
+                <input type="number" id="tmS" class="te-time-input" min="0" max="59" value="${sec}" inputmode="numeric"
+                    oncontextmenu="event.stopPropagation()">
+                <span class="te-time-label">sec</span>
             </div>
-            ${refSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin:8px 0;">Current: ${formatTime(refSeconds)}</div>` : ''}
+        </div>
+        ${refSeconds > 0 ? '<div class="te-current">Current: ' + formatTime(refSeconds) + '</div>' : ''}
 
-            <div class="btn-group" style="margin-top:14px;">
-                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); saveTimingFromEditor('${escapedName}')">Done</button>
-            </div>
-        </div>`;
+        <button class="te-done-btn squishy" onclick="handleClick(); saveTimingFromEditor('${escapedName}')">Done</button>`;
 }
 
-function renderTimingUnitPicker(modal, ingName) {
+function renderTimingUnitPicker(panel, ingName) {
     const escapedName = ingName.replace(/'/g, "\\'");
 
-    modal.innerHTML = `
-        <div class="modal-content" style="text-align:center;max-width:340px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">${ingName}</div>
-            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Set Unit</div>
+    panel.innerHTML = `
+        <div class="te-handle"></div>
+        <div class="te-name" oncontextmenu="event.preventDefault()">${ingName}</div>
+        <div class="te-subtitle">Select a unit to continue</div>
 
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Select a unit to continue:</div>
-            <select id="teUnitPicker" class="smart-unit-select" style="font-size:14px;width:100%;margin-bottom:14px;">
-                <option value="" selected>Choose unit...</option>
-                <optgroup label="Weight">
-                    ${WEIGHT_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
-                </optgroup>
-                <optgroup label="Volume">
-                    ${VOLUME_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
-                </optgroup>
-                <optgroup label="Pans">
-                    ${PAN_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
-                </optgroup>
-                <optgroup label="Count">
-                    ${COUNT_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
-                </optgroup>
-                <optgroup label="Containers">
-                    ${CONTAINER_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
-                </optgroup>
-                <optgroup label="Task">
-                    ${TASK_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
-                </optgroup>
-            </select>
+        <select id="teUnitPicker" class="te-unit-select" style="width:100%;margin-bottom:18px;">
+            <option value="" selected>Choose unit...</option>
+            <optgroup label="Weight">
+                ${WEIGHT_UNITS.map(u => '<option value="' + u + '">' + u + '</option>').join('')}
+            </optgroup>
+            <optgroup label="Volume">
+                ${VOLUME_UNITS.map(u => '<option value="' + u + '">' + u + '</option>').join('')}
+            </optgroup>
+            <optgroup label="Pans">
+                ${PAN_UNITS.map(u => '<option value="' + u + '">' + u + '</option>').join('')}
+            </optgroup>
+            <optgroup label="Count">
+                ${COUNT_UNITS.map(u => '<option value="' + u + '">' + u + '</option>').join('')}
+            </optgroup>
+            <optgroup label="Containers">
+                ${CONTAINER_UNITS.map(u => '<option value="' + u + '">' + u + '</option>').join('')}
+            </optgroup>
+            <optgroup label="Task">
+                ${TASK_UNITS.map(u => '<option value="' + u + '">' + u + '</option>').join('')}
+            </optgroup>
+        </select>
 
-            <div class="btn-group" style="margin-top:14px;">
-                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="handleClick(); teSelectUnitAndContinue('${escapedName}')">Next</button>
-            </div>
-        </div>`;
+        <button class="te-done-btn squishy" onclick="handleClick(); teSelectUnitAndContinue('${escapedName}')">Next</button>`;
 }
 
 function teSelectUnitAndContinue(ingName) {
-    const modal = document.getElementById('modalTimingEdit');
-    if (!modal) return;
+    const panel = document.getElementById('tePanel');
+    if (!panel) return;
 
     const unit = document.getElementById('teUnitPicker').value;
     if (!unit) {
@@ -3482,65 +3516,91 @@ function teSelectUnitAndContinue(ingName) {
         return;
     }
 
-    const stationId = parseInt(modal.dataset.stationId);
-    const ingredientId = parseInt(modal.dataset.ingredientId);
+    const stationId = parseInt(panel.dataset.stationId);
+    const ingredientId = parseInt(panel.dataset.ingredientId);
 
     if (stationId && ingredientId) {
         applyParUnit(stationId, ingredientId, unit);
     }
 
-    modal.dataset.mlUnit = unit;
+    panel.dataset.mlUnit = unit;
     if (PAN_UNITS.includes(unit)) {
-        modal.dataset.mlDepth = '4';
+        panel.dataset.mlDepth = '4';
     } else {
-        modal.dataset.mlDepth = '';
+        panel.dataset.mlDepth = '';
     }
-    modal.dataset.mlQty = '1';
-    modal.dataset.originalQty = '1';
+    panel.dataset.mlQty = '1';
+    panel.dataset.originalQty = '1';
 
-    renderTimingQtyTime(modal, ingName);
+    renderTimingQtyTime(panel, ingName);
+}
+
+function teUnitChanged(ingName) {
+    const panel = document.getElementById('tePanel');
+    if (!panel) return;
+
+    const newUnit = document.getElementById('teUnitSelect').value;
+    const oldUnit = panel.dataset.mlUnit;
+    if (newUnit === oldUnit) return;
+
+    const stationId = parseInt(panel.dataset.stationId);
+    const ingredientId = parseInt(panel.dataset.ingredientId);
+
+    if (stationId && ingredientId) {
+        applyParUnit(stationId, ingredientId, newUnit);
+    }
+
+    panel.dataset.mlUnit = newUnit;
+    if (PAN_UNITS.includes(newUnit)) {
+        panel.dataset.mlDepth = '4';
+    } else {
+        panel.dataset.mlDepth = '';
+    }
+
+    const newFamily = getTimingFamily(newUnit);
+    panel.dataset.family = newFamily;
+
+    // Recalculate time with new unit
+    teQtyChanged(ingName);
 }
 
 function teQtyChanged(ingName) {
-    const modal = document.getElementById('modalTimingEdit');
-    if (!modal) return;
+    const panel = document.getElementById('tePanel');
+    if (!panel) return;
 
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
-    const family = modal.dataset.family;
+    const family = panel.dataset.family;
     if (!tmpl || !tmpl[family] || !tmpl[family].secPerBaseUnit || tmpl[family].secPerBaseUnit <= 0) return;
 
     const newQty = parseFloat(document.getElementById('teQtyInput').value);
     if (!newQty || newQty <= 0) return;
 
-    const parUnit = modal.dataset.mlUnit;
-    const parDepth = parseInt(modal.dataset.mlDepth) || null;
+    const parUnit = panel.dataset.mlUnit;
+    const parDepth = parseInt(panel.dataset.mlDepth) || null;
 
     const baseQty = convertToBase(newQty, parUnit, parDepth);
     const newTotalSec = Math.max(Math.round(tmpl[family].secPerBaseUnit * baseQty), 0);
 
-    const h = Math.floor(newTotalSec / 3600);
-    const m = Math.floor((newTotalSec % 3600) / 60);
-    const s = newTotalSec % 60;
+    const totalMin = Math.floor(newTotalSec / 60);
+    const sec = newTotalSec % 60;
 
-    document.getElementById('tmH').value = h;
-    document.getElementById('tmM').value = m;
-    document.getElementById('tmS').value = s;
+    document.getElementById('tmM').value = totalMin;
+    document.getElementById('tmS').value = sec;
 }
 
 function saveTimingFromEditor(ingName) {
-    const modal = document.getElementById('modalTimingEdit');
-    if (!modal) return;
+    const panel = document.getElementById('tePanel');
+    if (!panel) return;
 
-    const h = parseInt(document.getElementById('tmH').value) || 0;
     const m = parseInt(document.getElementById('tmM').value) || 0;
     const s = parseInt(document.getElementById('tmS').value) || 0;
-    const totalSec = h * 3600 + m * 60 + s;
+    const totalSec = m * 60 + s;
 
-    const family = modal.dataset.family || 'volume';
+    const family = panel.dataset.family || 'volume';
     const key = ingName.toLowerCase();
 
-    // 0:0:0 clears timing
+    // 00:00 clears timing
     if (totalSec <= 0) {
         const tmpl = taskTemplates[key];
         if (tmpl && tmpl[family]) {
@@ -3548,7 +3608,7 @@ function saveTimingFromEditor(ingName) {
             if (!tmpl.volume && !tmpl.weight && !tmpl.count) delete taskTemplates[key];
         }
         saveTaskTemplates();
-        modal.remove();
+        closeTimingEditor();
         panelDirty.tools = true;
         panelDirty.home = true;
         renderPanel('home');
@@ -3558,8 +3618,8 @@ function saveTimingFromEditor(ingName) {
     }
 
     const refQty = parseFloat(document.getElementById('teQtyInput').value) || 1;
-    const refUnit = modal.dataset.mlUnit;
-    const depth = PAN_UNITS.includes(refUnit) ? (parseInt(modal.dataset.mlDepth) || 4) : null;
+    const refUnit = panel.dataset.mlUnit;
+    const depth = PAN_UNITS.includes(refUnit) ? (parseInt(panel.dataset.mlDepth) || 4) : null;
     const baseQty = convertToBase(refQty, refUnit, depth);
     const secPerBase = baseQty > 0 ? totalSec / baseQty : 0;
 
@@ -3575,15 +3635,20 @@ function saveTimingFromEditor(ingName) {
     taskTemplates[key].templateVersion = 3;
     saveTaskTemplates();
 
-    // Sync qty change back to station data if changed
-    const originalQty = parseFloat(modal.dataset.originalQty) || 0;
-    const stationId = parseInt(modal.dataset.stationId);
-    const ingredientId = parseInt(modal.dataset.ingredientId);
+    // Sync qty + unit change back to station data if changed
+    const originalQty = parseFloat(panel.dataset.originalQty) || 0;
+    const stationId = parseInt(panel.dataset.stationId);
+    const ingredientId = parseInt(panel.dataset.ingredientId);
 
-    if (refQty !== originalQty && stationId && ingredientId) {
-        const station = stations.find(s => s.id === stationId);
+    if (stationId && ingredientId) {
+        const station = stations.find(st => st.id === stationId);
         if (station && station.status[ingredientId]) {
-            station.status[ingredientId].parQty = refQty;
+            if (refQty !== originalQty) {
+                station.status[ingredientId].parQty = refQty;
+            }
+            station.status[ingredientId].parUnit = refUnit;
+            if (depth) station.status[ingredientId].parDepth = depth;
+            else station.status[ingredientId].parDepth = null;
             updateParLevel(station, ingredientId);
             saveIngredientDefault(station, ingredientId);
             saveData(true);
@@ -3591,7 +3656,7 @@ function saveTimingFromEditor(ingName) {
         }
     }
 
-    modal.remove();
+    closeTimingEditor();
     panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');

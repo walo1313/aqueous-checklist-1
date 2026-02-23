@@ -1357,75 +1357,60 @@
         }
         .ml-pill:active { transform: scale(0.95); }
 
-        /* Timing Editor HH:MM:SS */
-        .timing-hms {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            margin: 8px 0;
+        /* Timing Editor - Slide Up Panel */
+        .te-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 2000;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            opacity: 0;
+            transition: opacity 0.25s ease;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        .timing-hms-col {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .timing-hms-col input {
-            width: 56px;
-            height: 48px;
-            font-size: 24px;
-            font-weight: 800;
-            text-align: center;
-            border: 1.5px solid var(--border);
-            border-radius: 12px;
-            background: var(--bg);
-            color: var(--text);
-            -moz-appearance: textfield;
-        }
-        .timing-hms-col input::-webkit-inner-spin-button,
-        .timing-hms-col input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        .timing-hms-label {
-            font-size: 9px;
-            font-weight: 700;
-            color: var(--text-muted);
-            margin-top: 2px;
-        }
-        .timing-hms-sep {
-            font-size: 24px;
-            font-weight: 800;
-            color: var(--text-muted);
-            margin-bottom: 16px;
-        }
-
-        /* Timing Editor Family Buttons */
-        .te-fam-btn {
-            padding: 6px 14px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 700;
-            border: none;
-            cursor: pointer;
+        .te-overlay.show { opacity: 1; }
+        .te-panel {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 2001;
             background: var(--surface);
-            color: var(--text-muted);
-            box-shadow: var(--neu-shadow-sm);
-            display: flex;
-            align-items: center;
-            gap: 4px;
+            border-radius: 20px 20px 0 0;
+            padding: 20px 24px calc(env(safe-area-inset-bottom, 0px) + 16px);
+            box-shadow: 0 -8px 32px rgba(0,0,0,0.12);
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            max-height: 80vh;
+            overflow-y: auto;
         }
-        .te-fam-btn.active {
-            background: var(--accent-tint);
-            color: var(--accent);
-            box-shadow: var(--neu-inset);
-        }
-        .te-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
+        .te-panel.show { transform: translateY(0); }
+        .te-handle {
+            width: 36px;
+            height: 4px;
+            border-radius: 2px;
             background: var(--border);
-            display: inline-block;
+            margin: 0 auto 14px;
         }
-        .te-dot.active {
-            background: var(--accent);
+        .te-name {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--text);
+            text-align: center;
+            margin-bottom: 2px;
+            -webkit-user-select: none;
+            user-select: none;
+            pointer-events: none;
+        }
+        .te-subtitle {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-align: center;
+            margin-bottom: 18px;
         }
         .te-section-label {
             font-size: 11px;
@@ -1436,6 +1421,121 @@
             margin-bottom: 6px;
             text-align: left;
         }
+        .te-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .te-qty-input {
+            width: 80px;
+            height: 46px;
+            font-size: 20px;
+            font-weight: 800;
+            text-align: center;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg);
+            color: var(--text);
+            -moz-appearance: textfield;
+            -webkit-user-select: text;
+            user-select: text;
+        }
+        .te-qty-input::-webkit-inner-spin-button,
+        .te-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .te-qty-input:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px var(--accent-tint);
+        }
+        .te-unit-select {
+            flex: 1;
+            height: 46px;
+            font-size: 14px;
+            font-weight: 700;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg);
+            color: var(--text);
+            padding: 0 12px;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23999' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+        }
+        .te-unit-select:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px var(--accent-tint);
+        }
+        .te-time-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+        .te-time-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .te-time-input {
+            width: 72px;
+            height: 52px;
+            font-size: 28px;
+            font-weight: 800;
+            text-align: center;
+            border: 1.5px solid var(--border);
+            border-radius: 14px;
+            background: var(--bg);
+            color: var(--text);
+            -moz-appearance: textfield;
+            -webkit-user-select: text;
+            user-select: text;
+        }
+        .te-time-input::-webkit-inner-spin-button,
+        .te-time-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .te-time-input:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 3px var(--accent-tint);
+        }
+        .te-time-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+        .te-time-sep {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--text-muted);
+            margin-bottom: 18px;
+        }
+        .te-current {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: center;
+            margin: 4px 0 8px;
+        }
+        .te-done-btn {
+            display: block;
+            width: 100%;
+            height: 48px;
+            border: none;
+            border-radius: 14px;
+            background: var(--accent);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 800;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: transform 0.1s, opacity 0.1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .te-done-btn:active { transform: scale(0.97); opacity: 0.9; }
 
         /* Timer Gate */
         .timer-gate-msg {
