@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 149;
+const APP_BUILD = 150;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1476,6 +1476,12 @@ function loadData() {
     // Load task templates
     const savedTemplates = localStorage.getItem('aqueous_taskTemplates');
     if (savedTemplates) taskTemplates = JSON.parse(savedTemplates);
+
+    // One-time bulk timing load (Build 149)
+    if (!localStorage.getItem('aqueous_timing_bulk_v1')) {
+        bulkLoadTimingData();
+        localStorage.setItem('aqueous_timing_bulk_v1', '1');
+    }
 }
 
 function savePrepTimes() {
@@ -1484,6 +1490,215 @@ function savePrepTimes() {
 
 function saveTaskTemplates() {
     localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
+}
+
+function bulkLoadTimingData() {
+    // Unit abbreviation map: file abbrev → app unit name
+    const U = {
+        'qt': 'quart', 'pint': 'pint', 'cup': 'cup', 'oz': 'oz', 'sq btl': 'sq btl',
+        'squeeze': 'sq btl',
+        '1/9 pan': '1/9pan', '1/6 pan': '1/6pan', '1/3 pan': '1/3pan', '1/2 pan': '1/2pan', 'full pan': 'fullpan',
+        'hotel pan': 'hotel pan', '10 qt': '10 qt', '22 qt': '22 qt',
+        'kg': 'kg', 'lb': 'lb', 'g': 'g',
+        'ea': 'each', 'each': 'each', 'recipe': 'recipe', 'order': 'order', 'bag': 'bag',
+        'block': 'block', 'batch': 'batch', 'case': 'case', 'jar': 'jar',
+        'portion': 'portion', 'orders': 'orders', 'task': '(task)'
+    };
+
+    // Raw data: [name, unitAbbrev, family, totalSeconds]
+    const data = [
+        // SEAFOOD PREP-LIST
+        ['Split prawn','ea','count',90],['Gochujang-Infused Garlic Oil','qt','volume',900],
+        ['Shaved fennel','1/9 pan','volume',300],['Fried Bao (2 pz)','order','count',240],
+        ['Arugula','1/6 pan','volume',120],['Crispy shallot','pint','volume',600],
+        ['Lemon juice','ea','count',30],['Pickled fresno','cup','volume',300],
+        ['Olive oil','squeeze','volume',60],['Gochujang sauce','1/6 pan','volume',600],
+        ['Demi (Butcher\'s)','qt','volume',1800],['Brocoli','ea','count',180],
+        ['Potato pave','ea','count',2400],['Pistachio','qt','volume',300],
+        ['Cut of the day','ea','count',300],['CHICKEN BREAST','ea','count',180],
+        ['Pomme puree','qt','volume',1800],['CARAMELIZED PEARL ONION','pint','volume',900],
+        ['MUSHROOM MARSALA','qt','volume',1200],['FENNEL','1/9 pan','volume',240],
+        ['KING TRUMPET','1/9 pan','volume',300],['A5 Wagyu (3 oz)','ea','count',120],
+        ['Alaskan King Crab (3 oz)','ea','count',180],['Yuzukoshō Miso Kabocha (3)','order','count',300],
+        ['Asparagus (2)','ea','count',60],['Demi (Surf&Turf)','qt','volume',1800],
+        ['Butter','1/6 pan','volume',60],['Filet Mignon','ea','count',180],
+        ['Chicken (Wok)','ea','count',180],['Stir-fried sauce','recipe','count',900],
+        ['Lemongrass jazmin rice (200gr)','order','count',300],['Onion','1/9 pan','volume',240],
+        ['Bell peppers','1/9 pan','volume',240],['Sliced garlic','cup','volume',300],
+        ['Ginger','cup','volume',300],['Asparagus (Wok)','1/9 pan','volume',240],
+        ['Baby bok choy','1/6 pan','volume',180],['Snow peas','1/9 pan','volume',180],
+        ['Scallions','cup','volume',180],['Shrimp','ea','count',90],
+        ['Pomme puree (Enhancement)','qt','volume',1800],
+        // SAUTE
+        ['Lobster Bisque','recipe','count',3600],['Croissant','ea','count',30],
+        ['Crème Fraîche foam','recipe','count',600],['Lobster meat','bag','count',900],
+        ['Smoked paprika','cup','volume',60],['Branzino','ea','count',300],
+        ['Mixed Rice (120gr)','order','count',300],['Bubu Arare','cup','volume',60],
+        ['Szechuan Pepper','recipe','count',300],['Julienne bell peppers','1/9 pan','volume',360],
+        ['Julienne apple','1/9 pan','volume',300],['Mix green','1/3 pan','volume',180],
+        ['Pickled red onion','1/9 pan','volume',360],['Heavy cream','qt','volume',60],
+        ['Pasta','1/3 pan','volume',600],['Lobster meat (Mac)','bag','count',900],
+        ['Shredded cheese','bag','count',60],['Honey','squeeze','volume',60],
+        ['Pink pepper','1/9 pan','volume',120],['Baby Carrots','1/6 pan','volume',360],
+        // SUSHI
+        ['Hamachi Slice','order','count',180],['Salmon Tartare','recipe','count',900],
+        ['King Crab Mix','recipe','count',900],['Spicy Tuna','recipe','count',600],
+        ['Lobster mix','recipe','count',900],['Seabass for tempura','1/9 pan','volume',360],
+        ['Ahi Tuna Slice','block','count',600],['Ora King Salmon Slice','block','count',600],
+        ['Smoked paprika aioli','1/9 pan','volume',600],['Orange Tobiko','1/6 pan','volume',60],
+        ['Yuzu Tobiko','1/6 pan','volume',60],['Ikura','ea','count',60],
+        ['Serrano thin slice','1/9 pan','volume',300],['Micro Cilantro (Cilantro)','cup','volume',120],
+        ['Avocado','1/9 pan','volume',300],['Jalapeno Julienne','1/9 pan','volume',300],
+        ['Chive fine chop','1/9 pan','volume',300],['Wagyu A5','1/9 pan','volume',300],
+        ['Takuan Julienne','1/9 pan','volume',240],['Caviar','1/9 pan','volume',60],
+        ['Kizami wasabi','cup','volume',60],['Green Onion fine chop','1/9 pan','volume',240],
+        ['Micro Herb','cup','volume',120],['Yuzu Shoyu','sq btl','volume',300],
+        ['Kimchi Aioli','sq btl','volume',600],['Sun-dried Tomato Pesto','recipe','count',900],
+        ['Yuzu kosho aioli','sq btl','volume',600],['Crème Fraiche','sq btl','volume',120],
+        ['Sweet Shoyu','sq btl','volume',300],['Aka yuzu kosho aioli','recipe','count',600],
+        ['Sriracha','sq btl','volume',60],['Temaki Nori','sq btl','volume',60],
+        ['Sushi Rice','recipe','count',2400],['Crispy Sushi Rice','ea','count',600],
+        ['Pickled shiso relish','pint','volume',600],['Toasted Sesame seeds','cup','volume',180],
+        ['Wasabi','recipe','count',120],['Sushi Ginger','1/9 pan','volume',60],
+        // AMBER BAR
+        ['Rainbow Carrots','1/9 pan','volume',300],['Mini Sweet Pepper','1/9 pan','volume',240],
+        ['Cucumber','1/9 pan','volume',180],['Micro Crudites Mix','1/9 pan','volume',300],
+        ['Celery','1/9 pan','volume',180],['Asparagus','1/9 pan','volume',240],
+        ['Classic hummus','qt','volume',1200],
+        ['Tzatziki','recipe','count',900],['Dehydrated Black Olive','pint','volume',1800],
+        ['Grilled pita','bag','count',300],['Dry Salami','ea','count',180],
+        ['Hot Sopressata','ea','count',180],['Italian Salami','ea','count',180],
+        ['Prosciutto','1/6 pan','volume',240],['Parmigiano Reggiano','1/9 pan','volume',300],
+        ['Cheddar','1/9 pan','volume',180],['Brie','1/9 pan','volume',120],
+        ['Stilton','1/9 pan','volume',120],['Apricot Jam','1/9 pan','volume',60],
+        ['Grape','1/9 pan','volume',120],['Candied nuts','qt','volume',900],
+        ['GF Grissini (3 EA)','order','count',60],['Artichokes','1/6 pan','volume',600],
+        ['Salsa verde','recipe','count',900],['Pecorino','1/9 pan','volume',240],
+        ['Lemon Wedge','1/9 pan','volume',180],['Yuzu aioli','recipe','count',600],
+        ['Romesco sauce','recipe','count',1200],['Red bell pepper brunoise','cup','volume',360],
+        ['Spring roll order (2 each)','order','count',300],['Micro herbs','cup','volume',120],
+        ['Fennel saved for salad','qt','volume',360],['Red chili sauce','recipe','count',900],
+        ['Kabocha crisp','qt','volume',1200],['Kabocha sous vide','1/9 pan','volume',1800],
+        ['Sage Crisps','pint','volume',600],['Kabocha bisque','recipe','count',2400],
+        ['Yellow tomato','ea','count',120],['Balsamic pearls','jar','count',60],
+        ['Basil-citrus vinaigrette','recipe','count',600],['Burrata','ea','count',60],
+        ['Yuzu glaze','recipe','count',900],['Yuzu syrup','recipe','count',600],
+        ['Basil baby leaf','cup','volume',120],['Little gem lettuce','1/3 pan','volume',240],
+        ['Radicchio','1/9 pan','volume',180],['Focaccia croutons','qt','volume',600],
+        ['Parmigiano reggiano (Caesar)','1/9 pan','volume',240],['Crispy prosciutto','qt','volume',900],
+        ['Cherry Tomatoes','1/9 pan','volume',180],['Caesar dressing','recipe','count',600],
+        ['Sushi rice (Amber)','recipe','count',2400],['Tuna','1/6 pan','volume',300],
+        ['Furikake','1/9 pan','volume',60],['Mango','1/9 pan','volume',300],
+        ['Tosaka nori','qt','volume',60],['Edamame','1/9 pan','volume',300],
+        ['Cucumber (Poke)','1/9 pan','volume',180],['Avocado (Amber)','1/9 pan','volume',300],
+        ['Seaweed salad','1/9 pan','volume',120],['Kimchi aioli','recipe','count',600],
+        ['Chicken broth','recipe','count',3600],['Chashu chicken','ea','count',1800],
+        ['Sous vide Corn','1/9 pan','volume',600],['Shimeji mushrooms','1/9 pan','volume',240],
+        ['Black Fungus','1/9 pan','volume',180],['Bamboo shoots','1/9 pan','volume',120],
+        ['Chicken Chicharron','qt','volume',1200],['Crispy Shallot','pint','volume',600],
+        ['Black garlic oil','pint','volume',1800],['Roasted garlic oil','pint','volume',1200],
+        ['Sesame chili oil','sq btl','volume',600],['Lime Wedge','1/9 pan','volume',180],
+        ['Scallions (Amber)','1/9 pan','volume',180],['Tamago egg','ea','count',300],
+        ['Allen bros beef patty (2 EACH)','order','count',120],['American cheese','1/9 pan','volume',60],
+        ['Brioche bun','each','count',30],['Black bean patty','recipe','count',1800],
+        ['Amber aioli','recipe','count',600],['Caramelized onion','1/9 pan','volume',900],
+        ['Tomato sliced','1/6 pan','volume',180],['Arugula (Amber)','1/6 pan','volume',120],
+        ['Fries','hotel pan','volume',900],['Korean BBQ short rib','order','count',1800],
+        ['Gochujang butter','recipe','count',600],['Mozzarella cheese shredded','1/9 pan','volume',120],
+        ['Kimchi aioli (Sandwich)','recipe','count',600],['Kimchi Julienne','1/9 pan','volume',300],
+        ['Sourdough','order','count',60],['Wagyu brisket','order','count',1800],
+        ['Sweet-soy glaze','recipe','count',600],['Pickled cabbage','1/9 pan','volume',600],
+        ['Cucumber (Bao)','1/9 pan','volume',180],['Pickled Mini sweet pepper','1/9 pan','volume',360],
+        ['Bao bun (4 each)','order','count',240],['Cherry tomatoes pickled','qt','volume',600],
+        ['Milk bread','order','count',60],['Katsu sando sauce','sq btl','volume',600],
+        ['Kappa pickle brunoise','1/9 pan','volume',360],['Pork katsu','order','count',900],
+        ['Shaved little gem','1/9 pan','volume',180],['Kappa pickle','1/9 pan','volume',240],
+        ['Lemongrass Rice (200 GR)','pint','volume',300],['Chicken Sousvide dinner','each','count',1800],
+        ['Baby Bokchoy','1/6 pan','volume',180],['Asparagus (Amber)','1/9 pan','volume',240],
+        ['Yellow bell pepper julienne','1/9 pan','volume',360],['Red bell pepper julienne','1/9 pan','volume',360],
+        ['Yellow onion julienne','1/9 pan','volume',360],['Snow peas (Amber)','1/9 pan','volume',180],
+        ['Ginger fine julienne','cup','volume',360],['Garlic slice','cup','volume',300],
+        ['Stir-fry sauce','recipe','count',900],['Scallion (Stir-fry)','cup','volume',180],
+        ['Elotes (8 pz)','order','count',600],['Yuzu kosho aioli (Amber)','recipe','count',600],
+        ['Lime cream','recipe','count',600],['Togarashi aioli','recipe','count',600],
+        ['Lime wedge (Amber)','1/9 pan','volume',180],
+        // GARDE MANGER
+        ['Smoked Salmon Mousse','recipe','count',1800],['Ossetra caviar','ea','count',60],
+        ['Red onion','cup','volume',240],['Chives','cup','volume',180],
+        ['Egg White','ea','count',30],['Egg Yolk','ea','count',30],
+        ['Potato Chips','order','count',60],['Sour Cream','sq btl','volume',60],
+        ['Gremolata','pint','volume',600],['Sliced meat','ea','count',180],
+        ['Arugula (GM)','1/6 pan','volume',120],['Cucumber (GM)','1/9 pan','volume',180],
+        ['Parmesan cheese','1/9 pan','volume',240],['Tortilla strips','qt','volume',600],
+        ['Cucumber julienne','1/9 pan','volume',300],['Pickled carrot','recipe','count',600],
+        ['Watermelon','ea','count',300],['Watermelon citrus ponzu','recipe','count',600],
+        ['Pickled onion','recipe','count',360],['Peach marinated','1/6 pan','volume',300],
+        ['Plum marinated','1/6 pan','volume',300],['White balsamic dressing','1/6 pan','volume',300],
+        ['Burrata cheese','1/6 pan','volume',60],['Mint','1/9 pan','volume',120],
+        ['Prosciutto (GM)','recipe','count',240],['Matcha mayo','recipe','count',600],
+        ['Tempura-togarashi crumbs','pint','volume',900],['Ginger Brunoise','cup','volume',360],
+        ['Scallions (GM)','cup','volume',180],['Tuna diced','1/6 pan','volume',360],
+        ['Shrimp u-8 (6)','bag','count',600],['Greens','1/3 pan','volume',180],
+        ['Orange segments','ea','count',300],['Lemon','ea','count',30],
+        ['Lime','ea','count',30],['Horseradish quenelle','1/9 pan','volume',600],
+        ['Aqueous cocktail sauce','recipe','count',600],['Oysters (6)','ea','count',360],
+        ['Romaine','hotel pan','volume',300],['Lemon-togarashi croutons','1/6 pan','volume',600],
+        ['Creamy parmesan dressing','recipe','count',600],['Roasted broccoli','1/6 pan','volume',480],
+        ['Grana Padano','1/9 pan','volume',240],['Apple','ea','count',180],
+        ['Lobster sous vide (1)','ea','count',1800],['Scallops','ea','count',60],
+        ['Sashimi (3 oz)','portion','count',180],['Crab claws','bag','count',600],
+        ['Lump crab','ea','count',600],['Garlic Oil','qt','volume',900],
+        ['Bamboo leaves','ea','count',30],['Butter plates','ea','count',120],
+        ['Cookies','recipe','count',1800],['Jam','recipe','count',1200],
+        // OVERNIGHT
+        ['Crack Eggs','10 qt','volume',1200],['Plate Fruit','ea','count',300],
+        ['Pancake Mix','recipe','count',600],['Cut Fruit','hotel pan','volume',1800],
+        ['Carrots Shredded','1/9 pan','volume',360],['Cucumber (ON)','1/9 pan','volume',180],
+        ['Orange Segments','ea','count',300],['Cherry Tomatoes (ON)','1/9 pan','volume',180],
+        ['Baby Gem Lettuce','hotel pan','volume',600],['Mix Greens','1/3 pan','volume',300],
+        ['Parmesan Cheese (ON)','1/9 pan','volume',240],['Caesar Dressing','recipe','count',600],
+        ['Italian Dressing','recipe','count',600],['Blue Cheese Dressing','recipe','count',600],
+        ['White Balsamic Dressing','recipe','count',300],['Ranch Dressing','recipe','count',600],
+        ['Yuzu Ponzu','recipe','count',300],['Cocktail Sauce','recipe','count',600],
+        ['Butter Mold','ea','count',120],['Scoop Cookies','batch','count',1200],
+        ['Clean Lobster','ea','count',900],['Clean King Crab','batch','count',1200],
+        ['Focaccia for Croutons','1/6 pan','volume',600],['Scrub Oysters','case','count',1200],
+        ['Cook Pasta','qt','volume',600],['Lobster Stock','recipe','count',3600],
+        ['Blanch Baby Carrots','1/6 pan','volume',360],['Snow Peas (ON)','1/9 pan','volume',180],
+        ['Peel Potato','22 qt','volume',2400],['Open Filet','ea','count',300],
+        ['Hummus','recipe','count',1200],['Asparagus (ON)','orders','count',240],
+        ['Blanch Fries Gluten Free','case','count',1200],['Mirepoix','hotel pan','volume',1800],
+        ['Change Oil','task','count',1200],['Wash Frier','task','count',1800],
+        ['Shari-Zu','recipe','count',900]
+    ];
+
+    let loaded = 0;
+    data.forEach(([name, unitAbbrev, family, totalSec]) => {
+        const key = name.toLowerCase();
+        const unit = U[unitAbbrev] || unitAbbrev;
+        const depth = PAN_UNITS.includes(unit) ? 4 : null;
+        const baseQty = convertToBase(1, unit, depth);
+        const secPerBase = baseQty > 0 ? totalSec / baseQty : 0;
+
+        if (!taskTemplates[key]) taskTemplates[key] = { templateVersion: 3 };
+        taskTemplates[key][family] = {
+            secPerBaseUnit: secPerBase,
+            refSeconds: totalSec,
+            refQty: 1,
+            refUnit: unit,
+            refDepth: depth,
+            date: Date.now()
+        };
+        taskTemplates[key].templateVersion = 3;
+        loaded++;
+    });
+
+    saveTaskTemplates();
+    showToast(`Timing loaded: ${loaded} ingredients`);
+    panelDirty.home = true;
+    panelDirty.tools = true;
+    renderPanel(currentView);
+    return loaded;
 }
 
 function migrateTaskTemplatesToV3() {
