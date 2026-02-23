@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 151;
+const APP_BUILD = 152;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1961,22 +1961,37 @@ function switchView(view, skipSlide) {
         return;
     }
 
-    // Swipe views — slide track + render if needed
-    if (!skipSlide) slideTrackTo(view, true);
+    // Swipe views — render target BEFORE sliding, then slide
     renderPanel(view);
+    // Also pre-render panels between current and target to avoid blanks during slide
+    const fromIdx = SWIPE_VIEW_ORDER.indexOf(previousView || 'home');
+    const toIdx = SWIPE_VIEW_ORDER.indexOf(view);
+    if (fromIdx >= 0 && toIdx >= 0) {
+        const lo = Math.min(fromIdx, toIdx);
+        const hi = Math.max(fromIdx, toIdx);
+        for (let i = lo; i <= hi; i++) {
+            renderPanel(SWIPE_VIEW_ORDER[i]);
+        }
+    }
+    updateFab();
+    if (!skipSlide) slideTrackTo(view, true);
 }
 
-function renderPanel(view) {
-    const panel = getPanel(view);
-    if (!panel) return;
+function updateFab() {
     const fab = document.getElementById('fab');
-    if (view === 'home') {
+    if (currentView === 'home') {
         fab.style.display = 'flex';
         fab.textContent = homeStationPickerOpen ? '\u00d7' : '+';
         fab.classList.toggle('fab-close', homeStationPickerOpen);
     } else {
         fab.style.display = 'none';
     }
+}
+
+function renderPanel(view) {
+    const panel = getPanel(view);
+    if (!panel) return;
+    updateFab();
 
     // Only re-render if dirty (data changed) or never rendered
     if (!panelDirty[view]) return;
@@ -2079,11 +2094,14 @@ function handleFabClick() {
 
 function toggleHomeStationPicker() {
     homeStationPickerOpen = !homeStationPickerOpen;
-    const fab = document.getElementById('fab');
-    fab.textContent = homeStationPickerOpen ? '\u00d7' : '+';
-    fab.classList.toggle('fab-close', homeStationPickerOpen);
+    updateFab();
     panelDirty.home = true;
     renderPanel('home');
+    // Scroll to top when closing station picker to show Master List
+    if (!homeStationPickerOpen) {
+        const panel = getPanel('home');
+        if (panel) panel.scrollTop = 0;
+    }
 }
 
 function renderStationsView(opts) {
