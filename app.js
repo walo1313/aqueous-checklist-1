@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 154;
+const APP_BUILD = 155;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1908,6 +1908,7 @@ function dismissOverlay() {
         const navItems = document.querySelectorAll('.nav-item');
         const idx = SWIPE_VIEW_ORDER.indexOf(target);
         if (idx >= 0 && navItems[idx]) navItems[idx].classList.add('active');
+        updateFab();
     });
 }
 
@@ -1961,6 +1962,7 @@ function switchView(view, skipSlide) {
     // Overlay views (settings, logDetail)
     if (OVERLAY_VIEWS.includes(view)) {
         const overlay = document.getElementById('panelOverlay');
+        updateFab();
         showOverlay(true);
         if (view === 'settings') renderSettings(overlay);
         else if (view === 'logDetail') renderLogDetail(overlay);
