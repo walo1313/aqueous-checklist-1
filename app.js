@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 138;
+const APP_BUILD = 139;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -34,6 +34,9 @@ let taskTimers = {};
 let blockTimers = {}; // { "high": { seconds, running, interval }, "_all": { ... } }
 let summaryStationCollapsed = {}; // { stationId: true/false }
 let logsBlockCollapsed = { withData: false, missingData: true };
+let logsStationCollapsed = {}; // { "stationName": true/false }
+let mlStopwatches = {}; // { "stationId-ingId": { startedAt, elapsed, interval } }
+let mlLongPressTimer = null;
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 // Wake Lock to keep screen on during timers
@@ -122,36 +125,37 @@ function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
     if (!tmpl) {
-        // Legacy fallback to prepTimes
         const pt = prepTimes[key];
         if (!pt || !pt.bestSecPerUnit || !parQty || !parUnit) return null;
         const baseUnit = getBaseUnit(parUnit);
         if (pt.baseUnit && pt.baseUnit !== 'unit' && pt.baseUnit !== baseUnit) return null;
         const baseQty = convertToBase(parQty, parUnit, parDepth);
-        const estSeconds = Math.round(pt.bestSecPerUnit * baseQty);
-        return { totalSeconds: estSeconds, hasTemplate: false };
+        return { totalSeconds: Math.round(pt.bestSecPerUnit * baseQty), hasTemplate: false };
     }
 
-    // Proportional timing: secPerBaseUnit stored with baseFamily
+    const targetFamily = getTimingFamily(parUnit);
+
+    // V3: check exact family sub-object
+    if (tmpl[targetFamily] && tmpl[targetFamily].secPerBaseUnit > 0 && parQty) {
+        const baseQty = convertToBase(parQty, parUnit, parDepth);
+        return { totalSeconds: Math.max(Math.round(tmpl[targetFamily].secPerBaseUnit * baseQty), 1), hasTemplate: true, family: targetFamily };
+    }
+
+    // Fallback: other family refSeconds
+    const otherFamily = targetFamily === 'volume' ? 'weight' : 'volume';
+    if (tmpl[otherFamily] && tmpl[otherFamily].refSeconds > 0) {
+        return { totalSeconds: tmpl[otherFamily].refSeconds, hasTemplate: true, family: otherFamily, approximate: true };
+    }
+
+    // Legacy V2 flat format
     if (tmpl.secPerBaseUnit > 0 && tmpl.baseFamily) {
-        const targetFamily = getTimingFamily(parUnit);
         if (targetFamily === tmpl.baseFamily && parQty) {
             const baseQty = convertToBase(parQty, parUnit, parDepth);
-            const total = Math.round(tmpl.secPerBaseUnit * baseQty);
-            return { totalSeconds: Math.max(total, 1), hasTemplate: true };
+            return { totalSeconds: Math.max(Math.round(tmpl.secPerBaseUnit * baseQty), 1), hasTemplate: true };
         }
-        // Family mismatch or no qty — use the raw reference time
-        if (tmpl.refSeconds > 0) {
-            return { totalSeconds: tmpl.refSeconds, hasTemplate: true };
-        }
+        if (tmpl.refSeconds > 0) return { totalSeconds: tmpl.refSeconds, hasTemplate: true };
     }
-
-    // Manual flat seconds (no proportional)
-    if (tmpl.manualSeconds > 0) {
-        return { totalSeconds: tmpl.manualSeconds, hasTemplate: true };
-    }
-
-    // Legacy calibration format
+    if (tmpl.manualSeconds > 0) return { totalSeconds: tmpl.manualSeconds, hasTemplate: true };
     if (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0) {
         const baseQty = convertToBase(parQty || 1, parUnit || 'each', parDepth);
         const total = (tmpl.activeFixedSeconds || 0) + Math.round((tmpl.activeSecondsPerUnit || 0) * baseQty)
@@ -193,8 +197,18 @@ function shouldHideStopwatch(ingName) {
 }
 
 function ingredientHasTimingData(ingName) {
+    const f = getIngTimingFamilies(ingName);
+    return f.volume || f.weight;
+}
+
+function getIngTimingFamilies(ingName) {
     const key = ingName.toLowerCase();
-    return !!prepTimes[key] || !!taskTemplates[key];
+    const tmpl = taskTemplates[key];
+    if (!tmpl) return { volume: false, weight: false };
+    return {
+        volume: !!(tmpl.volume && tmpl.volume.secPerBaseUnit > 0),
+        weight: !!(tmpl.weight && tmpl.weight.secPerBaseUnit > 0)
+    };
 }
 
 function getIngTimingBadge(ingName, st) {
@@ -657,6 +671,7 @@ function dismissInstall() {
 
 function initApp() {
     loadData();
+    migrateTaskTemplatesToV3();
     loadDayChecklists();
     loadCompletedHistory();
     migrateMlDayStates();
@@ -1434,6 +1449,35 @@ function saveTaskTemplates() {
     localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
 }
 
+function migrateTaskTemplatesToV3() {
+    let changed = false;
+    Object.keys(taskTemplates).forEach(key => {
+        const tmpl = taskTemplates[key];
+        if (tmpl.templateVersion >= 3) return;
+        if (tmpl.secPerBaseUnit > 0 && tmpl.baseFamily) {
+            const fam = tmpl.baseFamily;
+            if (!tmpl[fam]) {
+                tmpl[fam] = {
+                    secPerBaseUnit: tmpl.secPerBaseUnit,
+                    refSeconds: tmpl.refSeconds || 0,
+                    refQty: tmpl.refQty || 1,
+                    refUnit: tmpl.refUnit || 'each',
+                    refDepth: tmpl.refDepth || null,
+                    date: tmpl.lastUpdatedAt || Date.now()
+                };
+                changed = true;
+            }
+        }
+        if (tmpl.manualSeconds > 0 && !tmpl.volume && !tmpl.weight) {
+            tmpl.manual = { seconds: tmpl.manualSeconds, date: tmpl.lastUpdatedAt || Date.now() };
+            changed = true;
+        }
+        tmpl.templateVersion = 3;
+        changed = true;
+    });
+    if (changed) saveTaskTemplates();
+}
+
 function saveIngredientDefaults() {
     localStorage.setItem('aqueous_ingredient_defaults', JSON.stringify(ingredientDefaults));
 }
@@ -1719,6 +1763,20 @@ function renderHome(container) {
         content = renderStationsView();
     }
 
+    // Check if all ML items have timing for timer gate
+    let timerGateHtml = '';
+    if (homeSubTab === 'master') {
+        const dayItems = dayChecklists[getActiveDay()] || [];
+        const missingTimingCount = dayItems.filter(item => {
+            const fam = getTimingFamily(item.parUnit);
+            const ingFam = getIngTimingFamilies(item.name);
+            return !ingFam[fam] && fam !== 'count';
+        }).length;
+        if (missingTimingCount > 0) {
+            timerGateHtml = `<span class="timer-gate-msg">${missingTimingCount} missing timing</span>`;
+        }
+    }
+
     container.innerHTML = `
         <div class="home-tab-sticky">
             <div class="home-tab-switch">
@@ -1735,9 +1793,10 @@ function renderHome(container) {
             </div>
             <div class="home-timer-row">
                 <span class="timer-label">Timer</span>
+                ${timerGateHtml}
                 <span class="countdown-label" id="countdownLabel"></span>
-                <button class="neu-toggle ${timerOn ? 'active' : ''}"
-                    onclick="${timerOn ? 'clockOut()' : 'clockIn()'}"></button>
+                <button class="neu-toggle ${timerOn ? 'active' : ''}${timerGateHtml && !timerOn ? ' disabled' : ''}"
+                    onclick="${timerGateHtml && !timerOn ? '' : (timerOn ? 'clockOut()' : 'clockIn()')}"></button>
             </div>
             <div class="countdown-bar-container">
                 <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
@@ -2266,16 +2325,34 @@ function mlRenderRow(item) {
         ? `${item.parQty} ${PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) + '" ' + item.parUnit : item.parUnit}`
         : (item.parQty ? `${item.parQty}` : '');
     const struckClass = item.struck ? ' ml-struck' : '';
-    // Always compute timing fresh
-    const freshTime = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
-    const timePill = freshTime
-        ? `<span class="ml-time">${formatTime(freshTime)}</span>`
-        : `<span class="ml-time" style="color:var(--high);">no time</span>`;
 
+    const family = getTimingFamily(item.parUnit);
+    const ingFamilies = getIngTimingFamilies(item.name);
+    const hasFamilyTiming = ingFamilies[family];
+    const freshTime = getTimeForMasterList(item.name, item.parQty, item.parUnit, item.parDepth);
+
+    let timePill;
+    if (!hasFamilyTiming && family !== 'count') {
+        const swKey = `${item.stationId}-${item.ingredientId}`;
+        const isRunning = mlStopwatches[swKey];
+        if (isRunning) {
+            timePill = `<button class="ml-pill running" id="mlsw-${item.stationId}-${item.ingredientId}" onclick="event.stopPropagation(); mlStopwatchStop(${item.stationId}, ${item.ingredientId})">Stop ${formatTime(isRunning.elapsed)}</button>`;
+        } else {
+            timePill = `<button class="ml-pill" onclick="event.stopPropagation(); mlStopwatchStart(${item.stationId}, ${item.ingredientId})">Start</button>`;
+        }
+    } else if (freshTime) {
+        timePill = `<span class="ml-time">${formatTime(freshTime)}</span>`;
+    } else {
+        timePill = `<span class="ml-time" style="color:var(--high);">no time</span>`;
+    }
+
+    const escapedName = item.name.replace(/'/g, "\\'");
     return `
     <div class="ml-row${struckClass}" id="ml-${item.stationId}-${item.ingredientId}"
          onclick="mlToggleStrike(${item.stationId}, ${item.ingredientId})"
-         ontouchstart="mlSwipeStart(event, ${item.stationId}, ${item.ingredientId})">
+         ontouchstart="mlSwipeStart(event, ${item.stationId}, ${item.ingredientId}); mlRowLongPressStart(event, ${item.stationId}, ${item.ingredientId})"
+         ontouchend="mlRowLongPressCancel()" ontouchmove="mlRowLongPressCancel()"
+         oncontextmenu="event.preventDefault(); showTimingEditor('${escapedName}')">
         <span class="${dotClass}"></span>
         <span class="ml-name">${item.name}</span>
         ${qtyDisplay ? `<span class="ml-qty">${qtyDisplay}</span>` : ''}
@@ -2883,401 +2960,229 @@ function getCalibrationTimerSeconds(timer) {
     return timer.pausedElapsed;
 }
 
-// ==================== TIMING MODAL (Logs Long Press) ====================
+// ==================== TIMING EDITOR (HH:MM:SS, Dual Family) ====================
 
-let logLongPressTimer = null;
-
-function startLogLongPress(event, ingName) {
-    logLongPressTimer = setTimeout(() => {
-        logLongPressTimer = null;
-        if (navigator.vibrate) navigator.vibrate(30);
-        showTimingModalByName(ingName);
-    }, 600);
-}
-
-function cancelLogLongPress() {
-    if (logLongPressTimer) { clearTimeout(logLongPressTimer); logLongPressTimer = null; }
-}
-
-function showTimingModalByName(ingName) {
+function showTimingEditor(ingName) {
     const existing = document.getElementById('modalTimingEdit');
     if (existing) existing.remove();
 
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
-    const bestLog = getIngredientBestTime(ingName);
     const escapedName = ingName.replace(/'/g, "\\'");
+    const families = getIngTimingFamilies(ingName);
 
-    let currentSeconds = 0;
-    if (tmpl && tmpl.refSeconds > 0) currentSeconds = tmpl.refSeconds;
-    else if (tmpl && tmpl.manualSeconds > 0) currentSeconds = tmpl.manualSeconds;
-    else if (bestLog && bestLog > 0) currentSeconds = bestLog;
-
-    const isMinutes = currentSeconds >= 60;
-    const displayVal = isMinutes ? Math.round(currentSeconds / 60) : currentSeconds;
-    const timeUnit = isMinutes ? 'min' : 'sec';
-
-    const refQty = tmpl && tmpl.refQty ? tmpl.refQty : 1;
-    const refUnit = tmpl && tmpl.refUnit ? tmpl.refUnit : 'pint';
-    const refFamily = tmpl && tmpl.baseFamily ? tmpl.baseFamily : 'volume';
-    const allUnits = refFamily === 'weight' ? WEIGHT_UNITS : [...VOLUME_UNITS, ...PAN_UNITS];
-    const unitOpts = allUnits.map(u => `<option value="${u}" ${refUnit === u ? 'selected' : ''}>${u}</option>`).join('');
+    // Pick initial family: volume if has volume data, else weight if has weight, else volume default
+    let initFamily = 'volume';
+    if (families.weight && !families.volume) initFamily = 'weight';
 
     const modal = document.createElement('div');
     modal.id = 'modalTimingEdit';
     modal.className = 'modal show';
+    modal.dataset.family = initFamily;
+    modal.dataset.ingName = ingName;
+
+    renderTimingEditorContent(modal, ingName, initFamily);
+
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function renderTimingEditorContent(modal, ingName, family) {
+    const key = ingName.toLowerCase();
+    const tmpl = taskTemplates[key];
+    const escapedName = ingName.replace(/'/g, "\\'");
+    const families = getIngTimingFamilies(ingName);
+
+    // Get existing data for selected family
+    let refQty = 1, refUnit = family === 'weight' ? 'lb' : 'pint', refSeconds = 0;
+    if (tmpl && tmpl[family]) {
+        refQty = tmpl[family].refQty || 1;
+        refUnit = tmpl[family].refUnit || (family === 'weight' ? 'lb' : 'pint');
+        refSeconds = tmpl[family].refSeconds || 0;
+    }
+
+    const h = Math.floor(refSeconds / 3600);
+    const m = Math.floor((refSeconds % 3600) / 60);
+    const s = refSeconds % 60;
+
+    const allUnits = family === 'weight' ? WEIGHT_UNITS : [...VOLUME_UNITS, ...PAN_UNITS, ...CONTAINER_UNITS];
+    const unitOpts = allUnits.map(u => `<option value="${u}" ${refUnit === u ? 'selected' : ''}>${u}</option>`).join('');
+
+    modal.dataset.family = family;
     modal.innerHTML = `
         <div class="modal-content" style="text-align:center;max-width:340px;">
             <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">${ingName}</div>
-            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Edit timing</div>
-            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;">
-                <button id="editFamVol" onclick="editTimingSetFamily('volume')" style="padding:6px 14px;border-radius:12px;font-size:11px;font-weight:700;border:none;cursor:pointer;
-                    background:${refFamily === 'volume' ? 'var(--accent-tint)' : 'var(--surface)'};
-                    color:${refFamily === 'volume' ? 'var(--accent)' : 'var(--text-muted)'};
-                    box-shadow:${refFamily === 'volume' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">Volume</button>
-                <button id="editFamWt" onclick="editTimingSetFamily('weight')" style="padding:6px 14px;border-radius:12px;font-size:11px;font-weight:700;border:none;cursor:pointer;
-                    background:${refFamily === 'weight' ? 'var(--accent-tint)' : 'var(--surface)'};
-                    color:${refFamily === 'weight' ? 'var(--accent)' : 'var(--text-muted)'};
-                    box-shadow:${refFamily === 'weight' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">Weight</button>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Edit Timing</div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px;">
+                <button class="te-fam-btn ${family === 'volume' ? 'active' : ''}" onclick="teSetFamily('volume')">
+                    Volume ${families.volume ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
+                </button>
+                <button class="te-fam-btn ${family === 'weight' ? 'active' : ''}" onclick="teSetFamily('weight')">
+                    Weight ${families.weight ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
+                </button>
             </div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Reference unit</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;">
                 <input type="number" id="editRefQty" class="smart-qty-input" value="${refQty}" min="0.1" step="1" inputmode="decimal" style="width:60px;font-size:16px;text-align:center;">
                 <select id="editRefUnit" class="smart-unit-select" style="font-size:13px;">${unitOpts}</select>
-                <span style="font-size:13px;font-weight:700;color:var(--text-muted);">=</span>
-                <input type="number" id="timingValueInput" class="smart-qty-input"
-                    value="${displayVal || ''}" placeholder="0" min="0" step="1" inputmode="numeric"
-                    style="width:60px;font-size:16px;text-align:center;font-weight:800;">
-                <div style="display:flex;flex-direction:column;gap:2px;">
-                    <button id="timingUnitMin" onclick="setTimingUnit('min')"
-                        style="padding:4px 8px;border-radius:8px;font-size:10px;font-weight:700;border:none;cursor:pointer;
-                        background:${timeUnit === 'min' ? 'var(--accent-tint)' : 'var(--surface)'};
-                        color:${timeUnit === 'min' ? 'var(--accent)' : 'var(--text-muted)'};
-                        box-shadow:${timeUnit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">min</button>
-                    <button id="timingUnitSec" onclick="setTimingUnit('sec')"
-                        style="padding:4px 8px;border-radius:8px;font-size:10px;font-weight:700;border:none;cursor:pointer;
-                        background:${timeUnit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)'};
-                        color:${timeUnit === 'sec' ? 'var(--accent)' : 'var(--text-muted)'};
-                        box-shadow:${timeUnit === 'sec' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">sec</button>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Time</div>
+            <div class="timing-hms">
+                <div class="timing-hms-col">
+                    <input type="number" id="tmH" min="0" max="23" value="${h}" inputmode="numeric">
+                    <span class="timing-hms-label">h</span>
+                </div>
+                <span class="timing-hms-sep">:</span>
+                <div class="timing-hms-col">
+                    <input type="number" id="tmM" min="0" max="59" value="${m}" inputmode="numeric">
+                    <span class="timing-hms-label">m</span>
+                </div>
+                <span class="timing-hms-sep">:</span>
+                <div class="timing-hms-col">
+                    <input type="number" id="tmS" min="0" max="59" value="${s}" inputmode="numeric">
+                    <span class="timing-hms-label">s</span>
                 </div>
             </div>
-            ${currentSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Current: ${formatTime(currentSeconds)}</div>` : ''}
-            <div class="btn-group">
+            ${refSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin:8px 0;">Current: ${formatTime(refSeconds)}</div>` : ''}
+            <div class="btn-group" style="margin-top:14px;">
                 <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
-                ${currentSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearIngTimingByName('${escapedName}')">Clear</button>` : ''}
-                <button class="btn btn-primary squishy" onclick="handleClick(); saveIngTimingByName('${escapedName}')">Save</button>
+                ${refSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearTimingFamily('${escapedName}')">Clear</button>` : ''}
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveTimingFromEditor('${escapedName}')">Save</button>
             </div>
         </div>`;
-    document.body.appendChild(modal);
-    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-    modal.dataset.timingUnit = timeUnit;
-    modal.dataset.family = refFamily;
-
-    setTimeout(() => {
-        const input = document.getElementById('timingValueInput');
-        if (input) { input.focus(); input.select(); }
-    }, 150);
 }
 
-function editTimingSetFamily(family) {
+function teSetFamily(family) {
     const modal = document.getElementById('modalTimingEdit');
     if (!modal) return;
-    modal.dataset.family = family;
-    const volBtn = document.getElementById('editFamVol');
-    const wtBtn = document.getElementById('editFamWt');
-    if (volBtn) { volBtn.style.background = family === 'volume' ? 'var(--accent-tint)' : 'var(--surface)'; volBtn.style.color = family === 'volume' ? 'var(--accent)' : 'var(--text-muted)'; volBtn.style.boxShadow = family === 'volume' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'; }
-    if (wtBtn) { wtBtn.style.background = family === 'weight' ? 'var(--accent-tint)' : 'var(--surface)'; wtBtn.style.color = family === 'weight' ? 'var(--accent)' : 'var(--text-muted)'; wtBtn.style.boxShadow = family === 'weight' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'; }
-    // Update unit dropdown
-    const sel = document.getElementById('editRefUnit');
-    if (sel) {
-        const units = family === 'weight' ? WEIGHT_UNITS : [...VOLUME_UNITS, ...PAN_UNITS];
-        sel.innerHTML = units.map(u => `<option value="${u}">${u}</option>`).join('');
-    }
+    const ingName = modal.dataset.ingName;
+    renderTimingEditorContent(modal, ingName, family);
 }
 
-function setTimingUnit(unit) {
+function saveTimingFromEditor(ingName) {
     const modal = document.getElementById('modalTimingEdit');
     if (!modal) return;
-    modal.dataset.timingUnit = unit;
+    const h = parseInt(document.getElementById('tmH').value) || 0;
+    const m = parseInt(document.getElementById('tmM').value) || 0;
+    const s = parseInt(document.getElementById('tmS').value) || 0;
+    const totalSec = h * 3600 + m * 60 + s;
+    if (totalSec <= 0) { showToast('Enter a time'); return; }
 
-    const minBtn = document.getElementById('timingUnitMin');
-    const secBtn = document.getElementById('timingUnitSec');
-    if (minBtn) {
-        minBtn.style.background = unit === 'min' ? 'var(--accent-tint)' : 'var(--surface)';
-        minBtn.style.color = unit === 'min' ? 'var(--accent)' : 'var(--text-muted)';
-        minBtn.style.boxShadow = unit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)';
-    }
-    if (secBtn) {
-        secBtn.style.background = unit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)';
-        secBtn.style.color = unit === 'sec' ? 'var(--accent)' : 'var(--text-muted)';
-        secBtn.style.boxShadow = unit === 'sec' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)';
-    }
-}
-
-function saveIngTimingByName(ingName) {
-    const modal = document.getElementById('modalTimingEdit');
-    const timeInput = document.getElementById('timingValueInput');
-    const qtyInput = document.getElementById('editRefQty');
-    const unitSelect = document.getElementById('editRefUnit');
-
-    const val = timeInput ? parseFloat(timeInput.value) : 0;
-    const timeUnit = modal ? modal.dataset.timingUnit : 'min';
-    const family = modal ? modal.dataset.family : 'volume';
-
-    if (!val || val <= 0) { showToast('Enter a time value'); return; }
-
-    const seconds = timeUnit === 'min' ? Math.round(val * 60) : Math.round(val);
-    const refQty = qtyInput ? parseFloat(qtyInput.value) || 1 : 1;
-    const refUnit = unitSelect ? unitSelect.value : 'pint';
-    const baseQty = convertToBase(refQty, refUnit, 4);
-    const secPerBase = baseQty > 0 ? seconds / baseQty : 0;
+    const family = modal.dataset.family || 'volume';
+    const refQty = parseFloat(document.getElementById('editRefQty').value) || 1;
+    const refUnit = document.getElementById('editRefUnit').value;
+    const depth = PAN_UNITS.includes(refUnit) ? 4 : null;
+    const baseQty = convertToBase(refQty, refUnit, depth);
+    const secPerBase = baseQty > 0 ? totalSec / baseQty : 0;
     const key = ingName.toLowerCase();
 
-    taskTemplates[key] = {
+    if (!taskTemplates[key]) taskTemplates[key] = { templateVersion: 3 };
+    taskTemplates[key][family] = {
         secPerBaseUnit: secPerBase,
-        baseFamily: family,
-        refSeconds: seconds,
+        refSeconds: totalSec,
         refQty: refQty,
         refUnit: refUnit,
-        refDepth: PAN_UNITS.includes(refUnit) ? 4 : null,
-        manualSeconds: 0,
-        activeFixedSeconds: 0,
-        activeSecondsPerUnit: 0,
-        passiveFixedSeconds: 0,
-        passiveSecondsPerUnit: 0,
-        lastUpdatedAt: Date.now(),
-        calibratedBy: 'manual',
-        templateVersion: 2
+        refDepth: depth,
+        date: Date.now()
     };
-    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
+    taskTemplates[key].templateVersion = 3;
+    saveTaskTemplates();
 
-    if (modal) modal.remove();
+    modal.remove();
     panelDirty.logs = true;
     panelDirty.home = true;
     renderPanel('logs');
-    showToast(`${ingName}: ${formatTime(seconds)} (${refQty} ${refUnit})`);
+    showToast(`${ingName}: ${formatTime(totalSec)} (${family})`);
 }
 
-function clearIngTimingByName(ingName) {
-    const key = ingName.toLowerCase();
-    delete taskTemplates[key];
-    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
-
+function clearTimingFamily(ingName) {
     const modal = document.getElementById('modalTimingEdit');
+    const family = modal ? modal.dataset.family : 'volume';
+    const key = ingName.toLowerCase();
+    const tmpl = taskTemplates[key];
+    if (tmpl && tmpl[family]) {
+        delete tmpl[family];
+        // If no families left, remove entire template
+        if (!tmpl.volume && !tmpl.weight) delete taskTemplates[key];
+    }
+    saveTaskTemplates();
+
     if (modal) modal.remove();
     panelDirty.logs = true;
     panelDirty.home = true;
     renderPanel('logs');
-    showToast(`${ingName}: timing cleared`);
+    showToast(`${ingName}: ${family} timing cleared`);
 }
 
-// ==================== STOPWATCH FLOW ====================
+// ==================== ML STOPWATCH (Start/Stop Pill) ====================
 
-let swState = null; // { ingName, step, family, qty, unit, attempts:[], timerStart, timerInterval, elapsed }
-
-function startStopwatchFlow(ingName) {
-    swState = { ingName, step: 'family', family: null, qty: 1, unit: 'pint', depth: 4, attempts: [], timerStart: null, timerInterval: null, elapsed: 0 };
-    renderStopwatchModal();
+function mlStopwatchStart(stationId, ingredientId) {
+    handleClick();
+    const key = `${stationId}-${ingredientId}`;
+    const now = Date.now();
+    mlStopwatches[key] = { startedAt: now, elapsed: 0, interval: null };
+    mlStopwatches[key].interval = setInterval(() => {
+        mlStopwatches[key].elapsed = Math.floor((Date.now() - now) / 1000);
+        const btn = document.getElementById(`mlsw-${stationId}-${ingredientId}`);
+        if (btn) btn.textContent = `Stop ${formatTime(mlStopwatches[key].elapsed)}`;
+    }, 200);
+    panelDirty.home = true;
+    renderPanel('home');
 }
 
-function renderStopwatchModal() {
-    const sw = swState;
+function mlStopwatchStop(stationId, ingredientId) {
+    handleClick();
+    const key = `${stationId}-${ingredientId}`;
+    const sw = mlStopwatches[key];
     if (!sw) return;
-    const existing = document.getElementById('modalStopwatch');
-    if (existing) existing.remove();
+    clearInterval(sw.interval);
+    const elapsed = Math.floor((Date.now() - sw.startedAt) / 1000);
+    delete mlStopwatches[key];
 
-    const modal = document.createElement('div');
-    modal.id = 'modalStopwatch';
-    modal.className = 'modal show';
-    let content = '';
+    if (elapsed < 1) { showToast('Too short'); panelDirty.home = true; renderPanel('home'); return; }
 
-    if (sw.step === 'family') {
-        content = `
-            <div class="modal-content" style="text-align:center;max-width:320px;">
-                <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;">${sw.ingName}</div>
-                <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:20px;">What are you measuring?</div>
-                <div style="display:flex;gap:12px;justify-content:center;margin-bottom:20px;">
-                    <button class="btn btn-primary squishy" style="flex:1;padding:16px;" onclick="swSetFamily('volume')">
-                        <div style="font-size:20px;margin-bottom:4px;">🥤</div>Volume
-                    </button>
-                    <button class="btn btn-primary squishy" style="flex:1;padding:16px;" onclick="swSetFamily('weight')">
-                        <div style="font-size:20px;margin-bottom:4px;">⚖️</div>Weight
-                    </button>
-                </div>
-                <button class="btn btn-secondary squishy" onclick="swClose()">Cancel</button>
-            </div>`;
-    } else if (sw.step === 'qty') {
-        const units = sw.family === 'volume'
-            ? [...VOLUME_UNITS, ...PAN_UNITS]
-            : WEIGHT_UNITS;
-        const unitOpts = units.map(u => `<option value="${u}" ${sw.unit === u ? 'selected' : ''}>${u}</option>`).join('');
-        const showDepth = PAN_UNITS.includes(sw.unit);
-        content = `
-            <div class="modal-content" style="text-align:center;max-width:320px;">
-                <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;">${sw.ingName}</div>
-                <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:16px;">How much are you prepping?</div>
-                <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
-                    <input type="number" id="swQtyInput" class="smart-qty-input" value="${sw.qty}" min="0.1" step="1" inputmode="decimal"
-                        style="width:80px;font-size:24px;text-align:center;">
-                    <select id="swUnitSelect" class="smart-unit-select" style="font-size:14px;" onchange="swUnitChanged(this.value)">
-                        ${unitOpts}
-                    </select>
-                </div>
-                ${showDepth ? `
-                <div class="depth-chips" style="justify-content:center;margin-bottom:12px;">
-                    <button class="depth-chip ${sw.depth == 2 ? 'active' : ''}" onclick="swSetDepth(2)">2"</button>
-                    <button class="depth-chip ${sw.depth == 4 ? 'active' : ''}" onclick="swSetDepth(4)">4"</button>
-                    <button class="depth-chip ${sw.depth == 6 ? 'active' : ''}" onclick="swSetDepth(6)">6"</button>
-                </div>` : ''}
-                <div class="btn-group" style="margin-top:16px;">
-                    <button class="btn btn-secondary squishy" onclick="swState.step='family'; renderStopwatchModal()">Back</button>
-                    <button class="btn btn-primary squishy" onclick="swStartTimer()">Start Timer</button>
-                </div>
-            </div>`;
-    } else if (sw.step === 'timer') {
-        const elapsed = sw.elapsed;
-        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const s = String(elapsed % 60).padStart(2, '0');
-        content = `
-            <div class="modal-content" style="text-align:center;max-width:320px;">
-                <div style="font-size:14px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">${sw.ingName}</div>
-                <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">${sw.qty} ${sw.unit} · Attempt ${sw.attempts.length + 1}/3</div>
-                <div id="swTimerDisplay" style="font-size:52px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:2px;margin-bottom:24px;">${m}:${s}</div>
-                <button class="btn squishy" style="background:var(--high);color:#fff;width:100%;padding:16px;font-size:16px;font-weight:800;" onclick="swStopTimer()">STOP</button>
-            </div>`;
-    } else if (sw.step === 'result') {
-        const lastTime = sw.attempts[sw.attempts.length - 1];
-        const canRetry = sw.attempts.length < 3;
-        let attHtml = sw.attempts.map((t, i) => `<span style="font-size:13px;font-weight:600;color:var(--text);padding:4px 10px;border-radius:8px;background:var(--bg);box-shadow:var(--neu-shadow-sm);">#${i + 1}: ${formatTime(t)}</span>`).join(' ');
-        content = `
-            <div class="modal-content" style="text-align:center;max-width:320px;">
-                <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;">${sw.ingName}</div>
-                <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${sw.qty} ${sw.unit}</div>
-                <div style="font-size:36px;font-weight:800;color:var(--accent);margin-bottom:12px;">${formatTime(lastTime)}</div>
-                <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;">${attHtml}</div>
-                ${sw.attempts.length > 1 ? `
-                <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">
-                    Best: ${formatTime(Math.min(...sw.attempts))} · Avg: ${formatTime(Math.round(sw.attempts.reduce((a,b) => a+b, 0) / sw.attempts.length))}
-                </div>` : ''}
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                    ${canRetry ? `<button class="btn btn-secondary squishy" onclick="swRetry()">Try Again (${sw.attempts.length}/3)</button>` : ''}
-                    ${sw.attempts.length > 1 ? `
-                    <button class="btn btn-primary squishy" onclick="swSave('best')">Save Best (${formatTime(Math.min(...sw.attempts))})</button>
-                    <button class="btn squishy" style="background:var(--surface);color:var(--text);box-shadow:var(--neu-shadow-sm);" onclick="swSave('avg')">Save Average (${formatTime(Math.round(sw.attempts.reduce((a,b) => a+b, 0) / sw.attempts.length))})</button>
-                    ` : `<button class="btn btn-primary squishy" onclick="swSave('best')">Save</button>`}
-                    <button class="btn btn-secondary squishy" onclick="swClose()">Cancel</button>
-                </div>
-            </div>`;
-    }
+    const day = getActiveDay();
+    const item = (dayChecklists[day] || []).find(x => x.stationId === stationId && x.ingredientId === ingredientId);
+    if (!item) return;
 
-    modal.innerHTML = content;
-    document.body.appendChild(modal);
-    modal.onclick = function(e) { if (e.target === modal) swClose(); };
-}
+    const family = getTimingFamily(item.parUnit);
+    const depth = PAN_UNITS.includes(item.parUnit) ? (item.parDepth || 4) : null;
+    const baseQty = convertToBase(item.parQty || 1, item.parUnit || 'each', depth);
+    const secPerBase = baseQty > 0 ? elapsed / baseQty : 0;
+    const ingKey = item.name.toLowerCase();
 
-function swSetFamily(family) {
-    swState.family = family;
-    swState.unit = family === 'volume' ? 'pint' : 'lb';
-    swState.step = 'qty';
-    renderStopwatchModal();
-}
-
-function swUnitChanged(unit) {
-    swState.unit = unit;
-    if (PAN_UNITS.includes(unit) || !PAN_UNITS.includes(unit)) {
-        renderStopwatchModal();
-    }
-}
-
-function swSetDepth(d) {
-    swState.depth = d;
-    renderStopwatchModal();
-}
-
-function swStartTimer() {
-    const qtyInput = document.getElementById('swQtyInput');
-    const unitSelect = document.getElementById('swUnitSelect');
-    if (qtyInput) swState.qty = parseFloat(qtyInput.value) || 1;
-    if (unitSelect) swState.unit = unitSelect.value;
-    swState.elapsed = 0;
-    swState.step = 'timer';
-    swState.timerStart = Date.now();
-    renderStopwatchModal();
-    swState.timerInterval = setInterval(() => {
-        swState.elapsed = Math.floor((Date.now() - swState.timerStart) / 1000);
-        const display = document.getElementById('swTimerDisplay');
-        if (display) {
-            const m = String(Math.floor(swState.elapsed / 60)).padStart(2, '0');
-            const s = String(swState.elapsed % 60).padStart(2, '0');
-            display.textContent = `${m}:${s}`;
-        }
-    }, 200);
-}
-
-function swStopTimer() {
-    if (swState.timerInterval) { clearInterval(swState.timerInterval); swState.timerInterval = null; }
-    const elapsed = Math.floor((Date.now() - swState.timerStart) / 1000);
-    if (elapsed < 1) { showToast('Too short'); return; }
-    swState.attempts.push(elapsed);
-    swState.step = 'result';
-    if (navigator.vibrate) navigator.vibrate(30);
-    renderStopwatchModal();
-}
-
-function swRetry() {
-    swState.elapsed = 0;
-    swState.timerStart = Date.now();
-    swState.step = 'timer';
-    renderStopwatchModal();
-    swState.timerInterval = setInterval(() => {
-        swState.elapsed = Math.floor((Date.now() - swState.timerStart) / 1000);
-        const display = document.getElementById('swTimerDisplay');
-        if (display) {
-            const m = String(Math.floor(swState.elapsed / 60)).padStart(2, '0');
-            const s = String(swState.elapsed % 60).padStart(2, '0');
-            display.textContent = `${m}:${s}`;
-        }
-    }, 200);
-}
-
-function swSave(mode) {
-    const sw = swState;
-    if (!sw || sw.attempts.length === 0) return;
-
-    const seconds = mode === 'best' ? Math.min(...sw.attempts) : Math.round(sw.attempts.reduce((a, b) => a + b, 0) / sw.attempts.length);
-    const baseQty = convertToBase(sw.qty, sw.unit, sw.depth);
-    const secPerBase = baseQty > 0 ? seconds / baseQty : 0;
-    const key = sw.ingName.toLowerCase();
-
-    taskTemplates[key] = {
+    if (!taskTemplates[ingKey]) taskTemplates[ingKey] = { templateVersion: 3 };
+    taskTemplates[ingKey][family] = {
         secPerBaseUnit: secPerBase,
-        baseFamily: sw.family,
-        refSeconds: seconds,
-        refQty: sw.qty,
-        refUnit: sw.unit,
-        refDepth: PAN_UNITS.includes(sw.unit) ? sw.depth : null,
-        manualSeconds: 0,
-        activeFixedSeconds: 0,
-        activeSecondsPerUnit: 0,
-        passiveFixedSeconds: 0,
-        passiveSecondsPerUnit: 0,
-        lastUpdatedAt: Date.now(),
-        calibratedBy: 'stopwatch',
-        templateVersion: 2
+        refSeconds: elapsed,
+        refQty: item.parQty || 1,
+        refUnit: item.parUnit || 'each',
+        refDepth: depth,
+        date: Date.now()
     };
-    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
+    taskTemplates[ingKey].templateVersion = 3;
+    saveTaskTemplates();
 
-    swClose();
-    panelDirty.logs = true;
+    showToast(`${item.name}: ${formatTime(elapsed)}`);
     panelDirty.home = true;
-    renderPanel('logs');
-    showToast(`${sw.ingName}: ${formatTime(seconds)} (${sw.qty} ${sw.unit})`);
+    panelDirty.logs = true;
+    renderPanel('home');
 }
 
-function swClose() {
-    if (swState && swState.timerInterval) clearInterval(swState.timerInterval);
-    swState = null;
-    const modal = document.getElementById('modalStopwatch');
-    if (modal) modal.remove();
+// ==================== ML LONG PRESS TO EDIT TIMING ====================
+
+function mlRowLongPressStart(event, stationId, ingredientId) {
+    mlLongPressTimer = setTimeout(() => {
+        mlLongPressTimer = null;
+        if (navigator.vibrate) navigator.vibrate(30);
+        const day = getActiveDay();
+        const item = (dayChecklists[day] || []).find(x => x.stationId === stationId && x.ingredientId === ingredientId);
+        if (item) showTimingEditor(item.name);
+    }, 600);
+}
+
+function mlRowLongPressCancel() {
+    if (mlLongPressTimer) { clearTimeout(mlLongPressTimer); mlLongPressTimer = null; }
 }
 
 function startCalibration(stationId, ingredientId, ingName) {
@@ -3730,6 +3635,26 @@ function setParUnit(stationId, ingredientId, value) {
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
     const st = station.status[ingredientId];
+    const ing = getAllIngredients(station).find(i => i.id === ingredientId);
+
+    // Family change notification
+    if (ing && st.parUnit) {
+        const oldFamily = getTimingFamily(st.parUnit);
+        const newFamily = getTimingFamily(value);
+        const families = getIngTimingFamilies(ing.name);
+        if (oldFamily !== newFamily && families[oldFamily] && !families[newFamily] && newFamily !== 'count') {
+            showFamilyChangeNotification(stationId, ingredientId, value, oldFamily, newFamily);
+            return;
+        }
+    }
+
+    applyParUnit(stationId, ingredientId, value);
+}
+
+function applyParUnit(stationId, ingredientId, value) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
     st.parUnit = value;
     if (PAN_UNITS.includes(value)) {
         st.parQty = 1;
@@ -3742,6 +3667,25 @@ function setParUnit(stationId, ingredientId, value) {
     saveIngredientDefault(station, ingredientId);
     saveData(true);
     rerenderStationBody(stationId);
+}
+
+function showFamilyChangeNotification(stationId, ingredientId, newUnit, oldFamily, newFamily) {
+    const overlay = document.createElement('div');
+    overlay.className = 'time-picker-overlay';
+    overlay.innerHTML = `
+        <div class="time-picker-panel">
+            <div class="tp-title">Family Change</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin:12px 0;line-height:1.5;">
+                This ingredient has timing calculated by <b>${oldFamily}</b>.
+                To use <b>${newUnit}</b> you need to record timing by <b>${newFamily}</b>.
+            </p>
+            <div class="tp-actions">
+                <button class="tp-btn tp-cancel" onclick="closeTimePicker()">Keep Pre-set</button>
+                <button class="tp-btn tp-save" onclick="applyParUnit(${stationId}, ${ingredientId}, '${newUnit}'); closeTimePicker()">Continue</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('open'));
 }
 
 function setParDepth(stationId, ingredientId, value) {
@@ -5189,20 +5133,35 @@ function toggleLogsBlock(blockKey) {
     renderPanel('logs');
 }
 
+function toggleLogsStation(block, stationName) {
+    handleClick();
+    const key = block + '_' + stationName;
+    logsStationCollapsed[key] = !logsStationCollapsed[key];
+    panelDirty.logs = true;
+    renderPanel('logs');
+}
+
 function renderLogs(container) {
-    // Collect ALL unique ingredients from all stations
-    const allIngredients = [];
-    const seen = new Set();
+    // Collect ingredients grouped by station (preserving station association)
+    const stationIngMap = {}; // { stationName: [{ name, stationName }] }
+    const seenPerStation = {};
     stations.forEach(station => {
+        if (!stationIngMap[station.name]) stationIngMap[station.name] = [];
+        if (!seenPerStation[station.name]) seenPerStation[station.name] = new Set();
         getAllIngredients(station).forEach(ing => {
             const key = ing.name.toLowerCase();
-            if (seen.has(key)) return;
-            seen.add(key);
-            allIngredients.push({ name: ing.name, station: station.name });
+            if (seenPerStation[station.name].has(key)) return;
+            seenPerStation[station.name].add(key);
+            stationIngMap[station.name].push({ name: ing.name, stationName: station.name });
         });
     });
 
-    if (allIngredients.length === 0) {
+    // Count unique ingredients for progress
+    const uniqueNames = new Set();
+    Object.values(stationIngMap).forEach(list => list.forEach(i => uniqueNames.add(i.name.toLowerCase())));
+    const total = uniqueNames.size;
+
+    if (total === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">📝</div>
@@ -5212,78 +5171,99 @@ function renderLogs(container) {
         return;
     }
 
-    // Build log count map from activityLog
-    const logMap = {};
-    activityLog.forEach(entry => {
-        if (entry.type !== 'task_complete' || !entry.data || !entry.data.seconds || entry.data.seconds === 0) return;
-        const d = entry.data;
-        const key = d.ingredient;
-        if (!logMap[key]) logMap[key] = { count: 0, lastTimestamp: entry.timestamp };
-        logMap[key].count++;
-        if (entry.timestamp > logMap[key].lastTimestamp) logMap[key].lastTimestamp = entry.timestamp;
+    // Count volume/weight coverage
+    let volCount = 0, wtCount = 0;
+    uniqueNames.forEach(key => {
+        const f = getIngTimingFamilies(key);
+        if (f.volume) volCount++;
+        if (f.weight) wtCount++;
     });
+    const volPct = total > 0 ? Math.round(volCount / total * 100) : 0;
+    const wtPct = total > 0 ? Math.round(wtCount / total * 100) : 0;
 
-    // Partition
-    const withData = [];
-    const missingData = [];
-    allIngredients.forEach(ing => {
-        if (ingredientHasTimingData(ing.name)) {
-            const lm = logMap[ing.name];
-            const bestTime = getIngredientBestTime(ing.name);
-            withData.push({
-                name: ing.name,
-                station: ing.station,
-                count: lm ? lm.count : 0,
-                bestTime,
-                lastTimestamp: lm ? lm.lastTimestamp : ''
-            });
-        } else {
-            missingData.push(ing);
-        }
+    // Progress dashboard
+    let html = `
+        <div class="logs-progress">
+            <div class="logs-progress-row">
+                <span class="logs-prog-label">Volume</span>
+                <div class="logs-prog-bar"><div class="logs-prog-fill" style="width:${volPct}%"></div></div>
+                <span class="logs-prog-count">${volCount}/${total}</span>
+            </div>
+            <div class="logs-progress-row">
+                <span class="logs-prog-label">Weight</span>
+                <div class="logs-prog-bar"><div class="logs-prog-fill" style="width:${wtPct}%"></div></div>
+                <span class="logs-prog-count">${wtCount}/${total}</span>
+            </div>
+        </div>`;
+
+    // Partition into with/missing per station
+    const withByStation = {};
+    const missingByStation = {};
+    let totalWith = 0, totalMissing = 0;
+    const globalSeen = new Set();
+
+    Object.keys(stationIngMap).forEach(sName => {
+        stationIngMap[sName].forEach(ing => {
+            const lk = ing.name.toLowerCase();
+            if (globalSeen.has(lk)) return;
+            globalSeen.add(lk);
+            if (ingredientHasTimingData(ing.name)) {
+                if (!withByStation[sName]) withByStation[sName] = [];
+                withByStation[sName].push(ing);
+                totalWith++;
+            } else {
+                if (!missingByStation[sName]) missingByStation[sName] = [];
+                missingByStation[sName].push(ing);
+                totalMissing++;
+            }
+        });
     });
-
-    // Sort withData by most recent first
-    withData.sort((a, b) => (b.lastTimestamp || '').localeCompare(a.lastTimestamp || ''));
-
-    let html = '';
 
     // Block 1: With Timing Data
     html += `
         <div class="logs-block-header" onclick="toggleLogsBlock('withData')">
-            <span>With Timing Data (${withData.length})</span>
+            <span>With Timing Data (${totalWith})</span>
             <span class="summary-expand-icon">${logsBlockCollapsed.withData ? '+' : '\u2212'}</span>
         </div>
         <div class="logs-block-body${logsBlockCollapsed.withData ? ' collapsed' : ''}">`;
 
-    if (withData.length === 0) {
-        html += `<div style="padding:12px 4px;font-size:12px;color:var(--text-muted);">No timing data yet — complete tasks with timers</div>`;
+    if (totalWith === 0) {
+        html += `<div style="padding:12px 4px;font-size:12px;color:var(--text-muted);">No timing data yet</div>`;
     } else {
-        withData.forEach(ing => {
-            const escapedName = ing.name.replace(/'/g, "\\'");
-            const tmpl = taskTemplates[ing.name.toLowerCase()];
-            const timeDisplay = tmpl && tmpl.secPerBaseUnit > 0 && tmpl.refSeconds > 0
-                ? formatTime(tmpl.refSeconds)
-                : (ing.bestTime ? formatTime(ing.bestTime) : '');
-            const rateInfo = tmpl && tmpl.secPerBaseUnit > 0 && tmpl.refQty && tmpl.refUnit
-                ? `${tmpl.refQty} ${tmpl.refUnit}` : '';
+        Object.keys(withByStation).forEach(sName => {
+            const collapsed = logsStationCollapsed['with_' + sName];
+            const safeSName = sName.replace(/'/g, "\\'");
             html += `
-            <div class="log-ingredient-card" style="cursor:default;" oncontextmenu="event.preventDefault();">
-                <div class="log-ing-top">
-                    <span class="log-ing-name">${ing.name}</span>
-                    <div class="log-ing-actions">
-                        <button class="log-action-btn" onclick="event.stopPropagation(); startStopwatchFlow('${escapedName}')" title="Stopwatch">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M10 2h4"/><path d="M12 2v2"/></svg>
-                        </button>
-                        <button class="log-action-btn" onclick="event.stopPropagation(); showTimingModalByName('${escapedName}')" title="Edit timing">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </button>
+            <div class="logs-station-header" onclick="toggleLogsStation('with','${safeSName}')">
+                <span>${sName} (${withByStation[sName].length})</span>
+                <span class="summary-expand-icon">${collapsed ? '+' : '\u2212'}</span>
+            </div>
+            <div class="logs-station-body${collapsed ? ' collapsed' : ''}">`;
+            withByStation[sName].forEach(ing => {
+                const escapedName = ing.name.replace(/'/g, "\\'");
+                const families = getIngTimingFamilies(ing.name);
+                const tmpl = taskTemplates[ing.name.toLowerCase()];
+                let refInfo = '';
+                if (tmpl) {
+                    if (tmpl.volume && tmpl.volume.refSeconds > 0) refInfo += formatTime(tmpl.volume.refSeconds) + ' (' + (tmpl.volume.refQty || 1) + ' ' + (tmpl.volume.refUnit || '') + ')';
+                    if (tmpl.weight && tmpl.weight.refSeconds > 0) {
+                        if (refInfo) refInfo += ' · ';
+                        refInfo += formatTime(tmpl.weight.refSeconds) + ' (' + (tmpl.weight.refQty || 1) + ' ' + (tmpl.weight.refUnit || '') + ')';
+                    }
+                }
+                html += `
+                <div class="log-ingredient-card" onclick="showTimingEditor('${escapedName}')" oncontextmenu="event.preventDefault();">
+                    <div class="log-ing-top">
+                        <span class="log-ing-name">${ing.name}</span>
+                        <div class="log-timing-indicators">
+                            <span class="timing-dot ${families.volume ? 'active' : ''}">V</span>
+                            <span class="timing-dot ${families.weight ? 'active' : ''}">W</span>
+                        </div>
                     </div>
-                </div>
-                <div class="log-ing-bottom">
-                    <span class="log-ing-station">${ing.station}${rateInfo ? ' · ' + rateInfo : ''}</span>
-                    ${timeDisplay ? `<span class="log-ing-best">${timeDisplay}</span>` : ''}
-                </div>
-            </div>`;
+                    ${refInfo ? `<div class="log-ing-bottom"><span class="log-ing-station">${refInfo}</span></div>` : ''}
+                </div>`;
+            });
+            html += `</div>`;
         });
     }
     html += `</div>`;
@@ -5291,31 +5271,31 @@ function renderLogs(container) {
     // Block 2: Missing Timing Data
     html += `
         <div class="logs-block-header" onclick="toggleLogsBlock('missingData')">
-            <span>Missing Timing Data (${missingData.length})</span>
+            <span>Missing Timing Data (${totalMissing})</span>
             <span class="summary-expand-icon">${logsBlockCollapsed.missingData ? '+' : '\u2212'}</span>
         </div>
         <div class="logs-block-body${logsBlockCollapsed.missingData ? ' collapsed' : ''}">`;
 
-    if (missingData.length === 0) {
+    if (totalMissing === 0) {
         html += `<div style="padding:12px 4px;font-size:12px;color:var(--text-muted);">All ingredients have timing data!</div>`;
     } else {
-        missingData.forEach(ing => {
-            const escapedName = ing.name.replace(/'/g, "\\'");
+        Object.keys(missingByStation).forEach(sName => {
+            const collapsed = logsStationCollapsed['missing_' + sName];
+            const safeSName = sName.replace(/'/g, "\\'");
             html += `
-            <div class="logs-missing-card" oncontextmenu="event.preventDefault();">
-                <div style="flex:1;min-width:0;">
+            <div class="logs-station-header" onclick="toggleLogsStation('missing','${safeSName}')">
+                <span>${sName} (${missingByStation[sName].length})</span>
+                <span class="summary-expand-icon">${collapsed ? '+' : '\u2212'}</span>
+            </div>
+            <div class="logs-station-body${collapsed ? ' collapsed' : ''}">`;
+            missingByStation[sName].forEach(ing => {
+                const escapedName = ing.name.replace(/'/g, "\\'");
+                html += `
+                <div class="logs-missing-card" onclick="showTimingEditor('${escapedName}')" oncontextmenu="event.preventDefault();">
                     <div class="logs-missing-name">${ing.name}</div>
-                    <div class="logs-missing-station">${ing.station}</div>
-                </div>
-                <div class="log-ing-actions">
-                    <button class="log-action-btn" onclick="event.stopPropagation(); startStopwatchFlow('${escapedName}')" title="Stopwatch">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M10 2h4"/><path d="M12 2v2"/></svg>
-                    </button>
-                    <button class="log-action-btn" onclick="event.stopPropagation(); showTimingModalByName('${escapedName}')" title="Edit timing">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                    </button>
-                </div>
-            </div>`;
+                </div>`;
+            });
+            html += `</div>`;
         });
     }
     html += `</div>`;

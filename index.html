@@ -995,6 +995,197 @@
             color: var(--text-muted);
         }
 
+        /* Logs Progress Dashboard */
+        .logs-progress {
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+        }
+        .logs-progress-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .logs-progress-row:last-child { margin-bottom: 0; }
+        .logs-prog-label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            width: 50px;
+            flex-shrink: 0;
+        }
+        .logs-prog-bar {
+            flex: 1;
+            height: 6px;
+            background: var(--bg);
+            border-radius: 3px;
+            overflow: hidden;
+            box-shadow: inset 1px 1px 2px rgba(0,0,0,0.06);
+        }
+        .logs-prog-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        .logs-prog-count {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text);
+            width: 42px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        /* Logs Station Sub-headers */
+        .logs-station-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-muted);
+            cursor: pointer;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 2px;
+        }
+        .logs-station-body.collapsed { display: none; }
+
+        /* Timing Indicator Dots */
+        .log-timing-indicators {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+        .timing-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 9px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg);
+            color: var(--text-muted);
+            box-shadow: inset 1px 1px 2px rgba(0,0,0,0.06);
+        }
+        .timing-dot.active {
+            background: var(--accent-tint);
+            color: var(--accent);
+            box-shadow: var(--neu-shadow-sm);
+        }
+
+        /* ML Start/Stop Pill */
+        .ml-pill {
+            flex-shrink: 0;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 800;
+            border: none;
+            background: var(--accent-tint);
+            color: var(--accent);
+            cursor: pointer;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .ml-pill.running {
+            background: var(--high);
+            color: #fff;
+            font-variant-numeric: tabular-nums;
+        }
+        .ml-pill:active { transform: scale(0.95); }
+
+        /* Timing Editor HH:MM:SS */
+        .timing-hms {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin: 8px 0;
+        }
+        .timing-hms-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .timing-hms-col input {
+            width: 56px;
+            height: 48px;
+            font-size: 24px;
+            font-weight: 800;
+            text-align: center;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            background: var(--bg);
+            color: var(--text);
+            -moz-appearance: textfield;
+        }
+        .timing-hms-col input::-webkit-inner-spin-button,
+        .timing-hms-col input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .timing-hms-label {
+            font-size: 9px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .timing-hms-sep {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+        }
+
+        /* Timing Editor Family Buttons */
+        .te-fam-btn {
+            padding: 6px 14px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            background: var(--surface);
+            color: var(--text-muted);
+            box-shadow: var(--neu-shadow-sm);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .te-fam-btn.active {
+            background: var(--accent-tint);
+            color: var(--accent);
+            box-shadow: var(--neu-inset);
+        }
+        .te-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--border);
+            display: inline-block;
+        }
+        .te-dot.active {
+            background: var(--accent);
+        }
+
+        /* Timer Gate */
+        .timer-gate-msg {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--high);
+            flex: 1;
+            text-align: center;
+        }
+        .neu-toggle.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
         /* Log Detail */
         .log-back-btn {
             display: inline-flex;
