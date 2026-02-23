@@ -930,6 +930,31 @@
             color: var(--text-muted);
             opacity: 0.4;
         }
+        .log-ing-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .log-action-btn {
+            width: 32px; height: 32px;
+            border: none;
+            border-radius: 10px;
+            background: var(--bg);
+            box-shadow: var(--neu-shadow-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-muted);
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .log-action-btn:active {
+            box-shadow: var(--neu-inset);
+            transform: scale(0.93);
+        }
+        .log-action-btn svg { width: 16px; height: 16px; }
 
         /* Log Expandable Blocks */
         .logs-block-header {

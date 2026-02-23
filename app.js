@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 137;
+const APP_BUILD = 138;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -75,10 +75,11 @@ const VOLUME_UNITS = ['quart', 'pint', 'cup', 'oz', 'sq btl'];
 const WEIGHT_UNITS = ['kg', 'lb', 'g'];
 const COUNT_UNITS = ['each', 'recipe', 'order', 'bag', 'block', 'batch', 'case', 'jar', 'portion', 'orders'];
 const CONTAINER_UNITS = ['hotel pan', '10 qt', '22 qt'];
+const CONTAINER_OZ = { 'hotel pan': 660, '10 qt': 320, '22 qt': 704 };
 const TASK_UNITS = ['(task)'];
 
 function getBaseUnit(unit) {
-    if (VOLUME_UNITS.includes(unit) || PAN_UNITS.includes(unit)) return 'oz';
+    if (VOLUME_UNITS.includes(unit) || PAN_UNITS.includes(unit) || CONTAINER_UNITS.includes(unit)) return 'oz';
     if (WEIGHT_UNITS.includes(unit)) return 'g';
     if (COUNT_UNITS.includes(unit)) return unit;
     return 'unit';
@@ -90,6 +91,7 @@ function convertToBase(qty, unit, depth) {
         const oz = (PAN_OZ[unit] && PAN_OZ[unit][d]) || PAN_OZ[unit][4] || 1;
         return qty * oz;
     }
+    if (CONTAINER_UNITS.includes(unit)) return qty * (CONTAINER_OZ[unit] || 1);
     if (VOLUME_UNITS.includes(unit)) return qty * (UNIT_TO_OZ[unit] || 1);
     if (WEIGHT_UNITS.includes(unit)) return qty * (UNIT_TO_G[unit] || 1);
     return qty;
@@ -118,48 +120,52 @@ function getBlockRemainingSeconds(bt) {
 
 function getIngredientEstimate(ingName, parQty, parUnit, parDepth) {
     const key = ingName.toLowerCase();
-
-    // Check task templates first (manual or calibrated data)
     const tmpl = taskTemplates[key];
-    if (tmpl && tmpl.manualSeconds > 0) {
-        return {
-            activeSeconds: tmpl.manualSeconds,
-            passiveSeconds: 0,
-            totalSeconds: tmpl.manualSeconds,
-            bestPerDisplayUnit: 0,
-            displayUnit: parUnit,
-            hasTemplate: true
-        };
-    }
-    if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) {
-        const baseQty = convertToBase(parQty || 1, parUnit || 'each', parDepth);
-        const activeTotal = (tmpl.activeFixedSeconds || 0) + Math.round((tmpl.activeSecondsPerUnit || 0) * baseQty);
-        const passiveTotal = (tmpl.passiveFixedSeconds || 0) + Math.round((tmpl.passiveSecondsPerUnit || 0) * baseQty);
-        const convFactor = PAN_UNITS.includes(parUnit)
-            ? ((PAN_OZ[parUnit] && PAN_OZ[parUnit][parDepth || 4]) || 1)
-            : (UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1);
-        return {
-            activeSeconds: activeTotal,
-            passiveSeconds: passiveTotal,
-            totalSeconds: activeTotal + passiveTotal,
-            bestPerDisplayUnit: Math.round((tmpl.activeSecondsPerUnit || 0) * convFactor),
-            displayUnit: parUnit,
-            hasTemplate: true
-        };
+    if (!tmpl) {
+        // Legacy fallback to prepTimes
+        const pt = prepTimes[key];
+        if (!pt || !pt.bestSecPerUnit || !parQty || !parUnit) return null;
+        const baseUnit = getBaseUnit(parUnit);
+        if (pt.baseUnit && pt.baseUnit !== 'unit' && pt.baseUnit !== baseUnit) return null;
+        const baseQty = convertToBase(parQty, parUnit, parDepth);
+        const estSeconds = Math.round(pt.bestSecPerUnit * baseQty);
+        return { totalSeconds: estSeconds, hasTemplate: false };
     }
 
-    // Fallback to prepTimes (legacy single-timer data)
-    const pt = prepTimes[key];
-    if (!pt || !pt.bestSecPerUnit || !parQty || !parUnit) return null;
-    const baseUnit = getBaseUnit(parUnit);
-    if (pt.baseUnit && pt.baseUnit !== 'unit' && pt.baseUnit !== baseUnit) return null;
-    const baseQty = convertToBase(parQty, parUnit, parDepth);
-    const estSeconds = Math.round(pt.bestSecPerUnit * baseQty);
-    const convFactor = PAN_UNITS.includes(parUnit)
-        ? ((PAN_OZ[parUnit] && PAN_OZ[parUnit][parDepth || 4]) || 1)
-        : (UNIT_TO_OZ[parUnit] || UNIT_TO_G[parUnit] || 1);
-    const bestPerDisplayUnit = Math.round(pt.bestSecPerUnit * convFactor);
-    return { totalSeconds: estSeconds, bestPerDisplayUnit, displayUnit: parUnit, hasTemplate: false };
+    // Proportional timing: secPerBaseUnit stored with baseFamily
+    if (tmpl.secPerBaseUnit > 0 && tmpl.baseFamily) {
+        const targetFamily = getTimingFamily(parUnit);
+        if (targetFamily === tmpl.baseFamily && parQty) {
+            const baseQty = convertToBase(parQty, parUnit, parDepth);
+            const total = Math.round(tmpl.secPerBaseUnit * baseQty);
+            return { totalSeconds: Math.max(total, 1), hasTemplate: true };
+        }
+        // Family mismatch or no qty — use the raw reference time
+        if (tmpl.refSeconds > 0) {
+            return { totalSeconds: tmpl.refSeconds, hasTemplate: true };
+        }
+    }
+
+    // Manual flat seconds (no proportional)
+    if (tmpl.manualSeconds > 0) {
+        return { totalSeconds: tmpl.manualSeconds, hasTemplate: true };
+    }
+
+    // Legacy calibration format
+    if (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0) {
+        const baseQty = convertToBase(parQty || 1, parUnit || 'each', parDepth);
+        const total = (tmpl.activeFixedSeconds || 0) + Math.round((tmpl.activeSecondsPerUnit || 0) * baseQty)
+                    + (tmpl.passiveFixedSeconds || 0) + Math.round((tmpl.passiveSecondsPerUnit || 0) * baseQty);
+        return { totalSeconds: total, hasTemplate: true };
+    }
+
+    return null;
+}
+
+function getTimingFamily(unit) {
+    if (VOLUME_UNITS.includes(unit) || PAN_UNITS.includes(unit) || CONTAINER_UNITS.includes(unit)) return 'volume';
+    if (WEIGHT_UNITS.includes(unit)) return 'weight';
+    return 'count';
 }
 
 function getIngredientBestTime(ingName) {
@@ -2903,43 +2909,58 @@ function showTimingModalByName(ingName) {
     const escapedName = ingName.replace(/'/g, "\\'");
 
     let currentSeconds = 0;
-    if (tmpl && tmpl.manualSeconds > 0) {
-        currentSeconds = tmpl.manualSeconds;
-    } else if (tmpl && (tmpl.activeSecondsPerUnit > 0 || tmpl.passiveSecondsPerUnit > 0)) {
-        currentSeconds = (tmpl.activeFixedSeconds || 0) + (tmpl.passiveFixedSeconds || 0);
-    } else if (bestLog && bestLog > 0) {
-        currentSeconds = bestLog;
-    }
+    if (tmpl && tmpl.refSeconds > 0) currentSeconds = tmpl.refSeconds;
+    else if (tmpl && tmpl.manualSeconds > 0) currentSeconds = tmpl.manualSeconds;
+    else if (bestLog && bestLog > 0) currentSeconds = bestLog;
 
     const isMinutes = currentSeconds >= 60;
     const displayVal = isMinutes ? Math.round(currentSeconds / 60) : currentSeconds;
-    const unit = isMinutes ? 'min' : 'sec';
+    const timeUnit = isMinutes ? 'min' : 'sec';
+
+    const refQty = tmpl && tmpl.refQty ? tmpl.refQty : 1;
+    const refUnit = tmpl && tmpl.refUnit ? tmpl.refUnit : 'pint';
+    const refFamily = tmpl && tmpl.baseFamily ? tmpl.baseFamily : 'volume';
+    const allUnits = refFamily === 'weight' ? WEIGHT_UNITS : [...VOLUME_UNITS, ...PAN_UNITS];
+    const unitOpts = allUnits.map(u => `<option value="${u}" ${refUnit === u ? 'selected' : ''}>${u}</option>`).join('');
 
     const modal = document.createElement('div');
     modal.id = 'modalTimingEdit';
     modal.className = 'modal show';
     modal.innerHTML = `
-        <div class="modal-content" style="text-align:center;max-width:320px;">
-            <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:16px;">${ingName}</div>
-            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:16px;">Set prep timing</div>
-            <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px;">
+        <div class="modal-content" style="text-align:center;max-width:340px;">
+            <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">${ingName}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Edit timing</div>
+            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:12px;">
+                <button id="editFamVol" onclick="editTimingSetFamily('volume')" style="padding:6px 14px;border-radius:12px;font-size:11px;font-weight:700;border:none;cursor:pointer;
+                    background:${refFamily === 'volume' ? 'var(--accent-tint)' : 'var(--surface)'};
+                    color:${refFamily === 'volume' ? 'var(--accent)' : 'var(--text-muted)'};
+                    box-shadow:${refFamily === 'volume' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">Volume</button>
+                <button id="editFamWt" onclick="editTimingSetFamily('weight')" style="padding:6px 14px;border-radius:12px;font-size:11px;font-weight:700;border:none;cursor:pointer;
+                    background:${refFamily === 'weight' ? 'var(--accent-tint)' : 'var(--surface)'};
+                    color:${refFamily === 'weight' ? 'var(--accent)' : 'var(--text-muted)'};
+                    box-shadow:${refFamily === 'weight' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">Weight</button>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;">
+                <input type="number" id="editRefQty" class="smart-qty-input" value="${refQty}" min="0.1" step="1" inputmode="decimal" style="width:60px;font-size:16px;text-align:center;">
+                <select id="editRefUnit" class="smart-unit-select" style="font-size:13px;">${unitOpts}</select>
+                <span style="font-size:13px;font-weight:700;color:var(--text-muted);">=</span>
                 <input type="number" id="timingValueInput" class="smart-qty-input"
                     value="${displayVal || ''}" placeholder="0" min="0" step="1" inputmode="numeric"
-                    style="width:90px;font-size:28px;text-align:center;font-weight:800;">
-                <div style="display:flex;flex-direction:column;gap:4px;">
+                    style="width:60px;font-size:16px;text-align:center;font-weight:800;">
+                <div style="display:flex;flex-direction:column;gap:2px;">
                     <button id="timingUnitMin" onclick="setTimingUnit('min')"
-                        style="padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;
-                        background:${unit === 'min' ? 'var(--accent-tint)' : 'var(--surface)'};
-                        color:${unit === 'min' ? 'var(--accent)' : 'var(--text-muted)'};
-                        box-shadow:${unit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">min</button>
+                        style="padding:4px 8px;border-radius:8px;font-size:10px;font-weight:700;border:none;cursor:pointer;
+                        background:${timeUnit === 'min' ? 'var(--accent-tint)' : 'var(--surface)'};
+                        color:${timeUnit === 'min' ? 'var(--accent)' : 'var(--text-muted)'};
+                        box-shadow:${timeUnit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">min</button>
                     <button id="timingUnitSec" onclick="setTimingUnit('sec')"
-                        style="padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;
-                        background:${unit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)'};
-                        color:${unit === 'sec' ? 'var(--accent)' : 'var(--text-muted)'};
-                        box-shadow:${unit === 'sec' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">sec</button>
+                        style="padding:4px 8px;border-radius:8px;font-size:10px;font-weight:700;border:none;cursor:pointer;
+                        background:${timeUnit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)'};
+                        color:${timeUnit === 'sec' ? 'var(--accent)' : 'var(--text-muted)'};
+                        box-shadow:${timeUnit === 'sec' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">sec</button>
                 </div>
             </div>
-            ${currentSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Current: ${formatTime(currentSeconds)}</div>` : ''}
+            ${currentSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Current: ${formatTime(currentSeconds)}</div>` : ''}
             <div class="btn-group">
                 <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
                 ${currentSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearIngTimingByName('${escapedName}')">Clear</button>` : ''}
@@ -2948,12 +2969,29 @@ function showTimingModalByName(ingName) {
         </div>`;
     document.body.appendChild(modal);
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-    modal.dataset.timingUnit = unit;
+    modal.dataset.timingUnit = timeUnit;
+    modal.dataset.family = refFamily;
 
     setTimeout(() => {
         const input = document.getElementById('timingValueInput');
         if (input) { input.focus(); input.select(); }
     }, 150);
+}
+
+function editTimingSetFamily(family) {
+    const modal = document.getElementById('modalTimingEdit');
+    if (!modal) return;
+    modal.dataset.family = family;
+    const volBtn = document.getElementById('editFamVol');
+    const wtBtn = document.getElementById('editFamWt');
+    if (volBtn) { volBtn.style.background = family === 'volume' ? 'var(--accent-tint)' : 'var(--surface)'; volBtn.style.color = family === 'volume' ? 'var(--accent)' : 'var(--text-muted)'; volBtn.style.boxShadow = family === 'volume' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'; }
+    if (wtBtn) { wtBtn.style.background = family === 'weight' ? 'var(--accent-tint)' : 'var(--surface)'; wtBtn.style.color = family === 'weight' ? 'var(--accent)' : 'var(--text-muted)'; wtBtn.style.boxShadow = family === 'weight' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'; }
+    // Update unit dropdown
+    const sel = document.getElementById('editRefUnit');
+    if (sel) {
+        const units = family === 'weight' ? WEIGHT_UNITS : [...VOLUME_UNITS, ...PAN_UNITS];
+        sel.innerHTML = units.map(u => `<option value="${u}">${u}</option>`).join('');
+    }
 }
 
 function setTimingUnit(unit) {
@@ -2976,25 +3014,39 @@ function setTimingUnit(unit) {
 }
 
 function saveIngTimingByName(ingName) {
-    const input = document.getElementById('timingValueInput');
     const modal = document.getElementById('modalTimingEdit');
-    const val = input ? parseFloat(input.value) : 0;
-    const unit = modal ? modal.dataset.timingUnit : 'min';
+    const timeInput = document.getElementById('timingValueInput');
+    const qtyInput = document.getElementById('editRefQty');
+    const unitSelect = document.getElementById('editRefUnit');
+
+    const val = timeInput ? parseFloat(timeInput.value) : 0;
+    const timeUnit = modal ? modal.dataset.timingUnit : 'min';
+    const family = modal ? modal.dataset.family : 'volume';
 
     if (!val || val <= 0) { showToast('Enter a time value'); return; }
 
-    const seconds = unit === 'min' ? Math.round(val * 60) : Math.round(val);
+    const seconds = timeUnit === 'min' ? Math.round(val * 60) : Math.round(val);
+    const refQty = qtyInput ? parseFloat(qtyInput.value) || 1 : 1;
+    const refUnit = unitSelect ? unitSelect.value : 'pint';
+    const baseQty = convertToBase(refQty, refUnit, 4);
+    const secPerBase = baseQty > 0 ? seconds / baseQty : 0;
     const key = ingName.toLowerCase();
 
     taskTemplates[key] = {
-        activeFixedSeconds: seconds,
+        secPerBaseUnit: secPerBase,
+        baseFamily: family,
+        refSeconds: seconds,
+        refQty: refQty,
+        refUnit: refUnit,
+        refDepth: PAN_UNITS.includes(refUnit) ? 4 : null,
+        manualSeconds: 0,
+        activeFixedSeconds: 0,
         activeSecondsPerUnit: 0,
         passiveFixedSeconds: 0,
         passiveSecondsPerUnit: 0,
-        manualSeconds: seconds,
         lastUpdatedAt: Date.now(),
         calibratedBy: 'manual',
-        templateVersion: 1
+        templateVersion: 2
     };
     localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
 
@@ -3002,7 +3054,7 @@ function saveIngTimingByName(ingName) {
     panelDirty.logs = true;
     panelDirty.home = true;
     renderPanel('logs');
-    showToast(`${ingName}: ${formatTime(seconds)}`);
+    showToast(`${ingName}: ${formatTime(seconds)} (${refQty} ${refUnit})`);
 }
 
 function clearIngTimingByName(ingName) {
@@ -3016,6 +3068,216 @@ function clearIngTimingByName(ingName) {
     panelDirty.home = true;
     renderPanel('logs');
     showToast(`${ingName}: timing cleared`);
+}
+
+// ==================== STOPWATCH FLOW ====================
+
+let swState = null; // { ingName, step, family, qty, unit, attempts:[], timerStart, timerInterval, elapsed }
+
+function startStopwatchFlow(ingName) {
+    swState = { ingName, step: 'family', family: null, qty: 1, unit: 'pint', depth: 4, attempts: [], timerStart: null, timerInterval: null, elapsed: 0 };
+    renderStopwatchModal();
+}
+
+function renderStopwatchModal() {
+    const sw = swState;
+    if (!sw) return;
+    const existing = document.getElementById('modalStopwatch');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalStopwatch';
+    modal.className = 'modal show';
+    let content = '';
+
+    if (sw.step === 'family') {
+        content = `
+            <div class="modal-content" style="text-align:center;max-width:320px;">
+                <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;">${sw.ingName}</div>
+                <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:20px;">What are you measuring?</div>
+                <div style="display:flex;gap:12px;justify-content:center;margin-bottom:20px;">
+                    <button class="btn btn-primary squishy" style="flex:1;padding:16px;" onclick="swSetFamily('volume')">
+                        <div style="font-size:20px;margin-bottom:4px;">🥤</div>Volume
+                    </button>
+                    <button class="btn btn-primary squishy" style="flex:1;padding:16px;" onclick="swSetFamily('weight')">
+                        <div style="font-size:20px;margin-bottom:4px;">⚖️</div>Weight
+                    </button>
+                </div>
+                <button class="btn btn-secondary squishy" onclick="swClose()">Cancel</button>
+            </div>`;
+    } else if (sw.step === 'qty') {
+        const units = sw.family === 'volume'
+            ? [...VOLUME_UNITS, ...PAN_UNITS]
+            : WEIGHT_UNITS;
+        const unitOpts = units.map(u => `<option value="${u}" ${sw.unit === u ? 'selected' : ''}>${u}</option>`).join('');
+        const showDepth = PAN_UNITS.includes(sw.unit);
+        content = `
+            <div class="modal-content" style="text-align:center;max-width:320px;">
+                <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;">${sw.ingName}</div>
+                <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:16px;">How much are you prepping?</div>
+                <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;">
+                    <input type="number" id="swQtyInput" class="smart-qty-input" value="${sw.qty}" min="0.1" step="1" inputmode="decimal"
+                        style="width:80px;font-size:24px;text-align:center;">
+                    <select id="swUnitSelect" class="smart-unit-select" style="font-size:14px;" onchange="swUnitChanged(this.value)">
+                        ${unitOpts}
+                    </select>
+                </div>
+                ${showDepth ? `
+                <div class="depth-chips" style="justify-content:center;margin-bottom:12px;">
+                    <button class="depth-chip ${sw.depth == 2 ? 'active' : ''}" onclick="swSetDepth(2)">2"</button>
+                    <button class="depth-chip ${sw.depth == 4 ? 'active' : ''}" onclick="swSetDepth(4)">4"</button>
+                    <button class="depth-chip ${sw.depth == 6 ? 'active' : ''}" onclick="swSetDepth(6)">6"</button>
+                </div>` : ''}
+                <div class="btn-group" style="margin-top:16px;">
+                    <button class="btn btn-secondary squishy" onclick="swState.step='family'; renderStopwatchModal()">Back</button>
+                    <button class="btn btn-primary squishy" onclick="swStartTimer()">Start Timer</button>
+                </div>
+            </div>`;
+    } else if (sw.step === 'timer') {
+        const elapsed = sw.elapsed;
+        const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        content = `
+            <div class="modal-content" style="text-align:center;max-width:320px;">
+                <div style="font-size:14px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">${sw.ingName}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">${sw.qty} ${sw.unit} · Attempt ${sw.attempts.length + 1}/3</div>
+                <div id="swTimerDisplay" style="font-size:52px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums;letter-spacing:2px;margin-bottom:24px;">${m}:${s}</div>
+                <button class="btn squishy" style="background:var(--high);color:#fff;width:100%;padding:16px;font-size:16px;font-weight:800;" onclick="swStopTimer()">STOP</button>
+            </div>`;
+    } else if (sw.step === 'result') {
+        const lastTime = sw.attempts[sw.attempts.length - 1];
+        const canRetry = sw.attempts.length < 3;
+        let attHtml = sw.attempts.map((t, i) => `<span style="font-size:13px;font-weight:600;color:var(--text);padding:4px 10px;border-radius:8px;background:var(--bg);box-shadow:var(--neu-shadow-sm);">#${i + 1}: ${formatTime(t)}</span>`).join(' ');
+        content = `
+            <div class="modal-content" style="text-align:center;max-width:320px;">
+                <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px;">${sw.ingName}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">${sw.qty} ${sw.unit}</div>
+                <div style="font-size:36px;font-weight:800;color:var(--accent);margin-bottom:12px;">${formatTime(lastTime)}</div>
+                <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:16px;">${attHtml}</div>
+                ${sw.attempts.length > 1 ? `
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">
+                    Best: ${formatTime(Math.min(...sw.attempts))} · Avg: ${formatTime(Math.round(sw.attempts.reduce((a,b) => a+b, 0) / sw.attempts.length))}
+                </div>` : ''}
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${canRetry ? `<button class="btn btn-secondary squishy" onclick="swRetry()">Try Again (${sw.attempts.length}/3)</button>` : ''}
+                    ${sw.attempts.length > 1 ? `
+                    <button class="btn btn-primary squishy" onclick="swSave('best')">Save Best (${formatTime(Math.min(...sw.attempts))})</button>
+                    <button class="btn squishy" style="background:var(--surface);color:var(--text);box-shadow:var(--neu-shadow-sm);" onclick="swSave('avg')">Save Average (${formatTime(Math.round(sw.attempts.reduce((a,b) => a+b, 0) / sw.attempts.length))})</button>
+                    ` : `<button class="btn btn-primary squishy" onclick="swSave('best')">Save</button>`}
+                    <button class="btn btn-secondary squishy" onclick="swClose()">Cancel</button>
+                </div>
+            </div>`;
+    }
+
+    modal.innerHTML = content;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) swClose(); };
+}
+
+function swSetFamily(family) {
+    swState.family = family;
+    swState.unit = family === 'volume' ? 'pint' : 'lb';
+    swState.step = 'qty';
+    renderStopwatchModal();
+}
+
+function swUnitChanged(unit) {
+    swState.unit = unit;
+    if (PAN_UNITS.includes(unit) || !PAN_UNITS.includes(unit)) {
+        renderStopwatchModal();
+    }
+}
+
+function swSetDepth(d) {
+    swState.depth = d;
+    renderStopwatchModal();
+}
+
+function swStartTimer() {
+    const qtyInput = document.getElementById('swQtyInput');
+    const unitSelect = document.getElementById('swUnitSelect');
+    if (qtyInput) swState.qty = parseFloat(qtyInput.value) || 1;
+    if (unitSelect) swState.unit = unitSelect.value;
+    swState.elapsed = 0;
+    swState.step = 'timer';
+    swState.timerStart = Date.now();
+    renderStopwatchModal();
+    swState.timerInterval = setInterval(() => {
+        swState.elapsed = Math.floor((Date.now() - swState.timerStart) / 1000);
+        const display = document.getElementById('swTimerDisplay');
+        if (display) {
+            const m = String(Math.floor(swState.elapsed / 60)).padStart(2, '0');
+            const s = String(swState.elapsed % 60).padStart(2, '0');
+            display.textContent = `${m}:${s}`;
+        }
+    }, 200);
+}
+
+function swStopTimer() {
+    if (swState.timerInterval) { clearInterval(swState.timerInterval); swState.timerInterval = null; }
+    const elapsed = Math.floor((Date.now() - swState.timerStart) / 1000);
+    if (elapsed < 1) { showToast('Too short'); return; }
+    swState.attempts.push(elapsed);
+    swState.step = 'result';
+    if (navigator.vibrate) navigator.vibrate(30);
+    renderStopwatchModal();
+}
+
+function swRetry() {
+    swState.elapsed = 0;
+    swState.timerStart = Date.now();
+    swState.step = 'timer';
+    renderStopwatchModal();
+    swState.timerInterval = setInterval(() => {
+        swState.elapsed = Math.floor((Date.now() - swState.timerStart) / 1000);
+        const display = document.getElementById('swTimerDisplay');
+        if (display) {
+            const m = String(Math.floor(swState.elapsed / 60)).padStart(2, '0');
+            const s = String(swState.elapsed % 60).padStart(2, '0');
+            display.textContent = `${m}:${s}`;
+        }
+    }, 200);
+}
+
+function swSave(mode) {
+    const sw = swState;
+    if (!sw || sw.attempts.length === 0) return;
+
+    const seconds = mode === 'best' ? Math.min(...sw.attempts) : Math.round(sw.attempts.reduce((a, b) => a + b, 0) / sw.attempts.length);
+    const baseQty = convertToBase(sw.qty, sw.unit, sw.depth);
+    const secPerBase = baseQty > 0 ? seconds / baseQty : 0;
+    const key = sw.ingName.toLowerCase();
+
+    taskTemplates[key] = {
+        secPerBaseUnit: secPerBase,
+        baseFamily: sw.family,
+        refSeconds: seconds,
+        refQty: sw.qty,
+        refUnit: sw.unit,
+        refDepth: PAN_UNITS.includes(sw.unit) ? sw.depth : null,
+        manualSeconds: 0,
+        activeFixedSeconds: 0,
+        activeSecondsPerUnit: 0,
+        passiveFixedSeconds: 0,
+        passiveSecondsPerUnit: 0,
+        lastUpdatedAt: Date.now(),
+        calibratedBy: 'stopwatch',
+        templateVersion: 2
+    };
+    localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
+
+    swClose();
+    panelDirty.logs = true;
+    panelDirty.home = true;
+    renderPanel('logs');
+    showToast(`${sw.ingName}: ${formatTime(seconds)} (${sw.qty} ${sw.unit})`);
+}
+
+function swClose() {
+    if (swState && swState.timerInterval) clearInterval(swState.timerInterval);
+    swState = null;
+    const modal = document.getElementById('modalStopwatch');
+    if (modal) modal.remove();
 }
 
 function startCalibration(stationId, ingredientId, ingName) {
@@ -4998,22 +5260,30 @@ function renderLogs(container) {
     } else {
         withData.forEach(ing => {
             const escapedName = ing.name.replace(/'/g, "\\'");
-            const hasLogs = ing.count > 0;
+            const tmpl = taskTemplates[ing.name.toLowerCase()];
+            const timeDisplay = tmpl && tmpl.secPerBaseUnit > 0 && tmpl.refSeconds > 0
+                ? formatTime(tmpl.refSeconds)
+                : (ing.bestTime ? formatTime(ing.bestTime) : '');
+            const rateInfo = tmpl && tmpl.secPerBaseUnit > 0 && tmpl.refQty && tmpl.refUnit
+                ? `${tmpl.refQty} ${tmpl.refUnit}` : '';
             html += `
-            <button class="log-ingredient-card" ${hasLogs ? `onclick="handleClick(); openLogDetail('${escapedName}')"` : ''} ${!hasLogs ? 'style="cursor:default;"' : ''}
-                ontouchstart="startLogLongPress(event, '${escapedName}')"
-                ontouchend="cancelLogLongPress()" ontouchmove="cancelLogLongPress()"
-                oncontextmenu="event.preventDefault(); showTimingModalByName('${escapedName}')">
+            <div class="log-ingredient-card" style="cursor:default;" oncontextmenu="event.preventDefault();">
                 <div class="log-ing-top">
                     <span class="log-ing-name">${ing.name}</span>
-                    <span class="log-ing-count">${ing.count > 0 ? ing.count + ' log' + (ing.count !== 1 ? 's' : '') : 'template'}</span>
+                    <div class="log-ing-actions">
+                        <button class="log-action-btn" onclick="event.stopPropagation(); startStopwatchFlow('${escapedName}')" title="Stopwatch">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M10 2h4"/><path d="M12 2v2"/></svg>
+                        </button>
+                        <button class="log-action-btn" onclick="event.stopPropagation(); showTimingModalByName('${escapedName}')" title="Edit timing">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="log-ing-bottom">
-                    <span class="log-ing-station">${ing.station}</span>
-                    ${ing.bestTime ? `<span class="log-ing-best">${formatTime(ing.bestTime)}</span>` : ''}
+                    <span class="log-ing-station">${ing.station}${rateInfo ? ' · ' + rateInfo : ''}</span>
+                    ${timeDisplay ? `<span class="log-ing-best">${timeDisplay}</span>` : ''}
                 </div>
-                ${hasLogs ? '<svg class="log-ing-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>' : ''}
-            </button>`;
+            </div>`;
         });
     }
     html += `</div>`;
@@ -5032,12 +5302,19 @@ function renderLogs(container) {
         missingData.forEach(ing => {
             const escapedName = ing.name.replace(/'/g, "\\'");
             html += `
-            <div class="logs-missing-card"
-                ontouchstart="startLogLongPress(event, '${escapedName}')"
-                ontouchend="cancelLogLongPress()" ontouchmove="cancelLogLongPress()"
-                oncontextmenu="event.preventDefault(); showTimingModalByName('${escapedName}')">
-                <span class="logs-missing-name">${ing.name}</span>
-                <span class="logs-missing-station">${ing.station}</span>
+            <div class="logs-missing-card" oncontextmenu="event.preventDefault();">
+                <div style="flex:1;min-width:0;">
+                    <div class="logs-missing-name">${ing.name}</div>
+                    <div class="logs-missing-station">${ing.station}</div>
+                </div>
+                <div class="log-ing-actions">
+                    <button class="log-action-btn" onclick="event.stopPropagation(); startStopwatchFlow('${escapedName}')" title="Stopwatch">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M10 2h4"/><path d="M12 2v2"/></svg>
+                    </button>
+                    <button class="log-action-btn" onclick="event.stopPropagation(); showTimingModalByName('${escapedName}')" title="Edit timing">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                </div>
             </div>`;
         });
     }
