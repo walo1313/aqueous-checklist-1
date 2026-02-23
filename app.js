@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 142;
+const APP_BUILD = 143;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2358,7 +2358,7 @@ function mlRenderRow(item) {
          onclick="mlToggleStrike(${item.stationId}, ${item.ingredientId})"
          ontouchstart="mlSwipeStart(event, ${item.stationId}, ${item.ingredientId}); mlRowLongPressStart(event, ${item.stationId}, ${item.ingredientId})"
          ontouchend="mlRowLongPressCancel()" ontouchmove="mlRowLongPressCancel()"
-         oncontextmenu="event.preventDefault(); showTimingEditor('${escapedName}')">
+         oncontextmenu="event.preventDefault(); mlOpenTimingEditor(${item.stationId}, ${item.ingredientId})">
         <span class="${dotClass}"></span>
         <div class="ml-name-col">
             <span class="ml-name">${item.name}</span>
@@ -2995,7 +2995,7 @@ function getCalibrationTimerSeconds(timer) {
 
 // ==================== TIMING EDITOR (HH:MM:SS, Dual Family) ====================
 
-function showTimingEditor(ingName) {
+function showTimingEditor(ingName, mlItem) {
     const existing = document.getElementById('modalTimingEdit');
     if (existing) existing.remove();
 
@@ -3004,16 +3004,27 @@ function showTimingEditor(ingName) {
     const escapedName = ingName.replace(/'/g, "\\'");
     const families = getIngTimingFamilies(ingName);
 
-    // Pick initial family: prefer family that has data, else volume default
+    // Pick initial family: use ML item's family if provided, else prefer family with data
     let initFamily = 'volume';
-    if (families.count && !families.volume && !families.weight) initFamily = 'count';
-    else if (families.weight && !families.volume) initFamily = 'weight';
+    if (mlItem && mlItem.parUnit) {
+        initFamily = getTimingFamily(mlItem.parUnit);
+    } else if (families.count && !families.volume && !families.weight) {
+        initFamily = 'count';
+    } else if (families.weight && !families.volume) {
+        initFamily = 'weight';
+    }
 
     const modal = document.createElement('div');
     modal.id = 'modalTimingEdit';
     modal.className = 'modal show';
     modal.dataset.family = initFamily;
     modal.dataset.ingName = ingName;
+    // Store ML item data for context
+    if (mlItem) {
+        modal.dataset.mlQty = mlItem.parQty || '';
+        modal.dataset.mlUnit = mlItem.parUnit || '';
+        modal.dataset.mlDepth = mlItem.parDepth || '';
+    }
 
     renderTimingEditorContent(modal, ingName, initFamily);
 
@@ -3027,10 +3038,28 @@ function renderTimingEditorContent(modal, ingName, family) {
     const escapedName = ingName.replace(/'/g, "\\'");
     const families = getIngTimingFamilies(ingName);
 
+    // Check if ML item data is stored and matches current family
+    const mlQty = parseFloat(modal.dataset.mlQty) || 0;
+    const mlUnit = modal.dataset.mlUnit || '';
+    const mlDepth = parseInt(modal.dataset.mlDepth) || null;
+    const mlFamily = mlUnit ? getTimingFamily(mlUnit) : '';
+
     // Get existing data for selected family
     const defaultUnit = family === 'weight' ? 'lb' : family === 'count' ? 'each' : 'pint';
     let refQty = 1, refUnit = defaultUnit, refSeconds = 0;
-    if (tmpl && tmpl[family]) {
+
+    if (mlFamily === family && mlQty > 0 && mlUnit) {
+        // Use ML item's current qty/unit as reference
+        refQty = mlQty;
+        refUnit = mlUnit;
+        // Calculate time for this qty/unit if timing exists
+        if (tmpl && tmpl[family] && tmpl[family].secPerBaseUnit > 0) {
+            const baseQty = convertToBase(mlQty, mlUnit, mlDepth);
+            refSeconds = Math.round(tmpl[family].secPerBaseUnit * baseQty);
+        } else if (tmpl && tmpl[family]) {
+            refSeconds = tmpl[family].refSeconds || 0;
+        }
+    } else if (tmpl && tmpl[family]) {
         refQty = tmpl[family].refQty || 1;
         refUnit = tmpl[family].refUnit || defaultUnit;
         refSeconds = tmpl[family].refSeconds || 0;
@@ -3118,6 +3147,7 @@ function saveTimingFromEditor(ingName) {
         modal.remove();
         panelDirty.logs = true;
         panelDirty.home = true;
+        renderPanel('home');
         renderPanel('logs');
         showToast(`${ingName}: ${family} timing cleared`);
         return;
@@ -3144,6 +3174,7 @@ function saveTimingFromEditor(ingName) {
     modal.remove();
     panelDirty.logs = true;
     panelDirty.home = true;
+    renderPanel('home');
     renderPanel('logs');
     showToast(`${ingName}: ${formatTime(totalSec)} (${family})`);
 }
@@ -3163,6 +3194,7 @@ function clearTimingFamily(ingName) {
     if (modal) modal.remove();
     panelDirty.logs = true;
     panelDirty.home = true;
+    renderPanel('home');
     renderPanel('logs');
     showToast(`${ingName}: ${family} timing cleared`);
 }
@@ -3230,12 +3262,18 @@ function mlRowLongPressStart(event, stationId, ingredientId) {
         if (navigator.vibrate) navigator.vibrate(30);
         const day = getActiveDay();
         const item = (dayChecklists[day] || []).find(x => x.stationId === stationId && x.ingredientId === ingredientId);
-        if (item) showTimingEditor(item.name);
+        if (item) showTimingEditor(item.name, item);
     }, 600);
 }
 
 function mlRowLongPressCancel() {
     if (mlLongPressTimer) { clearTimeout(mlLongPressTimer); mlLongPressTimer = null; }
+}
+
+function mlOpenTimingEditor(stationId, ingredientId) {
+    const day = getActiveDay();
+    const item = (dayChecklists[day] || []).find(x => x.stationId === stationId && x.ingredientId === ingredientId);
+    if (item) showTimingEditor(item.name, item);
 }
 
 function startCalibration(stationId, ingredientId, ingName) {
