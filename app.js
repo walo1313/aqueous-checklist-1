@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 152;
+const APP_BUILD = 153;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2048,7 +2048,7 @@ function renderHome(container) {
 
     container.innerHTML = `
         <div class="home-tab-sticky">
-            <div class="ml-title">MASTER LIST</div>
+            <div class="section-title-bar">MASTER LIST</div>
             <div class="day-selector-row">
                 <button class="day-chip ${getActiveDay() === getTodayKey() ? 'active' : ''}" onclick="setActiveDay(null)">Today</button>
                 <button class="day-chip ${getActiveDay() === getNextDayKey(getTodayKey()) ? 'active' : ''}" onclick="setActiveDay('${getNextDayKey(getTodayKey())}')">Tomorrow</button>
@@ -2167,6 +2167,7 @@ function renderTools(container) {
     }
 
     container.innerHTML = `
+        <div class="section-title-bar">TOOLS</div>
         <div class="tools-sub-tabs">
             <button class="tools-sub-tab ${toolsSubTab === 'stations' ? 'active' : ''}" onclick="switchToolsSubTab('stations')">Stations</button>
             <button class="tools-sub-tab ${toolsSubTab === 'logs' ? 'active' : ''}" onclick="switchToolsSubTab('logs')">Logs</button>
@@ -2211,6 +2212,7 @@ function renderLibrary(container) {
     }
 
     container.innerHTML = `
+        <div class="section-title-bar">LIBRARY</div>
         <div class="library-sub-tabs">
             <button class="library-sub-tab ${librarySubTab === 'bible' ? 'active' : ''}" onclick="switchLibrarySubTab('bible')">Bible</button>
             <button class="library-sub-tab ${librarySubTab === 'recipes' ? 'active' : ''}" onclick="switchLibrarySubTab('recipes')">Recipes</button>
