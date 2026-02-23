@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 155;
+const APP_BUILD = 156;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2061,7 +2061,6 @@ function renderHome(container) {
 
     container.innerHTML = `
         <div class="home-tab-sticky">
-            <div class="section-title-bar">MASTER LIST</div>
             <div class="day-selector-row">
                 <button class="day-chip ${getActiveDay() === getTodayKey() ? 'active' : ''}" onclick="setActiveDay(null)">Today</button>
                 <button class="day-chip ${getActiveDay() === getNextDayKey(getTodayKey()) ? 'active' : ''}" onclick="setActiveDay('${getNextDayKey(getTodayKey())}')">Tomorrow</button>
@@ -2180,11 +2179,10 @@ function renderTools(container) {
     }
 
     container.innerHTML = `
-        <div class="section-title-bar">TOOLS</div>
-        <div class="tools-sub-tabs">
-            <button class="tools-sub-tab ${toolsSubTab === 'stations' ? 'active' : ''}" onclick="switchToolsSubTab('stations')">Stations</button>
-            <button class="tools-sub-tab ${toolsSubTab === 'logs' ? 'active' : ''}" onclick="switchToolsSubTab('logs')">Logs</button>
-            <button class="tools-sub-tab ${toolsSubTab === 'history' ? 'active' : ''}" onclick="switchToolsSubTab('history')">History</button>
+        <div class="sub-pill-row">
+            <button class="day-chip ${toolsSubTab === 'stations' ? 'active' : ''}" onclick="switchToolsSubTab('stations')">Stations</button>
+            <button class="day-chip ${toolsSubTab === 'logs' ? 'active' : ''}" onclick="switchToolsSubTab('logs')">Logs</button>
+            <button class="day-chip ${toolsSubTab === 'history' ? 'active' : ''}" onclick="switchToolsSubTab('history')">History</button>
         </div>
         <div style="padding:0 20px 100px;">${content}</div>`;
 
@@ -2456,11 +2454,10 @@ function renderLibrary(container) {
     }
 
     container.innerHTML = `
-        <div class="section-title-bar">LIBRARY</div>
-        <div class="library-sub-tabs">
-            <button class="library-sub-tab ${librarySubTab === 'bible' ? 'active' : ''}" onclick="switchLibrarySubTab('bible')">Bible</button>
-            <button class="library-sub-tab ${librarySubTab === 'recipes' ? 'active' : ''}" onclick="switchLibrarySubTab('recipes')">Recipes</button>
-            <button class="library-sub-tab ${librarySubTab === 'tempLogs' ? 'active' : ''}" onclick="switchLibrarySubTab('tempLogs')">Temp Logs</button>
+        <div class="sub-pill-row">
+            <button class="day-chip ${librarySubTab === 'bible' ? 'active' : ''}" onclick="switchLibrarySubTab('bible')">Bible</button>
+            <button class="day-chip ${librarySubTab === 'recipes' ? 'active' : ''}" onclick="switchLibrarySubTab('recipes')">Recipes</button>
+            <button class="day-chip ${librarySubTab === 'tempLogs' ? 'active' : ''}" onclick="switchLibrarySubTab('tempLogs')">Temp Logs</button>
         </div>
         <div style="padding:0 20px 100px;">${content}</div>`;
 }

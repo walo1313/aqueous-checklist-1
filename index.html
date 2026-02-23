@@ -219,16 +219,15 @@
             padding: 0 20px 6px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
-        .section-title-bar {
-            background: var(--accent);
-            color: #fff;
-            font-size: 15px;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            text-align: center;
-            padding: 10px 20px;
-            margin: 0 -20px 8px;
-            text-transform: uppercase;
+        .sub-pill-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px 8px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--bg);
         }
         .home-tab-switch {
             display: flex;
@@ -3602,7 +3601,7 @@
                 <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
                 <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            Home
+            Master List
         </button>
         <button class="nav-item" onclick="switchView('tools')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
