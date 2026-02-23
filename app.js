@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 141;
+const APP_BUILD = 142;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -37,7 +37,7 @@ let logsBlockCollapsed = { withData: false, missingData: true };
 let logsStationCollapsed = {}; // { "stationName": true/false }
 let mlStopwatches = {}; // { "stationId-ingId": { startedAt, elapsed, interval } }
 let mlLongPressTimer = null;
-const PRESET_NOTES = ['Defrost', 'Pick up', "86'd", 'VIP'];
+const PRESET_NOTES = ['Defrost', 'Pick up', "86'd"];
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 // Wake Lock to keep screen on during timers
@@ -2424,7 +2424,6 @@ function renderDishIngredients(station, dish) {
                      ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
                      oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
                     <span class="ingredient-name ing-name-expanded" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
-                    ${inMl ? '<span class="in-ml-dot"></span>' : ''}
                 </div>
                 <div class="ing-expanded-card">
                     <div class="ing-qty-row">
@@ -2466,7 +2465,7 @@ function renderDishIngredients(station, dish) {
                     </div>
                     ` : ''}
                     <div class="ing-preset-row">
-                        ${PRESET_NOTES.map(p => `<button class="preset-pill ${activePresets.has(p) ? 'active' : ''}" onclick="event.stopPropagation(); togglePresetNote(${station.id}, ${ing.id}, '${p}')">${p}</button>`).join('')}
+                        ${PRESET_NOTES.map(p => { const ep = p.replace(/'/g, "\\'"); return `<button class="preset-pill ${activePresets.has(p) ? 'active' : ''}" onclick="event.stopPropagation(); togglePresetNote(${station.id}, ${ing.id}, '${ep}')">${p}</button>`; }).join('')}
                     </div>
                     <input type="text" class="ing-custom-note" placeholder="Custom note..."
                         value="${customNote}"
@@ -2488,7 +2487,6 @@ function renderDishIngredients(station, dish) {
                      oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
                     ${hasPri ? `<span class="priority-dot ${st.priority}"></span>` : ''}
                     <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
-                    ${inMl ? '<span class="in-ml-dot"></span>' : ''}
                     ${taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
                 </div>
             </div>`;
