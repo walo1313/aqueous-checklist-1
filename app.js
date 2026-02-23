@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 148;
+const APP_BUILD = 149;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -3121,107 +3121,79 @@ function getCalibrationTimerSeconds(timer) {
     return timer.pausedElapsed;
 }
 
-// ==================== TIMING EDITOR (HH:MM:SS, Dual Family) ====================
+// ==================== TIMING EDITOR (Simplified Qty + Time) ====================
 
 function showTimingEditor(ingName, mlItem) {
     const existing = document.getElementById('modalTimingEdit');
     if (existing) existing.remove();
 
-    const key = ingName.toLowerCase();
-    const tmpl = taskTemplates[key];
-    const escapedName = ingName.replace(/'/g, "\\'");
-    const families = getIngTimingFamilies(ingName);
-
-    // Pick initial family: use ML item's family if provided, else prefer family with data
-    let initFamily = 'volume';
-    if (mlItem && mlItem.parUnit) {
-        initFamily = getTimingFamily(mlItem.parUnit);
-    } else if (families.count && !families.volume && !families.weight) {
-        initFamily = 'count';
-    } else if (families.weight && !families.volume) {
-        initFamily = 'weight';
-    }
-
     const modal = document.createElement('div');
     modal.id = 'modalTimingEdit';
     modal.className = 'modal show';
-    modal.dataset.family = initFamily;
     modal.dataset.ingName = ingName;
-    // Store ML item data for context
+
     if (mlItem) {
+        modal.dataset.stationId = mlItem.stationId || '';
+        modal.dataset.ingredientId = mlItem.ingredientId || '';
         modal.dataset.mlQty = mlItem.parQty || '';
         modal.dataset.mlUnit = mlItem.parUnit || '';
         modal.dataset.mlDepth = mlItem.parDepth || '';
+        modal.dataset.originalQty = mlItem.parQty || '';
     }
 
-    renderTimingEditorContent(modal, ingName, initFamily);
+    if (mlItem && mlItem.parUnit) {
+        renderTimingQtyTime(modal, ingName);
+    } else {
+        renderTimingUnitPicker(modal, ingName);
+    }
 
     document.body.appendChild(modal);
     modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
 }
 
-function renderTimingEditorContent(modal, ingName, family) {
+function renderTimingQtyTime(modal, ingName) {
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
     const escapedName = ingName.replace(/'/g, "\\'");
-    const families = getIngTimingFamilies(ingName);
 
-    // Check if ML item data is stored and matches current family
-    const mlQty = parseFloat(modal.dataset.mlQty) || 0;
-    const mlUnit = modal.dataset.mlUnit || '';
-    const mlDepth = parseInt(modal.dataset.mlDepth) || null;
-    const mlFamily = mlUnit ? getTimingFamily(mlUnit) : '';
+    const parUnit = modal.dataset.mlUnit;
+    const parDepth = parseInt(modal.dataset.mlDepth) || null;
+    const parQty = parseFloat(modal.dataset.mlQty) || 1;
+    const family = getTimingFamily(parUnit);
 
-    // Get existing data for selected family
-    const defaultUnit = family === 'weight' ? 'lb' : family === 'count' ? 'each' : 'pint';
-    let refQty = 1, refUnit = defaultUnit, refSeconds = 0;
+    modal.dataset.family = family;
 
-    if (mlFamily === family && mlQty > 0 && mlUnit) {
-        // Use ML item's current qty/unit as reference
-        refQty = mlQty;
-        refUnit = mlUnit;
-        // Calculate time for this qty/unit if timing exists
-        if (tmpl && tmpl[family] && tmpl[family].secPerBaseUnit > 0) {
-            const baseQty = convertToBase(mlQty, mlUnit, mlDepth);
-            refSeconds = Math.round(tmpl[family].secPerBaseUnit * baseQty);
-        } else if (tmpl && tmpl[family]) {
-            refSeconds = tmpl[family].refSeconds || 0;
-        }
-    } else if (tmpl && tmpl[family]) {
-        refQty = tmpl[family].refQty || 1;
-        refUnit = tmpl[family].refUnit || defaultUnit;
-        refSeconds = tmpl[family].refSeconds || 0;
+    let refSeconds = 0;
+    if (tmpl && tmpl[family] && tmpl[family].secPerBaseUnit > 0) {
+        const baseQty = convertToBase(parQty, parUnit, parDepth);
+        refSeconds = Math.round(tmpl[family].secPerBaseUnit * baseQty);
+    } else if (tmpl && tmpl[family] && tmpl[family].refSeconds > 0) {
+        refSeconds = tmpl[family].refSeconds;
     }
 
     const h = Math.floor(refSeconds / 3600);
     const m = Math.floor((refSeconds % 3600) / 60);
     const s = refSeconds % 60;
 
-    const allUnits = family === 'weight' ? WEIGHT_UNITS : family === 'count' ? [...COUNT_UNITS, ...TASK_UNITS] : [...VOLUME_UNITS, ...PAN_UNITS, ...CONTAINER_UNITS];
-    const unitOpts = allUnits.map(u => `<option value="${u}" ${refUnit === u ? 'selected' : ''}>${u}</option>`).join('');
+    const unitLabel = PAN_UNITS.includes(parUnit)
+        ? `${parDepth || 4}" ${parUnit}`
+        : parUnit;
 
-    modal.dataset.family = family;
     modal.innerHTML = `
         <div class="modal-content" style="text-align:center;max-width:340px;">
             <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">${ingName}</div>
             <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Edit Timing</div>
-            <div style="display:flex;gap:8px;justify-content:center;margin-bottom:14px;">
-                <button class="te-fam-btn ${family === 'volume' ? 'active' : ''}" onclick="teSetFamily('volume')">
-                    Volume ${families.volume ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
-                </button>
-                <button class="te-fam-btn ${family === 'weight' ? 'active' : ''}" onclick="teSetFamily('weight')">
-                    Weight ${families.weight ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
-                </button>
-                <button class="te-fam-btn ${family === 'count' ? 'active' : ''}" onclick="teSetFamily('count')">
-                    Each ${families.count ? '<span class="te-dot active"></span>' : '<span class="te-dot"></span>'}
-                </button>
-            </div>
-            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Reference unit</div>
+
+            <div class="te-section-label">QUANTITY</div>
             <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:14px;">
-                <input type="number" id="editRefQty" class="smart-qty-input" value="${refQty}" min="0.1" step="1" inputmode="decimal" style="width:60px;font-size:16px;text-align:center;">
-                <select id="editRefUnit" class="smart-unit-select" style="font-size:13px;">${unitOpts}</select>
+                <input type="number" id="teQtyInput" class="smart-qty-input"
+                    value="${parQty}" min="0.1" step="1" inputmode="decimal"
+                    style="width:70px;font-size:18px;text-align:center;"
+                    oninput="debounce('teQty', function(){ teQtyChanged('${escapedName}'); }, 300)">
+                <span style="font-size:14px;font-weight:700;color:var(--text);">${unitLabel}</span>
             </div>
-            <div style="font-size:11px;font-weight:600;color:var(--text-muted);margin-bottom:6px;">Time</div>
+
+            <div class="te-section-label">TIME</div>
             <div class="timing-hms">
                 <div class="timing-hms-col">
                     <input type="number" id="tmH" min="0" max="23" value="${h}" inputmode="numeric">
@@ -3239,32 +3211,121 @@ function renderTimingEditorContent(modal, ingName, family) {
                 </div>
             </div>
             ${refSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin:8px 0;">Current: ${formatTime(refSeconds)}</div>` : ''}
+
             <div class="btn-group" style="margin-top:14px;">
                 <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
-                ${refSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearTimingFamily('${escapedName}')">Clear</button>` : ''}
-                <button class="btn btn-primary squishy" onclick="handleClick(); saveTimingFromEditor('${escapedName}')">Save</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveTimingFromEditor('${escapedName}')">Done</button>
             </div>
         </div>`;
 }
 
-function teSetFamily(family) {
+function renderTimingUnitPicker(modal, ingName) {
+    const escapedName = ingName.replace(/'/g, "\\'");
+
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:center;max-width:340px;">
+            <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">${ingName}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:14px;">Set Unit</div>
+
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">Select a unit to continue:</div>
+            <select id="teUnitPicker" class="smart-unit-select" style="font-size:14px;width:100%;margin-bottom:14px;">
+                <option value="" selected>Choose unit...</option>
+                <optgroup label="Weight">
+                    ${WEIGHT_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Volume">
+                    ${VOLUME_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Pans">
+                    ${PAN_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Count">
+                    ${COUNT_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Containers">
+                    ${CONTAINER_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Task">
+                    ${TASK_UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+                </optgroup>
+            </select>
+
+            <div class="btn-group" style="margin-top:14px;">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="handleClick(); teSelectUnitAndContinue('${escapedName}')">Next</button>
+            </div>
+        </div>`;
+}
+
+function teSelectUnitAndContinue(ingName) {
     const modal = document.getElementById('modalTimingEdit');
     if (!modal) return;
-    const ingName = modal.dataset.ingName;
-    renderTimingEditorContent(modal, ingName, family);
+
+    const unit = document.getElementById('teUnitPicker').value;
+    if (!unit) {
+        showToast('Please select a unit');
+        return;
+    }
+
+    const stationId = parseInt(modal.dataset.stationId);
+    const ingredientId = parseInt(modal.dataset.ingredientId);
+
+    if (stationId && ingredientId) {
+        applyParUnit(stationId, ingredientId, unit);
+    }
+
+    modal.dataset.mlUnit = unit;
+    if (PAN_UNITS.includes(unit)) {
+        modal.dataset.mlDepth = '4';
+    } else {
+        modal.dataset.mlDepth = '';
+    }
+    modal.dataset.mlQty = '1';
+    modal.dataset.originalQty = '1';
+
+    renderTimingQtyTime(modal, ingName);
+}
+
+function teQtyChanged(ingName) {
+    const modal = document.getElementById('modalTimingEdit');
+    if (!modal) return;
+
+    const key = ingName.toLowerCase();
+    const tmpl = taskTemplates[key];
+    const family = modal.dataset.family;
+    if (!tmpl || !tmpl[family] || !tmpl[family].secPerBaseUnit || tmpl[family].secPerBaseUnit <= 0) return;
+
+    const newQty = parseFloat(document.getElementById('teQtyInput').value);
+    if (!newQty || newQty <= 0) return;
+
+    const parUnit = modal.dataset.mlUnit;
+    const parDepth = parseInt(modal.dataset.mlDepth) || null;
+
+    const baseQty = convertToBase(newQty, parUnit, parDepth);
+    const newTotalSec = Math.max(Math.round(tmpl[family].secPerBaseUnit * baseQty), 0);
+
+    const h = Math.floor(newTotalSec / 3600);
+    const m = Math.floor((newTotalSec % 3600) / 60);
+    const s = newTotalSec % 60;
+
+    document.getElementById('tmH').value = h;
+    document.getElementById('tmM').value = m;
+    document.getElementById('tmS').value = s;
 }
 
 function saveTimingFromEditor(ingName) {
     const modal = document.getElementById('modalTimingEdit');
     if (!modal) return;
+
     const h = parseInt(document.getElementById('tmH').value) || 0;
     const m = parseInt(document.getElementById('tmM').value) || 0;
     const s = parseInt(document.getElementById('tmS').value) || 0;
     const totalSec = h * 3600 + m * 60 + s;
+
     const family = modal.dataset.family || 'volume';
     const key = ingName.toLowerCase();
 
-    // If 0:0:0, clear the timing for this family
+    // 0:0:0 clears timing
     if (totalSec <= 0) {
         const tmpl = taskTemplates[key];
         if (tmpl && tmpl[family]) {
@@ -3277,13 +3338,13 @@ function saveTimingFromEditor(ingName) {
         panelDirty.home = true;
         renderPanel('home');
         renderPanel('tools');
-        showToast(`${ingName}: ${family} timing cleared`);
+        showToast(`${ingName}: timing cleared`);
         return;
     }
 
-    const refQty = parseFloat(document.getElementById('editRefQty').value) || 1;
-    const refUnit = document.getElementById('editRefUnit').value;
-    const depth = PAN_UNITS.includes(refUnit) ? 4 : null;
+    const refQty = parseFloat(document.getElementById('teQtyInput').value) || 1;
+    const refUnit = modal.dataset.mlUnit;
+    const depth = PAN_UNITS.includes(refUnit) ? (parseInt(modal.dataset.mlDepth) || 4) : null;
     const baseQty = convertToBase(refQty, refUnit, depth);
     const secPerBase = baseQty > 0 ? totalSec / baseQty : 0;
 
@@ -3299,32 +3360,28 @@ function saveTimingFromEditor(ingName) {
     taskTemplates[key].templateVersion = 3;
     saveTaskTemplates();
 
+    // Sync qty change back to station data if changed
+    const originalQty = parseFloat(modal.dataset.originalQty) || 0;
+    const stationId = parseInt(modal.dataset.stationId);
+    const ingredientId = parseInt(modal.dataset.ingredientId);
+
+    if (refQty !== originalQty && stationId && ingredientId) {
+        const station = stations.find(s => s.id === stationId);
+        if (station && station.status[ingredientId]) {
+            station.status[ingredientId].parQty = refQty;
+            updateParLevel(station, ingredientId);
+            saveIngredientDefault(station, ingredientId);
+            saveData(true);
+            syncItemToChecklist(stationId, ingredientId);
+        }
+    }
+
     modal.remove();
     panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');
     renderPanel('tools');
-    showToast(`${ingName}: ${formatTime(totalSec)} (${family})`);
-}
-
-function clearTimingFamily(ingName) {
-    const modal = document.getElementById('modalTimingEdit');
-    const family = modal ? modal.dataset.family : 'volume';
-    const key = ingName.toLowerCase();
-    const tmpl = taskTemplates[key];
-    if (tmpl && tmpl[family]) {
-        delete tmpl[family];
-        // If no families left, remove entire template
-        if (!tmpl.volume && !tmpl.weight && !tmpl.count) delete taskTemplates[key];
-    }
-    saveTaskTemplates();
-
-    if (modal) modal.remove();
-    panelDirty.tools = true;
-    panelDirty.home = true;
-    renderPanel('home');
-    renderPanel('tools');
-    showToast(`${ingName}: ${family} timing cleared`);
+    showToast(`${ingName}: ${formatTime(totalSec)}`);
 }
 
 // ==================== ML STOPWATCH (Start/Stop Pill) ====================
