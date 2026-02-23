@@ -215,6 +215,13 @@
             margin: 0 -20px;
             padding: 8px 20px 6px;
         }
+        .ml-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--accent);
+            letter-spacing: -0.3px;
+            padding: 2px 0 4px;
+        }
         .home-tab-switch {
             display: flex;
             gap: 0;
@@ -290,13 +297,6 @@
             flex-shrink: 0;
         }
         .close-day-btn:active { transform: scale(0.95); }
-        .day-label {
-            flex: 1;
-            text-align: right;
-            font-size: 12px;
-            font-weight: 800;
-            color: var(--text-muted);
-        }
         .home-timer-row {
             display: flex;
             align-items: center;
@@ -307,10 +307,57 @@
             font-size: 13px;
             font-weight: 800;
             color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            -webkit-tap-highlight-color: transparent;
         }
+        .timer-label:active { transform: scale(0.9); }
+        .timer-total-display {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--accent);
+            letter-spacing: -0.5px;
+            min-width: 60px;
+        }
+        .cook-controls {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            margin-left: auto;
+        }
+        .cook-btn {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: none;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .cook-btn:active { transform: scale(0.9); box-shadow: var(--neu-inset); }
+        .cook-btn:disabled { opacity: 0.3; pointer-events: none; }
+        .cook-count-wrap {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--text);
+            min-width: 30px;
+            justify-content: center;
+        }
+        .cook-count-wrap svg { color: var(--text-muted); }
         .home-timer-row .countdown-label {
-            flex: 1;
             text-align: right;
+            margin-left: 4px;
         }
 
         /* ===== MASTER LIST VIEW ===== */
@@ -1386,8 +1433,8 @@
             font-size: 10px;
             font-weight: 700;
             color: var(--high);
-            flex: 1;
             text-align: center;
+            margin-left: 4px;
         }
         .neu-toggle.disabled {
             opacity: 0.4;
@@ -2181,6 +2228,21 @@
             left: 25px;
             background: white;
             box-shadow: none;
+        }
+        .neu-toggle-sm {
+            width: 38px;
+            height: 22px;
+            border-radius: 11px;
+            margin-left: 6px;
+        }
+        .neu-toggle-sm::after {
+            width: 16px;
+            height: 16px;
+            top: 3px;
+            left: 3px;
+        }
+        .neu-toggle-sm.active::after {
+            left: 19px;
         }
 
         /* ===== HISTORY TAB ===== */

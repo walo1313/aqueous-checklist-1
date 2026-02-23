@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 146;
+const APP_BUILD = 147;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -19,7 +19,7 @@ if (currentView === 'summary' || currentView === 'logs' || currentView === 'hist
 let dayChecklists = {}; // { "YYYY-MM-DD": [{ stationId, ingredientId, name, stationName, priority, parQty, parUnit, parDepth, struck, timeEstimate }] }
 let history = [];
 let completedHistory = {}; // { "YYYY-MM-DD": [{ name, stationName, priority, parQty, parUnit, parDepth, timeEstimate }] }
-let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true, activeDay: null };
+let settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', wakeLock: true, timerNotifications: true, activeDay: null, numCooks: 1 };
 let prepTimes = {}; // { "ingredientName": { avgSecPerUnit, bestSecPerUnit, count, baseUnit } }
 let ingredientDefaults = {}; // { "ingredientname": { qty: N, unit: "quart" } }
 let taskTemplates = {}; // { "ingredientname": { activeFixedSeconds, activeSecondsPerUnit, passiveFixedSeconds, passiveSecondsPerUnit, lastUpdatedAt, calibratedBy, templateVersion } }
@@ -296,6 +296,31 @@ function confirmClockOut() {
     renderPanel('home');
 }
 
+function adjustCooks(delta) {
+    handleClick();
+    const current = settings.numCooks || 1;
+    const next = Math.min(10, Math.max(1, current + delta));
+    if (next === current) return;
+    settings.numCooks = next;
+    saveSettings();
+    updateTimerDisplay();
+    const btns = document.querySelectorAll('.cook-btn');
+    if (btns.length === 2) {
+        btns[0].disabled = next <= 1;
+        btns[1].disabled = next >= 10;
+    }
+}
+
+function updateTimerDisplay() {
+    const totalSec = getCountdownTotalSeconds();
+    const cooks = settings.numCooks || 1;
+    const divided = totalSec > 0 ? Math.ceil(totalSec / cooks) : 0;
+    const timeEl = document.getElementById('timerTotalDisplay');
+    if (timeEl) timeEl.textContent = divided > 0 ? formatTime(divided) : '--:--';
+    const cookEl = document.getElementById('cookCountDisplay');
+    if (cookEl) cookEl.textContent = cooks;
+}
+
 // ==================== COUNTDOWN TIMER BAR ====================
 let countdownBarInterval = null;
 
@@ -347,12 +372,17 @@ function updateCountdownBar() {
         return;
     }
 
-    const totalSec = getCountdownTotalSeconds();
+    const cooks = settings.numCooks || 1;
+    const totalSec = Math.ceil(getCountdownTotalSeconds() / cooks);
     if (totalSec <= 0) {
         bar.style.width = '100%';
         label.textContent = 'No timing data';
         return;
     }
+
+    // Keep static time display in sync
+    const timeEl = document.getElementById('timerTotalDisplay');
+    if (timeEl) timeEl.textContent = formatTime(totalSec);
 
     const elapsedSec = Math.floor((Date.now() - settings.clockInTimestamp) / 1000);
     const remainingSec = Math.max(0, totalSec - elapsedSec);
@@ -1378,7 +1408,7 @@ function loadData() {
     const savedSettings = localStorage.getItem('aqueous_settings');
     if (savedSettings) {
         const s = JSON.parse(savedSettings);
-        settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', ...s };
+        settings = { vibration: true, sound: true, cookName: '', mascot: 'mascot', numCooks: 1, ...s };
     }
 
     const savedPrepTimes = localStorage.getItem('aqueous_prep_times');
@@ -1785,21 +1815,36 @@ function renderHome(container) {
     }
 
     const isToday = getActiveDay() === getTodayKey();
+    const cooks = settings.numCooks || 1;
+    const totalSec = getCountdownTotalSeconds();
+    const dividedSec = totalSec > 0 ? Math.ceil(totalSec / cooks) : 0;
+    const dividedDisplay = dividedSec > 0 ? formatTime(dividedSec) : '--:--';
 
     container.innerHTML = `
         <div class="home-tab-sticky">
+            <div class="ml-title">MASTER LIST</div>
             <div class="day-selector-row">
                 <button class="day-chip ${getActiveDay() === getTodayKey() ? 'active' : ''}" onclick="setActiveDay(null)">Today</button>
                 <button class="day-chip ${getActiveDay() === getNextDayKey(getTodayKey()) ? 'active' : ''}" onclick="setActiveDay('${getNextDayKey(getTodayKey())}')">Tomorrow</button>
                 <button class="day-chip day-chip-pick" onclick="showDayPicker()">+ Set Date</button>
                 ${isToday ? '<button class="close-day-btn" onclick="confirmCloseDay()">Close Day</button>' : ''}
-                <span class="day-label">${formatDayLabel(getActiveDay())}</span>
             </div>
             <div class="home-timer-row">
-                <span class="timer-label">Timer</span>
+                <span class="timer-label" onclick="${timerGateHtml && !timerOn ? '' : (timerOn ? 'clockOut()' : 'clockIn()')}">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </span>
+                <span class="timer-total-display" id="timerTotalDisplay">${dividedDisplay}</span>
                 ${timerGateHtml}
                 <span class="countdown-label" id="countdownLabel"></span>
-                <button class="neu-toggle ${timerOn ? 'active' : ''}${timerGateHtml && !timerOn ? ' disabled' : ''}"
+                <div class="cook-controls">
+                    <button class="cook-btn" onclick="adjustCooks(-1)" ${cooks <= 1 ? 'disabled' : ''}>−</button>
+                    <span class="cook-count-wrap">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+                        <span id="cookCountDisplay">${cooks}</span>
+                    </span>
+                    <button class="cook-btn" onclick="adjustCooks(1)" ${cooks >= 10 ? 'disabled' : ''}>+</button>
+                </div>
+                <button class="neu-toggle neu-toggle-sm ${timerOn ? 'active' : ''}${timerGateHtml && !timerOn ? ' disabled' : ''}"
                     onclick="${timerGateHtml && !timerOn ? '' : (timerOn ? 'clockOut()' : 'clockIn()')}"></button>
             </div>
             <div class="countdown-bar-container">
