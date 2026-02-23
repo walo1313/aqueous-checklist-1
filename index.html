@@ -2639,6 +2639,18 @@
             box-shadow: 0 2px 8px var(--accent-glow);
             transition: all 0.08s ease;
         }
+        .fab.fab-close { font-size: 32px; }
+
+        .station-picker-banner {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+            padding: 6px;
+            background: var(--accent-tint);
+            border-radius: var(--radius-sm);
+            margin: 0 0 8px;
+        }
 
         /* ===== BOTTOM NAV ===== */
         .bottom-nav {
@@ -3245,7 +3257,7 @@
     </div>
     </div><!-- /appShell -->
 
-    <button class="fab" id="fab" onclick="showNewStationModal()">+</button>
+    <button class="fab" id="fab" onclick="handleFabClick()">+</button>
 
     <div class="bottom-nav">
         <button class="nav-item active" onclick="switchView('home')">

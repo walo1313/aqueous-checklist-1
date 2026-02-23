@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 145;
+const APP_BUILD = 146;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -37,6 +37,7 @@ let librarySubTab = 'bible';  // 'bible' | 'recipes' | 'tempLogs'
 let summaryStationCollapsed = {}; // { stationId: true/false }
 let logsBlockCollapsed = { withData: false, missingData: true };
 let logsStationCollapsed = {}; // { "stationName": true/false }
+let homeStationPickerOpen = false;
 let mlStopwatches = {}; // { "stationId-ingId": { startedAt, elapsed, interval } }
 let mlLongPressTimer = null;
 const PRESET_NOTES = ['Defrost', 'Pick up', "86'd"];
@@ -1686,6 +1687,12 @@ function switchView(view, skipSlide) {
     currentView = view;
     sessionStorage.setItem('aqueous_currentView', view);
 
+    // Close Home station picker when leaving Home
+    if (view !== 'home' && homeStationPickerOpen) {
+        homeStationPickerOpen = false;
+        panelDirty.home = true;
+    }
+
     // Nav highlight
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItems = document.querySelectorAll('.nav-item');
@@ -1717,7 +1724,18 @@ function switchView(view, skipSlide) {
 function renderPanel(view) {
     const panel = getPanel(view);
     if (!panel) return;
-    document.getElementById('fab').style.display = (view === 'tools' && toolsSubTab === 'stations') ? 'flex' : 'none';
+    const fab = document.getElementById('fab');
+    if (view === 'home') {
+        fab.style.display = 'flex';
+        fab.textContent = homeStationPickerOpen ? '\u00d7' : '+';
+        fab.classList.toggle('fab-close', homeStationPickerOpen);
+    } else if (view === 'tools' && toolsSubTab === 'stations') {
+        fab.style.display = 'flex';
+        fab.textContent = '+';
+        fab.classList.remove('fab-close');
+    } else {
+        fab.style.display = 'none';
+    }
 
     // Only re-render if dirty (data changed) or never rendered
     if (!panelDirty[view]) return;
@@ -1746,7 +1764,13 @@ function renderCurrentView() {
 function renderHome(container) {
     autoCalcPrepWindow();
     const timerOn = !!settings.shiftStart;
-    const content = renderMasterListView();
+
+    let contentHtml;
+    if (homeStationPickerOpen) {
+        contentHtml = renderStationsView({ showPriority: true, mode: 'picker' });
+    } else {
+        contentHtml = renderMasterListView();
+    }
 
     // Check if all ML items have timing for timer gate
     let timerGateHtml = '';
@@ -1782,7 +1806,8 @@ function renderHome(container) {
                 <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
             </div>
         </div>
-        <div class="home-tab-content">${content}</div>`;
+        ${homeStationPickerOpen ? `<div class="station-picker-banner">Select ingredients for ${formatDayLabel(getActiveDay())}'s checklist</div>` : ''}
+        <div class="home-tab-content">${contentHtml}</div>`;
 
     // Kick off countdown bar if shift is active
     if (settings.clockInTimestamp) {
@@ -1791,7 +1816,26 @@ function renderHome(container) {
     }
 }
 
-function renderStationsView() {
+function handleFabClick() {
+    handleClick();
+    if (currentView === 'home') {
+        toggleHomeStationPicker();
+    } else {
+        showNewStationModal();
+    }
+}
+
+function toggleHomeStationPicker() {
+    homeStationPickerOpen = !homeStationPickerOpen;
+    const fab = document.getElementById('fab');
+    fab.textContent = homeStationPickerOpen ? '\u00d7' : '+';
+    fab.classList.toggle('fab-close', homeStationPickerOpen);
+    panelDirty.home = true;
+    renderPanel('home');
+}
+
+function renderStationsView(opts) {
+    opts = opts || {};
     if (stations.length === 0) {
         return `
             <div class="empty-state">
@@ -1825,8 +1869,8 @@ function renderStationsView() {
                 </div>
             </div>
             <div class="station-body ${isExpanded ? '' : 'collapsed'}" id="body-${station.id}">
-                ${renderIngredients(station)}
-                ${stationFooter(station.id)}
+                ${renderIngredients(station, opts)}
+                ${stationFooter(station.id, opts)}
             </div>
         </div>`;
     });
@@ -1843,12 +1887,9 @@ function switchToolsSubTab(tab) {
 }
 
 function renderTools(container) {
-    const activeDay = getActiveDay();
-    const dayLabel = formatDayLabel(activeDay);
-
     let content = '';
     if (toolsSubTab === 'stations') {
-        content = renderStationsView();
+        content = renderStationsView({ showPriority: false, mode: 'database' });
     } else if (toolsSubTab === 'logs') {
         content = renderLogsContent();
     } else if (toolsSubTab === 'history') {
@@ -1861,7 +1902,6 @@ function renderTools(container) {
             <button class="tools-sub-tab ${toolsSubTab === 'logs' ? 'active' : ''}" onclick="switchToolsSubTab('logs')">Logs</button>
             <button class="tools-sub-tab ${toolsSubTab === 'history' ? 'active' : ''}" onclick="switchToolsSubTab('history')">History</button>
         </div>
-        ${toolsSubTab === 'stations' ? `<div class="tools-adding-banner">Adding to: ${dayLabel}'s checklist</div>` : ''}
         <div style="padding:0 20px 100px;">${content}</div>`;
 
     // Show FAB only on Stations sub-tab
@@ -2349,7 +2389,7 @@ function renderMasterListView() {
             <div class="empty-state">
                 <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">No checklist for ${formatDayLabel(day)}</p>
                 <p class="empty-sub">Add ingredients from Stations to build your checklist</p>
-                <button class="btn btn-primary squishy" style="margin-top:16px;font-size:15px;padding:14px 32px;" onclick="handleClick(); switchView('tools')">+ Create Checklist</button>
+                <button class="btn btn-primary squishy" style="margin-top:16px;font-size:15px;padding:14px 32px;" onclick="toggleHomeStationPicker()">+ Create Checklist</button>
             </div>`;
     }
 
@@ -2418,9 +2458,11 @@ function mlRenderRow(item) {
     </div>`;
 }
 
-function renderIngredients(station) {
+function renderIngredients(station, opts) {
+    opts = opts || {};
     if (!station.dishes || station.dishes.length === 0) return '';
     const singleDish = station.dishes.length === 1;
+    const isPicker = opts.mode === 'picker';
     let html = '';
     station.dishes.forEach(dish => {
         const dishIngs = dish.ingredients || [];
@@ -2428,7 +2470,7 @@ function renderIngredients(station) {
         const dishTotal = dishIngs.length;
         const isDishExpanded = dish.expanded !== false;
         if (singleDish) {
-            html += renderDishIngredients(station, dish);
+            html += renderDishIngredients(station, dish, opts);
         } else {
             html += `
             <div class="dish-folder" data-station-id="${station.id}" data-dish-id="${dish.id}">
@@ -2439,11 +2481,11 @@ function renderIngredients(station) {
                     <span class="dish-count">${dishLow}/${dishTotal}</span>
                 </div>
                 <div class="dish-body ${isDishExpanded ? '' : 'collapsed'}">
-                    ${renderDishIngredients(station, dish)}
-                    <div class="dish-quick-add">
+                    ${renderDishIngredients(station, dish, opts)}
+                    ${!isPicker ? `<div class="dish-quick-add">
                         <input type="text" class="quick-add-input" id="quickAdd_${station.id}_${dish.id}" placeholder="Add to ${dish.name}..." onkeydown="if(event.key==='Enter'){quickAddIngredient(${station.id}, ${dish.id})}">
                         <button class="quick-add-btn" onclick="quickAddIngredient(${station.id}, ${dish.id})">+</button>
-                    </div>
+                    </div>` : ''}
                 </div>
             </div>`;
         }
@@ -2451,7 +2493,9 @@ function renderIngredients(station) {
     return html;
 }
 
-function renderDishIngredients(station, dish) {
+function renderDishIngredients(station, dish, opts) {
+    opts = opts || {};
+    const showPriority = opts.showPriority !== false;
     let html = '';
     (dish.ingredients || []).forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
@@ -2520,11 +2564,11 @@ function renderDishIngredients(station, dish) {
                         value="${customNote}"
                         oninput="debounce('parn_${station.id}_${ing.id}', () => setCustomNote(${station.id}, ${ing.id}, this.value), 600)"
                         onclick="event.stopPropagation()">
-                    <div class="ing-priority-row">
+                    ${showPriority ? `<div class="ing-priority-row">
                         <button class="pri-btn high ${st.priority === 'high' ? 'active' : ''}" onclick="event.stopPropagation(); setPriorityAndCollapse(${station.id}, ${ing.id}, 'high')">HIGH</button>
                         <button class="pri-btn medium ${st.priority === 'medium' ? 'active' : ''}" onclick="event.stopPropagation(); setPriorityAndCollapse(${station.id}, ${ing.id}, 'medium')">MEDIUM</button>
                         <button class="pri-btn low ${st.priority === 'low' ? 'active' : ''}" onclick="event.stopPropagation(); setPriorityAndCollapse(${station.id}, ${ing.id}, 'low')">LOW</button>
-                    </div>
+                    </div>` : ''}
                 </div>
             </div>`;
         } else {
@@ -3971,7 +4015,14 @@ function saveIngredientDefault(station, ingredientId) {
     }
 }
 
-function stationFooter(stationId) {
+function stationFooter(stationId, opts) {
+    opts = opts || {};
+    const mode = opts.mode || 'database';
+
+    // Picker mode: no footer
+    if (mode === 'picker') return '';
+
+    // Database mode: quick-add + New Dish (no Clear Checklist)
     const station = stations.find(s => s.id === stationId);
     const singleDish = station && station.dishes && station.dishes.length === 1;
     const defaultDishId = station && station.dishes && station.dishes[0] ? station.dishes[0].id : 0;
@@ -3984,10 +4035,6 @@ function stationFooter(stationId) {
             <button class="btn btn-outline dish-add-btn" onclick="handleClick(); showNewDishModal(${stationId})">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                 New Dish
-            </button>
-            <button class="btn btn-outline" onclick="resetStation(${stationId})">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 105.64-11.36L1 10"/></svg>
-                Clear Checklist
             </button>
         </div>`;
 }
@@ -4024,11 +4071,19 @@ function quickAddIngredient(stationId, dishId) {
 function rerenderStationBody(stationId) {
     const station = stations.find(s => s.id === stationId);
     if (!station) return;
-    const body = document.getElementById(`body-${stationId}`);
+
+    const activePanel = currentView === 'home' ? getPanel('home') : getPanel('tools');
+    const body = activePanel ? activePanel.querySelector(`#body-${stationId}`) : document.getElementById(`body-${stationId}`);
     if (body) {
-        const panel = getPanel('tools');
+        const panel = body.closest('.swipe-panel');
         const scrollBefore = panel ? panel.scrollTop : 0;
-        body.innerHTML = renderIngredients(station) + stationFooter(stationId);
+
+        const isHomePicker = panel && panel.id === 'panelHome';
+        const opts = isHomePicker
+            ? { showPriority: true, mode: 'picker' }
+            : { showPriority: false, mode: 'database' };
+
+        body.innerHTML = renderIngredients(station, opts) + stationFooter(stationId, opts);
         // Add dimming class when an ingredient is focused
         const hasFocus = [...expandedIngs].some(k => k.startsWith(`${stationId}-`));
         if (hasFocus) body.classList.add('has-focus');
