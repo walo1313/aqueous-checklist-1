@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 143;
+const APP_BUILD = 144;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -15,7 +15,7 @@ function updateLastSync() {
 let stations = [];
 let editingStationId = null;
 let currentView = sessionStorage.getItem('aqueous_currentView') || 'home';
-let homeSubTab = localStorage.getItem('aqueous_homeSubTab') || 'stations';
+if (currentView === 'summary' || currentView === 'logs' || currentView === 'history') currentView = 'home';
 let dayChecklists = {}; // { "YYYY-MM-DD": [{ stationId, ingredientId, name, stationName, priority, parQty, parUnit, parDepth, struck, timeEstimate }] }
 let history = [];
 let completedHistory = {}; // { "YYYY-MM-DD": [{ name, stationName, priority, parQty, parUnit, parDepth, timeEstimate }] }
@@ -32,6 +32,8 @@ const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 // Multi-task timer state: { "stationId_ingredientId": { seconds, interval, running, ingName, stationId, ingredientId } }
 let taskTimers = {};
 let blockTimers = {}; // { "high": { seconds, running, interval }, "_all": { ... } }
+let toolsSubTab = 'stations'; // 'stations' | 'logs' | 'history'
+let librarySubTab = 'bible';  // 'bible' | 'recipes' | 'tempLogs'
 let summaryStationCollapsed = {}; // { stationId: true/false }
 let logsBlockCollapsed = { withData: false, missingData: true };
 let logsStationCollapsed = {}; // { "stationName": true/false }
@@ -257,7 +259,7 @@ function clockIn() {
     startCountdownBar();
     startPrepNotification();
     requestNotificationPermission();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');
 }
@@ -288,7 +290,7 @@ function confirmClockOut() {
     stopCountdownBar();
     clearPrepNotification();
     closeTimePicker();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');
 }
@@ -502,7 +504,7 @@ function saveTimePicker() {
     autoCalcPrepWindow();
     saveSettings();
     closeTimePicker();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');
 }
@@ -518,7 +520,7 @@ function closeTimePicker() {
 function toggleSummaryStation(stationId) {
     handleClick();
     summaryStationCollapsed[stationId] = !summaryStationCollapsed[stationId];
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 // ==================== DISH HELPERS ====================
@@ -697,12 +699,12 @@ function initApp() {
     // Restore saved view and nav highlight
     const navItems = document.querySelectorAll('.nav-item');
     navItems.forEach(item => item.classList.remove('active'));
-    if (currentView === 'timer') currentView = 'logs'; // legacy redirect
+    // Legacy redirects
+    if (currentView === 'timer' || currentView === 'summary' || currentView === 'logs' || currentView === 'history') currentView = 'home';
     if (OVERLAY_VIEWS.includes(currentView)) currentView = 'home';
     if (currentView === 'home') navItems[0].classList.add('active');
-    else if (currentView === 'summary') navItems[1].classList.add('active');
-    else if (currentView === 'logs') navItems[2].classList.add('active');
-    else if (currentView === 'history') navItems[3].classList.add('active');
+    else if (currentView === 'tools') navItems[1].classList.add('active');
+    else if (currentView === 'library') navItems[2].classList.add('active');
     if (currentView === 'share') currentView = 'home';
 
     // Position track instantly (no animation) and render initial panel
@@ -1584,11 +1586,11 @@ function cleanOldHistory() {
 let previousView = 'home';
 let skipPopstate = false;
 
-const SWIPE_VIEW_ORDER = ['home', 'summary', 'logs', 'history'];
-const SWIPE_PANELS = { home: 'panelHome', summary: 'panelSummary', logs: 'panelLogs', history: 'panelHistory' };
+const SWIPE_VIEW_ORDER = ['home', 'tools', 'library'];
+const SWIPE_PANELS = { home: 'panelHome', tools: 'panelTools', library: 'panelLibrary' };
 const OVERLAY_VIEWS = ['settings', 'logDetail'];
 // Track which panels have been rendered at least once
-const panelDirty = { home: true, summary: true, logs: true, history: true };
+const panelDirty = { home: true, tools: true, library: true };
 
 function resolveSwipeView(v) {
     if (v === 'logDetail') return 'logs';
@@ -1609,7 +1611,7 @@ function slideTrackTo(view, animate) {
         const onEnd = () => { track.removeEventListener('transitionend', onEnd); track.classList.remove('snapping'); };
         track.addEventListener('transitionend', onEnd);
     }
-    track.style.transform = `translateX(-${idx * 25}%)`;
+    track.style.transform = `translateX(-${idx * 33.3333}%)`;
 }
 
 function showOverlay(show) {
@@ -1654,9 +1656,8 @@ function dismissOverlay() {
 
 function markAllPanelsDirty() {
     panelDirty.home = true;
-    panelDirty.summary = true;
-    panelDirty.logs = true;
-    panelDirty.history = true;
+    panelDirty.tools = true;
+    panelDirty.library = true;
 }
 
 function switchView(view, skipSlide) {
@@ -1677,7 +1678,11 @@ function switchView(view, skipSlide) {
         showOverlay(false);
     }
 
-    if (view === 'timer') view = 'logs'; // legacy redirect
+    // Legacy redirects
+    if (view === 'timer') view = 'tools';
+    if (view === 'summary') view = 'tools';
+    if (view === 'logs') { toolsSubTab = 'logs'; view = 'tools'; }
+    if (view === 'history') { toolsSubTab = 'history'; view = 'tools'; }
     currentView = view;
     sessionStorage.setItem('aqueous_currentView', view);
 
@@ -1685,11 +1690,10 @@ function switchView(view, skipSlide) {
     document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
     const navItems = document.querySelectorAll('.nav-item');
     if (view === 'home') navItems[0].classList.add('active');
-    else if (view === 'summary') navItems[1].classList.add('active');
-    else if (view === 'logs') navItems[2].classList.add('active');
-    else if (view === 'history') navItems[3].classList.add('active');
+    else if (view === 'tools') navItems[1].classList.add('active');
+    else if (view === 'library') navItems[2].classList.add('active');
     else if (view === 'settings') { window.history.pushState({ view: 'settings' }, ''); }
-    else if (view === 'logDetail') navItems[2].classList.add('active');
+    else if (view === 'logDetail') navItems[1].classList.add('active');
 
     // Overlay views (settings, logDetail)
     if (OVERLAY_VIEWS.includes(view)) {
@@ -1713,7 +1717,7 @@ function switchView(view, skipSlide) {
 function renderPanel(view) {
     const panel = getPanel(view);
     if (!panel) return;
-    document.getElementById('fab').style.display = 'none';
+    document.getElementById('fab').style.display = (view === 'tools' && toolsSubTab === 'stations') ? 'flex' : 'none';
 
     // Only re-render if dirty (data changed) or never rendered
     if (!panelDirty[view]) return;
@@ -1721,9 +1725,8 @@ function renderPanel(view) {
 
     const scrollBefore = panel.scrollTop;
     if (view === 'home') renderHome(panel);
-    else if (view === 'summary') renderSummary(panel);
-    else if (view === 'logs') renderLogs(panel);
-    else if (view === 'history') renderHistoryTab(panel);
+    else if (view === 'tools') renderTools(panel);
+    else if (view === 'library') renderLibrary(panel);
     panel.scrollTop = scrollBefore;
 }
 
@@ -1738,61 +1741,34 @@ function renderCurrentView() {
     }
 }
 
-function refreshSummaryPanel() {
-    const panel = document.getElementById('panelSummary');
-    if (!panel) return;
-    const scrollBefore = panel.scrollTop;
-    renderSummary(panel);
-    panel.scrollTop = scrollBefore;
-}
-
-// ==================== HOME VIEW ====================
-
-function switchHomeSubTab(tab) {
-    handleClick();
-    homeSubTab = tab;
-    localStorage.setItem('aqueous_homeSubTab', tab);
-    panelDirty.home = true;
-    renderPanel('home');
-}
+// ==================== HOME VIEW (Master List) ====================
 
 function renderHome(container) {
     autoCalcPrepWindow();
     const timerOn = !!settings.shiftStart;
-
-    let content = '';
-    if (homeSubTab === 'master') {
-        content = renderMasterListView();
-    } else {
-        content = renderStationsView();
-    }
+    const content = renderMasterListView();
 
     // Check if all ML items have timing for timer gate
     let timerGateHtml = '';
-    if (homeSubTab === 'master') {
-        const dayItems = dayChecklists[getActiveDay()] || [];
-        const missingTimingCount = dayItems.filter(item => {
-            const fam = getTimingFamily(item.parUnit);
-            const ingFam = getIngTimingFamilies(item.name);
-            return !ingFam[fam];
-        }).length;
-        if (missingTimingCount > 0) {
-            timerGateHtml = `<span class="timer-gate-msg">${missingTimingCount} missing timing</span>`;
-        }
+    const dayItems = dayChecklists[getActiveDay()] || [];
+    const missingTimingCount = dayItems.filter(item => {
+        const fam = getTimingFamily(item.parUnit);
+        const ingFam = getIngTimingFamilies(item.name);
+        return !ingFam[fam];
+    }).length;
+    if (missingTimingCount > 0) {
+        timerGateHtml = `<span class="timer-gate-msg">${missingTimingCount} missing timing</span>`;
     }
+
+    const isToday = getActiveDay() === getTodayKey();
 
     container.innerHTML = `
         <div class="home-tab-sticky">
-            <div class="home-tab-switch">
-                <button class="home-tab-btn ${homeSubTab === 'stations' ? 'active' : ''}" onclick="switchHomeSubTab('stations')">Stations</button>
-                <button class="home-tab-btn ${homeSubTab === 'master' ? 'active' : ''}" onclick="switchHomeSubTab('master')">Master List</button>
-            </div>
-            ${homeSubTab === 'master' ? `
             <div class="day-selector-row">
                 <button class="day-chip ${getActiveDay() === getTodayKey() ? 'active' : ''}" onclick="setActiveDay(null)">Today</button>
                 <button class="day-chip ${getActiveDay() === getNextDayKey(getTodayKey()) ? 'active' : ''}" onclick="setActiveDay('${getNextDayKey(getTodayKey())}')">Tomorrow</button>
-                <button class="day-chip day-chip-pick" onclick="showDayPicker()">📅</button>
-                <button class="close-day-btn" onclick="confirmCloseDay()">Close Day</button>
+                <button class="day-chip day-chip-pick" onclick="showDayPicker()">+ Set Date</button>
+                ${isToday ? '<button class="close-day-btn" onclick="confirmCloseDay()">Close Day</button>' : ''}
                 <span class="day-label">${formatDayLabel(getActiveDay())}</span>
             </div>
             <div class="home-timer-row">
@@ -1804,7 +1780,7 @@ function renderHome(container) {
             </div>
             <div class="countdown-bar-container">
                 <div class="countdown-bar" id="countdownBar" style="width: 100%"></div>
-            </div>` : ''}
+            </div>
         </div>
         <div class="home-tab-content">${content}</div>`;
 
@@ -1812,13 +1788,6 @@ function renderHome(container) {
     if (settings.clockInTimestamp) {
         updateCountdownBar();
         startCountdownBar();
-    }
-
-    if (homeSubTab === 'stations') {
-        expandedIngs.forEach(key => {
-            const ctrl = document.getElementById(`ing-ctrl-${key}`);
-            if (ctrl) ctrl.classList.add('open');
-        });
     }
 }
 
@@ -1862,6 +1831,84 @@ function renderStationsView() {
         </div>`;
     });
     return html;
+}
+
+// ==================== TOOLS VIEW ====================
+
+function switchToolsSubTab(tab) {
+    handleClick();
+    toolsSubTab = tab;
+    panelDirty.tools = true;
+    renderPanel('tools');
+}
+
+function renderTools(container) {
+    const activeDay = getActiveDay();
+    const dayLabel = formatDayLabel(activeDay);
+
+    let content = '';
+    if (toolsSubTab === 'stations') {
+        content = renderStationsView();
+    } else if (toolsSubTab === 'logs') {
+        content = renderLogsContent();
+    } else if (toolsSubTab === 'history') {
+        content = renderHistoryContent();
+    }
+
+    container.innerHTML = `
+        <div class="tools-sub-tabs">
+            <button class="tools-sub-tab ${toolsSubTab === 'stations' ? 'active' : ''}" onclick="switchToolsSubTab('stations')">Stations</button>
+            <button class="tools-sub-tab ${toolsSubTab === 'logs' ? 'active' : ''}" onclick="switchToolsSubTab('logs')">Logs</button>
+            <button class="tools-sub-tab ${toolsSubTab === 'history' ? 'active' : ''}" onclick="switchToolsSubTab('history')">History</button>
+        </div>
+        ${toolsSubTab === 'stations' ? `<div class="tools-adding-banner">Adding to: ${dayLabel}'s checklist</div>` : ''}
+        <div style="padding:0 20px 100px;">${content}</div>`;
+
+    // Show FAB only on Stations sub-tab
+    document.getElementById('fab').style.display = toolsSubTab === 'stations' ? 'flex' : 'none';
+}
+
+// ==================== LIBRARY VIEW ====================
+
+function switchLibrarySubTab(tab) {
+    handleClick();
+    librarySubTab = tab;
+    panelDirty.library = true;
+    renderPanel('library');
+}
+
+function renderLibrary(container) {
+    let content = '';
+    if (librarySubTab === 'bible') {
+        content = `<div class="empty-state">
+            <div class="empty-state-icon">📖</div>
+            <p>Bible</p>
+            <p class="empty-sub">PDF guides, dish photos, allergens & procedures</p>
+            <button class="btn btn-primary squishy" disabled>Upload PDF (Coming Soon)</button>
+        </div>`;
+    } else if (librarySubTab === 'recipes') {
+        content = `<div class="empty-state">
+            <div class="empty-state-icon">🍳</div>
+            <p>Recipes</p>
+            <p class="empty-sub">Organized by shift: Breakfast, Lunch, Dinner</p>
+            <button class="btn btn-primary squishy" disabled>Coming Soon</button>
+        </div>`;
+    } else if (librarySubTab === 'tempLogs') {
+        content = `<div class="empty-state">
+            <div class="empty-state-icon">🌡️</div>
+            <p>Temp Logs</p>
+            <p class="empty-sub">Temperature sheets, random product selection, digital signature</p>
+            <button class="btn btn-primary squishy" disabled>Coming Soon</button>
+        </div>`;
+    }
+
+    container.innerHTML = `
+        <div class="library-sub-tabs">
+            <button class="library-sub-tab ${librarySubTab === 'bible' ? 'active' : ''}" onclick="switchLibrarySubTab('bible')">Bible</button>
+            <button class="library-sub-tab ${librarySubTab === 'recipes' ? 'active' : ''}" onclick="switchLibrarySubTab('recipes')">Recipes</button>
+            <button class="library-sub-tab ${librarySubTab === 'tempLogs' ? 'active' : ''}" onclick="switchLibrarySubTab('tempLogs')">Temp Logs</button>
+        </div>
+        <div style="padding:0 20px 100px;">${content}</div>`;
 }
 
 // ── Day Checklists (per-day independent checklists) ──
@@ -2122,8 +2169,8 @@ function closeDay() {
     saveDayChecklists();
     saveData(true);
     saveSettings();
-    refreshSummaryPanel();
-    panelDirty.history = true;
+    panelDirty.tools = true;
+    panelDirty.tools = true;
 
     closeTimePicker();
     setActiveDay(day === getTodayKey() ? null : nextDay);
@@ -2270,7 +2317,7 @@ function mlDeleteItem(stationId, ingredientId) {
         saveData(true);
         animateMascot();
         checkBlockCompletion(pLevel);
-        refreshSummaryPanel();
+        panelDirty.tools = true;
     }
 
     // Remove from day checklist
@@ -2279,7 +2326,7 @@ function mlDeleteItem(stationId, ingredientId) {
     saveDayChecklists();
 
     panelDirty.home = true;
-    panelDirty.history = true;
+    panelDirty.tools = true;
     renderPanel('home');
 }
 
@@ -2299,8 +2346,9 @@ function renderMasterListView() {
     if (items.length === 0) {
         return `
             <div class="empty-state">
-                <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">All clear</p>
-                <p class="empty-sub">No active tasks — set priorities in Stations</p>
+                <p style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">No checklist for ${formatDayLabel(day)}</p>
+                <p class="empty-sub">Add ingredients from Stations to build your checklist</p>
+                <button class="btn btn-primary squishy" style="margin-top:16px;font-size:15px;padding:14px 32px;" onclick="handleClick(); switchView('tools')">+ Create Checklist</button>
             </div>`;
     }
 
@@ -3145,10 +3193,10 @@ function saveTimingFromEditor(ingName) {
         }
         saveTaskTemplates();
         modal.remove();
-        panelDirty.logs = true;
+        panelDirty.tools = true;
         panelDirty.home = true;
         renderPanel('home');
-        renderPanel('logs');
+        renderPanel('tools');
         showToast(`${ingName}: ${family} timing cleared`);
         return;
     }
@@ -3172,10 +3220,10 @@ function saveTimingFromEditor(ingName) {
     saveTaskTemplates();
 
     modal.remove();
-    panelDirty.logs = true;
+    panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');
-    renderPanel('logs');
+    renderPanel('tools');
     showToast(`${ingName}: ${formatTime(totalSec)} (${family})`);
 }
 
@@ -3192,10 +3240,10 @@ function clearTimingFamily(ingName) {
     saveTaskTemplates();
 
     if (modal) modal.remove();
-    panelDirty.logs = true;
+    panelDirty.tools = true;
     panelDirty.home = true;
     renderPanel('home');
-    renderPanel('logs');
+    renderPanel('tools');
     showToast(`${ingName}: ${family} timing cleared`);
 }
 
@@ -3250,7 +3298,7 @@ function mlStopwatchStop(stationId, ingredientId) {
 
     showToast(`${item.name}: ${formatTime(elapsed)}`);
     panelDirty.home = true;
-    panelDirty.logs = true;
+    panelDirty.tools = true;
     renderPanel('home');
 }
 
@@ -3977,7 +4025,7 @@ function rerenderStationBody(stationId) {
     if (!station) return;
     const body = document.getElementById(`body-${stationId}`);
     if (body) {
-        const panel = getPanel('home');
+        const panel = getPanel('tools');
         const scrollBefore = panel ? panel.scrollTop : 0;
         body.innerHTML = renderIngredients(station) + stationFooter(stationId);
         // Add dimming class when an ingredient is focused
@@ -3990,12 +4038,8 @@ function rerenderStationBody(stationId) {
 }
 
 function rerenderHomePanel() {
-    if (homeSubTab === 'master') {
-        panelDirty.home = true;
-        renderPanel('home');
-    } else {
-        stations.forEach(s => rerenderStationBody(s.id));
-    }
+    panelDirty.home = true;
+    renderPanel('home');
 }
 
 function updateStationCount(stationId) {
@@ -4253,13 +4297,13 @@ function toggleCompleted(stationId, ingredientId) {
             saveData(true);
             animateMascot();
             checkBlockCompletion(pLevel);
-            refreshSummaryPanel();
+            panelDirty.tools = true;
             rerenderHomePanel();
         }
     } else {
         station.status[ingredientId].completed = false;
         saveData(true);
-        refreshSummaryPanel();
+        panelDirty.tools = true;
     }
 }
 
@@ -4466,7 +4510,7 @@ function toggleTaskTimer(timerKey, stationId, ingredientId, ingName) {
 
     checkAndManageWakeLock();
     showToast(bestGoal > 0 ? `⏱ ${formatTime(bestGoal)} countdown` : `⏱ Timing: ${ingName}`);
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function pauseTaskTimer(timerKey) {
@@ -4479,7 +4523,7 @@ function pauseTaskTimer(timerKey) {
     t.interval = null;
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function resumeTaskTimer(timerKey) {
@@ -4494,7 +4538,7 @@ function resumeTaskTimer(timerKey) {
     }, 1000);
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function resetTaskTimer(timerKey) {
@@ -4505,7 +4549,7 @@ function resetTaskTimer(timerKey) {
     forceUpdateTimerNotification();
 
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function nextTimerPhase(timerKey) {
@@ -4540,7 +4584,7 @@ function nextTimerPhase(timerKey) {
     }, 1000);
 
     forceUpdateTimerNotification();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
     showToast('Passive phase started');
 }
 
@@ -4607,7 +4651,7 @@ function toggleBlockTimer(level) {
     };
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function pauseBlockTimer(level) {
@@ -4620,7 +4664,7 @@ function pauseBlockTimer(level) {
     bt.interval = null;
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function resumeBlockTimer(level) {
@@ -4641,7 +4685,7 @@ function resumeBlockTimer(level) {
     }, 1000);
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function resetBlockTimer(level) {
@@ -4651,7 +4695,7 @@ function resetBlockTimer(level) {
     delete blockTimers[level];
     forceUpdateTimerNotification();
     checkAndManageWakeLock();
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function checkBlockCompletion(level) {
@@ -4689,7 +4733,7 @@ function checkBlockCompletion(level) {
 
     const msgs = { behind: 'Behind', ontime: 'On Time', ahead: 'Ahead' };
     showToast(`${label}: ${msgs[status] || 'Done'}`);
-    refreshSummaryPanel();
+    panelDirty.tools = true;
 }
 
 function showTaskCompleteConfirm(stationId, ingredientId) {
@@ -4848,7 +4892,7 @@ function confirmTaskComplete(stationId, ingredientId) {
 
         animateMascot();
         checkBlockCompletion(pLevel);
-        refreshSummaryPanel();
+        panelDirty.tools = true;
         rerenderHomePanel();
     }
 }
@@ -5302,19 +5346,19 @@ let logDetailIngredient = null;
 function toggleLogsBlock(blockKey) {
     handleClick();
     logsBlockCollapsed[blockKey] = !logsBlockCollapsed[blockKey];
-    panelDirty.logs = true;
-    renderPanel('logs');
+    panelDirty.tools = true;
+    renderPanel('tools');
 }
 
 function toggleLogsStation(block, stationName) {
     handleClick();
     const key = block + '_' + stationName;
     logsStationCollapsed[key] = !logsStationCollapsed[key];
-    panelDirty.logs = true;
-    renderPanel('logs');
+    panelDirty.tools = true;
+    renderPanel('tools');
 }
 
-function renderLogs(container) {
+function renderLogsContent() {
     // Collect ingredients grouped by station (preserving station association)
     const stationIngMap = {}; // { stationName: [{ name, stationName }] }
     const seenPerStation = {};
@@ -5335,13 +5379,12 @@ function renderLogs(container) {
     const total = uniqueNames.size;
 
     if (total === 0) {
-        container.innerHTML = `
+        return `
             <div class="empty-state">
                 <div class="empty-state-icon">📝</div>
                 <p>No ingredients yet</p>
                 <p class="empty-sub">Add ingredients to your stations first</p>
             </div>`;
-        return;
     }
 
     // Count volume/weight/each coverage
@@ -5481,7 +5524,11 @@ function renderLogs(container) {
     }
     html += `</div>`;
 
-    container.innerHTML = html;
+    return html;
+}
+
+function renderLogs(container) {
+    container.innerHTML = renderLogsContent();
 }
 
 function openLogDetail(ingredientName) {
@@ -5911,11 +5958,11 @@ function getDateKey(d) {
 
 function selectHistoryDate(dateKey) {
     historySelectedDate = dateKey;
-    panelDirty.history = true;
-    renderPanel('history');
+    panelDirty.tools = true;
+    renderPanel('tools');
 }
 
-function renderHistoryTab(container) {
+function renderHistoryContent() {
     const today = new Date();
     if (!historySelectedDate) historySelectedDate = getDateKey(today);
 
@@ -5942,8 +5989,7 @@ function renderHistoryTab(container) {
             <div class="history-day-label">No Data</div>
             <div class="history-day-sub">No completed tasks this day</div>
         </div>`;
-        container.innerHTML = html;
-        return;
+        return html;
     }
 
     // Group by station
@@ -5992,7 +6038,11 @@ function renderHistoryTab(container) {
         html += `</div></div>`;
     });
 
-    container.innerHTML = html;
+    return html;
+}
+
+function renderHistoryTab(container) {
+    container.innerHTML = renderHistoryContent();
 }
 
 // ==================== STATION MANAGEMENT ====================
@@ -6555,7 +6605,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Gesture-driven swipe — 4 persistent panels
+    // Gesture-driven swipe — 3 persistent panels
     const track = document.getElementById('swipeTrack');
     let swStartX = 0, swStartY = 0, swDx = 0;
     let swSwiping = false, swDirectionLocked = false, swIsHorizontal = false;
@@ -6607,8 +6657,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         swSwiping = true;
         swDx = dx;
-        const basePct = swBaseIdx * 25;
-        const offsetPct = (dx / swViewportW) * 25;
+        const basePct = swBaseIdx * 33.3333;
+        const offsetPct = (dx / swViewportW) * 33.3333;
         track.style.transform = `translateX(${-(basePct) + offsetPct}%)`;
     }, { passive: true });
 

@@ -3105,7 +3105,7 @@
 
         .neu-card, .glass-card { animation: fadeIn 0.25s ease; }
 
-        /* Gesture-driven swipe — 4 persistent panels */
+        /* Gesture-driven swipe — 3 persistent panels */
         .swipe-viewport {
             position: relative;
             overflow: hidden;
@@ -3114,7 +3114,7 @@
         }
         .swipe-track {
             display: flex;
-            width: 400%;
+            width: 300%;
             height: 100%;
             transform: translateX(0%);
             will-change: transform;
@@ -3123,7 +3123,7 @@
             transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
         .swipe-panel {
-            width: 25%;
+            width: 33.3333%;
             flex-shrink: 0;
             height: 100%;
             overflow-y: auto;
@@ -3162,6 +3162,49 @@
             background: var(--border);
         }
 
+        /* Tools / Library sub-tabs */
+        .tools-sub-tabs, .library-sub-tabs {
+            display: flex;
+            gap: 0;
+            background: var(--surface);
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+            padding: 3px;
+            margin: 0 20px 12px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .tools-sub-tab, .library-sub-tab {
+            flex: 1;
+            padding: 10px 0;
+            border: none;
+            background: transparent;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.15s;
+            text-align: center;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tools-sub-tab.active, .library-sub-tab.active {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: var(--neu-shadow-sm);
+        }
+        .tools-adding-banner {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+            padding: 6px;
+            background: var(--accent-tint);
+            border-radius: var(--radius-sm);
+            margin: 0 20px 8px;
+        }
+
         /* Smooth scroll fix */
         html { scroll-behavior: smooth; }
 
@@ -3195,9 +3238,8 @@
     <div class="swipe-viewport" id="swipeViewport">
         <div class="swipe-track" id="swipeTrack">
             <div class="swipe-panel" id="panelHome"></div>
-            <div class="swipe-panel" id="panelSummary"></div>
-            <div class="swipe-panel" id="panelLogs"></div>
-            <div class="swipe-panel" id="panelHistory"></div>
+            <div class="swipe-panel" id="panelTools"></div>
+            <div class="swipe-panel" id="panelLibrary"></div>
         </div>
         <div class="swipe-overlay" id="panelOverlay"></div>
     </div>
@@ -3208,38 +3250,23 @@
     <div class="bottom-nav">
         <button class="nav-item active" onclick="switchView('home')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <rect x="6" y="6" width="12" height="9" rx="1"/>
-                <line x1="6" y1="19" x2="8" y2="19"/>
-                <line x1="10" y1="19" x2="12" y2="19"/>
-                <circle cx="17" cy="19" r="1"/>
+                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
             Home
         </button>
-        <button class="nav-item" onclick="switchView('summary')">
+        <button class="nav-item" onclick="switchView('tools')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-                <rect x="9" y="3" width="6" height="4" rx="1"/>
-                <path d="M9 14l2 2 4-4"/>
+                <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
             </svg>
-            Summary
+            Tools
         </button>
-        <button class="nav-item" onclick="switchView('logs')">
+        <button class="nav-item" onclick="switchView('library')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-                <line x1="16" y1="13" x2="8" y2="13"/>
-                <line x1="16" y1="17" x2="8" y2="17"/>
-                <polyline points="10 9 9 9 8 9"/>
+                <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
             </svg>
-            Logs
-        </button>
-        <button class="nav-item" onclick="switchView('history')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-            </svg>
-            History
+            Library
         </button>
     </div>
 
