@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 136;
+const APP_BUILD = 137;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2322,14 +2322,13 @@ function renderDishIngredients(station, dish) {
         html += `
         <div class="ingredient ${st.low ? 'low' : ''} ${hasPri ? 'has-priority priority-' + st.priority : ''} ${isExpanded ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
             <div class="ingredient-header"
-                 onclick="toggleIngExpand(${station.id}, ${ing.id})"
                  ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
                  ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
                  oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
                 ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
                 ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
-                <span class="ingredient-name" onclick="inlineEditIngName(event, ${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
-                ${!isExpanded ? getIngTimingBadge(ing.name, st) : ''}
+                <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
+                ${!isExpanded && taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
             </div>
             <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
                 <div class="smart-qty-row">
@@ -2535,16 +2534,12 @@ function showIngredientContextMenu(event, stationId, ingId, ingName) {
     menu.innerHTML = `
         <div class="context-menu">
             <div class="context-menu-title">${ingName}</div>
-            <button class="context-menu-item" onclick="document.getElementById('ingredientContextMenu').remove(); showTimingModal(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                Timing
-            </button>
             <button class="context-menu-item" onclick="editIngredientFromHome(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                Rename
+                Edit
             </button>
             <button class="context-menu-item" onclick="startCalibration(${stationId}, ${ingId}, &quot;${safeIngName}&quot;)">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 Calibrate
             </button>
             <button class="context-menu-item delete" onclick="deleteIngredientFromHome(${stationId}, ${ingId})">
@@ -2882,15 +2877,30 @@ function getCalibrationTimerSeconds(timer) {
     return timer.pausedElapsed;
 }
 
-// ==================== TIMING MODAL (Long Press) ====================
+// ==================== TIMING MODAL (Logs Long Press) ====================
 
-function showTimingModal(stationId, ingId, ingName) {
+let logLongPressTimer = null;
+
+function startLogLongPress(event, ingName) {
+    logLongPressTimer = setTimeout(() => {
+        logLongPressTimer = null;
+        if (navigator.vibrate) navigator.vibrate(30);
+        showTimingModalByName(ingName);
+    }, 600);
+}
+
+function cancelLogLongPress() {
+    if (logLongPressTimer) { clearTimeout(logLongPressTimer); logLongPressTimer = null; }
+}
+
+function showTimingModalByName(ingName) {
     const existing = document.getElementById('modalTimingEdit');
     if (existing) existing.remove();
 
     const key = ingName.toLowerCase();
     const tmpl = taskTemplates[key];
     const bestLog = getIngredientBestTime(ingName);
+    const escapedName = ingName.replace(/'/g, "\\'");
 
     let currentSeconds = 0;
     if (tmpl && tmpl.manualSeconds > 0) {
@@ -2917,14 +2927,12 @@ function showTimingModal(stationId, ingId, ingName) {
                     value="${displayVal || ''}" placeholder="0" min="0" step="1" inputmode="numeric"
                     style="width:90px;font-size:28px;text-align:center;font-weight:800;">
                 <div style="display:flex;flex-direction:column;gap:4px;">
-                    <button class="timing-unit-btn ${unit === 'min' ? 'active' : ''}" id="timingUnitMin"
-                        onclick="setTimingUnit('min')"
+                    <button id="timingUnitMin" onclick="setTimingUnit('min')"
                         style="padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;
                         background:${unit === 'min' ? 'var(--accent-tint)' : 'var(--surface)'};
                         color:${unit === 'min' ? 'var(--accent)' : 'var(--text-muted)'};
                         box-shadow:${unit === 'min' ? 'var(--neu-inset)' : 'var(--neu-shadow-sm)'};">min</button>
-                    <button class="timing-unit-btn ${unit === 'sec' ? 'active' : ''}" id="timingUnitSec"
-                        onclick="setTimingUnit('sec')"
+                    <button id="timingUnitSec" onclick="setTimingUnit('sec')"
                         style="padding:6px 12px;border-radius:12px;font-size:12px;font-weight:700;border:none;cursor:pointer;
                         background:${unit === 'sec' ? 'var(--accent-tint)' : 'var(--surface)'};
                         color:${unit === 'sec' ? 'var(--accent)' : 'var(--text-muted)'};
@@ -2934,8 +2942,8 @@ function showTimingModal(stationId, ingId, ingName) {
             ${currentSeconds > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Current: ${formatTime(currentSeconds)}</div>` : ''}
             <div class="btn-group">
                 <button class="btn btn-secondary squishy" onclick="document.getElementById('modalTimingEdit').remove()">Cancel</button>
-                ${currentSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearIngTiming(${stationId}, ${ingId}, '${ingName.replace(/'/g, "\\'")}')">Clear</button>` : ''}
-                <button class="btn btn-primary squishy" onclick="handleClick(); saveIngTiming(${stationId}, ${ingId}, '${ingName.replace(/'/g, "\\'")}')">Save</button>
+                ${currentSeconds > 0 ? `<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="handleClick(); clearIngTimingByName('${escapedName}')">Clear</button>` : ''}
+                <button class="btn btn-primary squishy" onclick="handleClick(); saveIngTimingByName('${escapedName}')">Save</button>
             </div>
         </div>`;
     document.body.appendChild(modal);
@@ -2967,7 +2975,7 @@ function setTimingUnit(unit) {
     }
 }
 
-function saveIngTiming(stationId, ingId, ingName) {
+function saveIngTimingByName(ingName) {
     const input = document.getElementById('timingValueInput');
     const modal = document.getElementById('modalTimingEdit');
     const val = input ? parseFloat(input.value) : 0;
@@ -2991,20 +2999,22 @@ function saveIngTiming(stationId, ingId, ingName) {
     localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
 
     if (modal) modal.remove();
-    rerenderStationBody(stationId);
+    panelDirty.logs = true;
     panelDirty.home = true;
+    renderPanel('logs');
     showToast(`${ingName}: ${formatTime(seconds)}`);
 }
 
-function clearIngTiming(stationId, ingId, ingName) {
+function clearIngTimingByName(ingName) {
     const key = ingName.toLowerCase();
     delete taskTemplates[key];
     localStorage.setItem('aqueous_taskTemplates', JSON.stringify(taskTemplates));
 
     const modal = document.getElementById('modalTimingEdit');
     if (modal) modal.remove();
-    rerenderStationBody(stationId);
+    panelDirty.logs = true;
     panelDirty.home = true;
+    renderPanel('logs');
     showToast(`${ingName}: timing cleared`);
 }
 
@@ -4990,7 +5000,10 @@ function renderLogs(container) {
             const escapedName = ing.name.replace(/'/g, "\\'");
             const hasLogs = ing.count > 0;
             html += `
-            <button class="log-ingredient-card" ${hasLogs ? `onclick="handleClick(); openLogDetail('${escapedName}')"` : ''} ${!hasLogs ? 'style="cursor:default;"' : ''}>
+            <button class="log-ingredient-card" ${hasLogs ? `onclick="handleClick(); openLogDetail('${escapedName}')"` : ''} ${!hasLogs ? 'style="cursor:default;"' : ''}
+                ontouchstart="startLogLongPress(event, '${escapedName}')"
+                ontouchend="cancelLogLongPress()" ontouchmove="cancelLogLongPress()"
+                oncontextmenu="event.preventDefault(); showTimingModalByName('${escapedName}')">
                 <div class="log-ing-top">
                     <span class="log-ing-name">${ing.name}</span>
                     <span class="log-ing-count">${ing.count > 0 ? ing.count + ' log' + (ing.count !== 1 ? 's' : '') : 'template'}</span>
@@ -5017,8 +5030,12 @@ function renderLogs(container) {
         html += `<div style="padding:12px 4px;font-size:12px;color:var(--text-muted);">All ingredients have timing data!</div>`;
     } else {
         missingData.forEach(ing => {
+            const escapedName = ing.name.replace(/'/g, "\\'");
             html += `
-            <div class="logs-missing-card">
+            <div class="logs-missing-card"
+                ontouchstart="startLogLongPress(event, '${escapedName}')"
+                ontouchend="cancelLogLongPress()" ontouchmove="cancelLogLongPress()"
+                oncontextmenu="event.preventDefault(); showTimingModalByName('${escapedName}')">
                 <span class="logs-missing-name">${ing.name}</span>
                 <span class="logs-missing-station">${ing.station}</span>
             </div>`;
