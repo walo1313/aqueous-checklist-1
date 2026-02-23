@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 139;
+const APP_BUILD = 140;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -37,6 +37,7 @@ let logsBlockCollapsed = { withData: false, missingData: true };
 let logsStationCollapsed = {}; // { "stationName": true/false }
 let mlStopwatches = {}; // { "stationId-ingId": { startedAt, elapsed, interval } }
 let mlLongPressTimer = null;
+const PRESET_NOTES = ['Defrost', 'Pick up', "86'd", 'VIP'];
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
 // Wake Lock to keep screen on during timers
@@ -2402,67 +2403,93 @@ function renderDishIngredients(station, dish) {
     let html = '';
     (dish.ingredients || []).forEach(ing => {
         const st = station.status[ing.id] || { low: false, priority: null, parLevel: '', parQty: null, parUnit: '', parNotes: '', completed: false };
-
         const escapedIngName = ing.name.replace(/'/g, "\\'");
         const isExpanded = expandedIngs.has(`${station.id}-${ing.id}`);
         const hasPri = st.priority && !st.completed;
-        const priLabel = hasPri ? st.priority.charAt(0).toUpperCase() + st.priority.slice(1) : 'Priority';
-        html += `
-        <div class="ingredient ${st.low ? 'low' : ''} ${hasPri ? 'has-priority priority-' + st.priority : ''} ${isExpanded ? 'expanded' : ''}" id="ing-${station.id}-${ing.id}">
-            <div class="ingredient-header"
-                 ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
-                 ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
-                 oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
-                ${hasPri && !isExpanded ? `<span class="priority-dot ${st.priority}"></span>` : ''}
-                ${isExpanded ? `<button class="priority-pill ${hasPri ? st.priority : ''}" onclick="event.stopPropagation(); cyclePriority(${station.id}, ${ing.id})">${priLabel}</button>` : ''}
-                <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
-                ${!isExpanded && taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
-            </div>
-            <div class="ingredient-controls" id="ing-ctrl-${station.id}-${ing.id}">
-                <div class="smart-qty-row">
-                    <input type="number" class="smart-qty-input"
-                        value="${st.parQty || ''}"
-                        placeholder="0"
-                        min="0" step="1" inputmode="decimal"
-                        oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
-                        onclick="event.stopPropagation()">
+        const inMl = hasPri;
+
+        // Parse notes: separate presets from custom
+        const notesList = (st.parNotes || '').split(',').map(n => n.trim()).filter(Boolean);
+        const activePresets = new Set(notesList.filter(n => PRESET_NOTES.includes(n)));
+        const customNote = notesList.filter(n => !PRESET_NOTES.includes(n)).join(', ');
+
+        if (isExpanded) {
+            html += `
+            <div class="ingredient focused ${hasPri ? 'has-priority priority-' + st.priority : ''}" id="ing-${station.id}-${ing.id}">
+                <div class="ingredient-header"
+                     ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
+                     ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
+                     oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
+                    <span class="ingredient-name ing-name-expanded" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
+                    ${inMl ? '<span class="in-ml-dot"></span>' : ''}
+                </div>
+                <div class="ing-expanded-card">
+                    <div class="ing-qty-row">
+                        <button class="ing-qty-btn" onclick="event.stopPropagation(); adjustParQty(${station.id}, ${ing.id}, -1)">−</button>
+                        <input type="number" class="ing-qty-input"
+                            value="${st.parQty || ''}"
+                            placeholder="0"
+                            min="0" step="1" inputmode="decimal"
+                            oninput="debounce('parq_${station.id}_${ing.id}', () => setParQty(${station.id}, ${ing.id}, this.value), 400)"
+                            onclick="event.stopPropagation()">
+                        <button class="ing-qty-btn" onclick="event.stopPropagation(); adjustParQty(${station.id}, ${ing.id}, 1)">+</button>
+                        <select class="ing-unit-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
+                            <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
+                            <optgroup label="Weight">
+                                ${WEIGHT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="Volume">
+                                ${VOLUME_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="Pans">
+                                ${PAN_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="Count">
+                                ${COUNT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="Containers">
+                                ${CONTAINER_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                            </optgroup>
+                            <optgroup label="Task">
+                                ${TASK_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
+                            </optgroup>
+                        </select>
+                    </div>
                     ${PAN_UNITS.includes(st.parUnit) ? `
-                    <div class="depth-chips">
+                    <div class="ing-depth-row">
                         <button class="depth-chip ${(st.parDepth || 4) == 2 ? 'active' : ''}" onclick="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, 2)">2"</button>
                         <button class="depth-chip ${(st.parDepth || 4) == 4 ? 'active' : ''}" onclick="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, 4)">4"</button>
                         <button class="depth-chip ${(st.parDepth || 4) == 6 ? 'active' : ''}" onclick="event.stopPropagation(); setParDepth(${station.id}, ${ing.id}, 6)">6"</button>
                     </div>
                     ` : ''}
-                    <select class="smart-unit-select" onchange="event.stopPropagation(); setParUnit(${station.id}, ${ing.id}, this.value)">
-                        <option value="" ${!st.parUnit ? 'selected' : ''}>Unit</option>
-                        <optgroup label="Weight">
-                            ${WEIGHT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
-                        </optgroup>
-                        <optgroup label="Volume">
-                            ${VOLUME_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
-                        </optgroup>
-                        <optgroup label="Pans">
-                            ${PAN_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
-                        </optgroup>
-                        <optgroup label="Count">
-                            ${COUNT_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
-                        </optgroup>
-                        <optgroup label="Containers">
-                            ${CONTAINER_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
-                        </optgroup>
-                        <optgroup label="Task">
-                            ${TASK_UNITS.map(u => `<option value="${u}" ${st.parUnit === u ? 'selected' : ''}>${u}</option>`).join('')}
-                        </optgroup>
-                    </select>
-                </div>
-                <div class="par-notes-row">
-                    <input type="text" class="par-input par-notes-input" placeholder="Notes..."
-                        value="${st.parNotes || ''}"
-                        oninput="debounce('parn_${station.id}_${ing.id}', () => setParNotes(${station.id}, ${ing.id}, this.value), 600)"
+                    <div class="ing-preset-row">
+                        ${PRESET_NOTES.map(p => `<button class="preset-pill ${activePresets.has(p) ? 'active' : ''}" onclick="event.stopPropagation(); togglePresetNote(${station.id}, ${ing.id}, '${p}')">${p}</button>`).join('')}
+                    </div>
+                    <input type="text" class="ing-custom-note" placeholder="Custom note..."
+                        value="${customNote}"
+                        oninput="debounce('parn_${station.id}_${ing.id}', () => setCustomNote(${station.id}, ${ing.id}, this.value), 600)"
                         onclick="event.stopPropagation()">
+                    <div class="ing-priority-row">
+                        <button class="pri-btn high ${st.priority === 'high' ? 'active' : ''}" onclick="event.stopPropagation(); setPriorityAndCollapse(${station.id}, ${ing.id}, 'high')">HIGH</button>
+                        <button class="pri-btn medium ${st.priority === 'medium' ? 'active' : ''}" onclick="event.stopPropagation(); setPriorityAndCollapse(${station.id}, ${ing.id}, 'medium')">MEDIUM</button>
+                        <button class="pri-btn low ${st.priority === 'low' ? 'active' : ''}" onclick="event.stopPropagation(); setPriorityAndCollapse(${station.id}, ${ing.id}, 'low')">LOW</button>
+                    </div>
                 </div>
-            </div>
-        </div>`;
+            </div>`;
+        } else {
+            html += `
+            <div class="ingredient ${st.low ? 'low' : ''} ${hasPri ? 'has-priority priority-' + st.priority : ''}" id="ing-${station.id}-${ing.id}">
+                <div class="ingredient-header"
+                     ontouchstart="startLongPress(event, ${station.id}, ${ing.id}, '${escapedIngName}')"
+                     ontouchend="cancelLongPress()" ontouchmove="cancelLongPress()"
+                     oncontextmenu="event.preventDefault(); showIngredientContextMenu(event, ${station.id}, ${ing.id}, '${escapedIngName}')">
+                    ${hasPri ? `<span class="priority-dot ${st.priority}"></span>` : ''}
+                    <span class="ingredient-name" onclick="toggleIngExpand(${station.id}, ${ing.id})" style="flex:1;pointer-events:auto;">${ing.name}</span>
+                    ${inMl ? '<span class="in-ml-dot"></span>' : ''}
+                    ${taskTemplates[ing.name.toLowerCase()] ? '<span class="template-indicator">⏱</span>' : ''}
+                </div>
+            </div>`;
+        }
     });
     return html;
 }
@@ -3565,9 +3592,11 @@ function toggleIngExpand(stationId, ingredientId) {
     const key = `${stationId}-${ingredientId}`;
     const wasOpen = expandedIngs.has(key);
 
-    if (wasOpen) {
-        expandedIngs.delete(key);
-    } else {
+    // Close all other expanded ingredients in this station
+    const prefix = `${stationId}-`;
+    expandedIngs.forEach(k => { if (k.startsWith(prefix)) expandedIngs.delete(k); });
+
+    if (!wasOpen) {
         expandedIngs.add(key);
         // Auto-fill defaults on first expand
         const station = stations.find(s => s.id === stationId);
@@ -3587,7 +3616,16 @@ function toggleIngExpand(stationId, ingredientId) {
             }
         }
     }
+
     rerenderStationBody(stationId);
+
+    // Auto-scroll to focused ingredient
+    if (!wasOpen) {
+        setTimeout(() => {
+            const el = document.getElementById(`ing-${stationId}-${ingredientId}`);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 50);
+    }
 }
 
 const PRIORITY_CYCLE = [null, 'high', 'medium', 'low'];
@@ -3624,6 +3662,40 @@ function setPriority(stationId, ingredientId, priority) {
     saveData(true);
     syncItemToChecklist(stationId, ingredientId);
     rerenderStationBody(stationId);
+}
+
+function setPriorityAndCollapse(stationId, ingredientId, priority) {
+    handleClick();
+    animateMascot();
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
+
+    // Toggle: if same priority, remove it
+    if (st.priority === priority) {
+        st.priority = null;
+        st.low = false;
+        st.completed = false;
+    } else {
+        st.priority = priority;
+        st.low = true;
+    }
+
+    saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
+
+    // Flash animation then collapse
+    const el = document.getElementById(`ing-${stationId}-${ingredientId}`);
+    if (el) {
+        el.classList.add('ing-confirm-flash');
+        setTimeout(() => {
+            expandedIngs.delete(`${stationId}-${ingredientId}`);
+            rerenderStationBody(stationId);
+        }, 400);
+    } else {
+        expandedIngs.delete(`${stationId}-${ingredientId}`);
+        rerenderStationBody(stationId);
+    }
 }
 
 function setParQty(stationId, ingredientId, value) {
@@ -3711,6 +3783,39 @@ function setParNotes(stationId, ingredientId, value) {
     const station = stations.find(s => s.id === stationId);
     if (!station || !station.status[ingredientId]) return;
     station.status[ingredientId].parNotes = value;
+    saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
+}
+
+function togglePresetNote(stationId, ingredientId, preset) {
+    handleClick();
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
+
+    const notesList = (st.parNotes || '').split(',').map(n => n.trim()).filter(Boolean);
+    const idx = notesList.indexOf(preset);
+    if (idx >= 0) {
+        notesList.splice(idx, 1);
+    } else {
+        notesList.push(preset);
+    }
+    st.parNotes = notesList.join(', ');
+    saveData(true);
+    syncItemToChecklist(stationId, ingredientId);
+    rerenderStationBody(stationId);
+}
+
+function setCustomNote(stationId, ingredientId, value) {
+    const station = stations.find(s => s.id === stationId);
+    if (!station || !station.status[ingredientId]) return;
+    const st = station.status[ingredientId];
+
+    // Preserve preset notes, replace custom part
+    const notesList = (st.parNotes || '').split(',').map(n => n.trim()).filter(Boolean);
+    const presets = notesList.filter(n => PRESET_NOTES.includes(n));
+    const customParts = value.trim() ? [value.trim()] : [];
+    st.parNotes = [...presets, ...customParts].join(', ');
     saveData(true);
     syncItemToChecklist(stationId, ingredientId);
 }
@@ -3816,11 +3921,10 @@ function rerenderStationBody(stationId) {
         const panel = getPanel('home');
         const scrollBefore = panel ? panel.scrollTop : 0;
         body.innerHTML = renderIngredients(station) + stationFooter(stationId);
-        // Restore expand states
-        expandedIngs.forEach(key => {
-            const ctrl = document.getElementById(`ing-ctrl-${key}`);
-            if (ctrl) ctrl.classList.add('open');
-        });
+        // Add dimming class when an ingredient is focused
+        const hasFocus = [...expandedIngs].some(k => k.startsWith(`${stationId}-`));
+        if (hasFocus) body.classList.add('has-focus');
+        else body.classList.remove('has-focus');
         if (panel) panel.scrollTop = scrollBefore;
     }
     updateStationCount(stationId);

@@ -554,8 +554,25 @@
             background: var(--surface);
         }
 
-        .ingredient.expanded {
+        .ingredient.focused {
             border-left-color: var(--accent);
+            background: var(--surface);
+            box-shadow: var(--neu-shadow), 0 0 0 1px var(--accent-tint);
+            z-index: 2;
+            position: relative;
+        }
+        .has-focus .ingredient:not(.focused) {
+            opacity: 0.4;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+        .in-ml-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #34C759;
+            box-shadow: 0 0 6px rgba(52, 199, 89, 0.6);
+            flex-shrink: 0;
         }
 
         .ingredient-header {
@@ -884,6 +901,181 @@
 
         .par-notes-row { margin-top: 6px; }
         .par-notes-input { font-size: 11px !important; padding: 6px 10px !important; }
+
+        /* Expanded ingredient card */
+        .ing-expanded-card {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--divider);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .ing-name-expanded {
+            font-size: 18px !important;
+            font-weight: 800 !important;
+        }
+        .ing-qty-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .ing-qty-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--text);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            flex-shrink: 0;
+        }
+        .ing-qty-btn:active {
+            box-shadow: var(--neu-inset);
+            transform: scale(0.95);
+        }
+        .ing-qty-input {
+            width: 72px;
+            padding: 10px 4px;
+            border: none;
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--neu-inset);
+            font-size: 26px;
+            font-weight: 800;
+            text-align: center;
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            -moz-appearance: textfield;
+            flex-shrink: 0;
+        }
+        .ing-qty-input::-webkit-inner-spin-button,
+        .ing-qty-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .ing-qty-input:focus { outline: none; box-shadow: var(--neu-inset-deep), 0 0 0 2px var(--accent-tint); }
+        .ing-unit-select {
+            flex: 1;
+            padding: 10px 12px;
+            min-height: 44px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 700;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+        }
+        .ing-depth-row {
+            display: flex;
+            gap: 6px;
+        }
+        .ing-preset-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .preset-pill {
+            padding: 8px 16px;
+            border: 1.5px solid var(--divider);
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 700;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .preset-pill.active {
+            background: var(--accent-tint);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+        .preset-pill:active {
+            transform: scale(0.95);
+        }
+        .ing-custom-note {
+            width: 100%;
+            padding: 10px 14px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            background: var(--surface);
+            box-shadow: var(--neu-inset);
+            color: var(--text);
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+        }
+        .ing-custom-note:focus { outline: none; box-shadow: var(--neu-inset-deep); }
+        .ing-custom-note::placeholder { color: var(--text-muted); }
+        .ing-priority-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .pri-btn {
+            flex: 1;
+            padding: 14px 0;
+            border: 2px solid transparent;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.15s;
+            -webkit-tap-highlight-color: transparent;
+            text-align: center;
+        }
+        .pri-btn:active {
+            transform: scale(0.96);
+        }
+        .pri-btn.high {
+            background: rgba(255, 59, 59, 0.1);
+            color: #FF3B3B;
+            border-color: rgba(255, 59, 59, 0.3);
+        }
+        .pri-btn.high.active, .pri-btn.high:active {
+            background: #FF3B3B;
+            color: #fff;
+            box-shadow: 0 0 16px rgba(255, 59, 59, 0.5);
+        }
+        .pri-btn.medium {
+            background: rgba(255, 184, 0, 0.1);
+            color: #CC9400;
+            border-color: rgba(255, 184, 0, 0.3);
+        }
+        .pri-btn.medium.active, .pri-btn.medium:active {
+            background: #FFB800;
+            color: #fff;
+            box-shadow: 0 0 16px rgba(255, 184, 0, 0.5);
+        }
+        .pri-btn.low {
+            background: rgba(52, 199, 89, 0.1);
+            color: #34C759;
+            border-color: rgba(52, 199, 89, 0.3);
+        }
+        .pri-btn.low.active, .pri-btn.low:active {
+            background: #34C759;
+            color: #fff;
+            box-shadow: 0 0 16px rgba(52, 199, 89, 0.5);
+        }
+        .ing-confirm-flash {
+            animation: flashConfirm 0.4s ease-out;
+        }
+        @keyframes flashConfirm {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.02); box-shadow: 0 0 20px rgba(52, 199, 89, 0.5); }
+            100% { transform: scale(0.98); opacity: 0.7; }
+        }
 
         .par-select {
             padding: 8px 10px;
