@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 153;
+const APP_BUILD = 154;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -40,6 +40,8 @@ let logsStationCollapsed = {}; // { "stationName": true/false }
 let homeStationPickerOpen = false;
 let mlStopwatches = {}; // { "stationId-ingId": { startedAt, elapsed, interval } }
 let mlLongPressTimer = null;
+let recipes = [];
+let recipeFilterCat = 'all';
 const PRESET_NOTES = ['Defrost', 'Pick up', "86'd"];
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
@@ -1482,6 +1484,15 @@ function loadData() {
         bulkLoadTimingData();
         localStorage.setItem('aqueous_timing_bulk_v1', '1');
     }
+
+    // Load recipes
+    const savedRecipes = localStorage.getItem('aqueous_recipes');
+    if (savedRecipes) {
+        recipes = JSON.parse(savedRecipes);
+    } else {
+        recipes = getDefaultRecipes();
+        saveRecipes();
+    }
 }
 
 function savePrepTimes() {
@@ -2186,22 +2197,253 @@ function switchLibrarySubTab(tab) {
     renderPanel('library');
 }
 
+function saveRecipes() {
+    localStorage.setItem('aqueous_recipes', JSON.stringify(recipes));
+}
+
+function getDefaultRecipes() {
+    return [
+        {
+            id: 1, name: 'Ora King Salmon', category: 'Dinner',
+            ingredients: [
+                { name: 'Truffles', qty: 4, unit: 'slice' },
+                { name: 'Pickled Fresno', qty: 3, unit: 'gram' },
+                { name: 'Cauliflower', qty: 15, unit: 'gram' },
+                { name: 'Bonito dashi', qty: 120, unit: 'ml' },
+                { name: 'Ora king salmon', qty: 170, unit: 'gram' },
+                { name: 'Shitake', qty: 20, unit: 'gram' },
+                { name: 'Shimeji (beech mushroom)', qty: 20, unit: 'gram' },
+                { name: 'Snow pea', qty: 30, unit: 'gram' },
+                { name: 'Rice flour', qty: 10, unit: 'gram' }
+            ],
+            steps: [],
+            subRecipes: []
+        },
+        {
+            id: 2, name: 'Pirikara Ahi Tartare Crispy Rice', category: 'Dinner',
+            ingredients: [
+                { name: 'Yuzu tobiko', qty: 10, unit: 'gram' },
+                { name: 'Kimchi aioli', qty: 10, unit: 'gram' },
+                { name: 'Micro herb', qty: null, unit: '-' },
+                { name: 'Crispy Rice 3oz', qty: 180, unit: 'gram' },
+                { name: 'Ahi tuna tartare', qty: 85, unit: 'gram' },
+                { name: 'Pirikara sauce', qty: 10, unit: 'gram' }
+            ],
+            steps: [],
+            subRecipes: []
+        },
+        {
+            id: 3, name: 'Ora King Salmon Flame Maki', category: 'Dinner',
+            ingredients: [],
+            steps: [],
+            subRecipes: []
+        },
+        {
+            id: 4, name: "Robin's Holistic Garden Red Curry", category: 'Dinner',
+            ingredients: [
+                { name: 'Koshi Hikari rice', qty: 200, unit: 'gram' },
+                { name: 'Carnival cauliflower', qty: 50, unit: 'gram' },
+                { name: 'Red curry broth', qty: 240, unit: 'ml' },
+                { name: 'Broccoli', qty: 25, unit: 'gram' },
+                { name: 'Micro herb', qty: 20, unit: 'gram' },
+                { name: 'Thai basil', qty: 5, unit: 'gram' },
+                { name: 'Shallot crisps', qty: 10, unit: 'gram' },
+                { name: 'Pickled fresno', qty: 3, unit: 'gram' },
+                { name: 'Corn', qty: 10, unit: 'gram' },
+                { name: 'Butternut squash confit', qty: 10, unit: 'gram' },
+                { name: 'Tepary beans', qty: 10, unit: 'gram' }
+            ],
+            steps: [
+                'Mixed vegetables: equal parts, cut into florets: cauliflower, broccolini, butternut squash, black, white, and brown tepary beans, yellow corn',
+                'Saute Cruciferous: saute romanesco, cauliflower until lightly browned. Add broccolini and finish cooking until tender',
+                'To make Panang curry: In a pot over medium heat, saute curry paste stirring often until brick red and aromatic. Add coconut milk and let simmer. Add tamari, sugar, and kaffir lime. Simmer on medium low heat for 20 minutes',
+                'Once done cooking, transfer to a 600 hotel pan and place in the chiller to cool'
+            ],
+            subRecipes: [{
+                name: 'Red Curry Broth',
+                ingredients: [
+                    { name: 'Maesri Red Curry Paste', qty: 800, unit: 'gram' },
+                    { name: 'Cooking oil', qty: 60, unit: 'ml' },
+                    { name: 'Coconut milk', qty: 5678, unit: 'ml' },
+                    { name: 'Tamari soy sauce', qty: 355, unit: 'ml' },
+                    { name: 'Cane sugar', qty: 300, unit: 'gram' },
+                    { name: 'Kaffir lime leaf', qty: 2, unit: 'cup' }
+                ]
+            }]
+        }
+    ];
+}
+
+function renderBibleContent() {
+    const bibleUrl = localStorage.getItem('aqueous_bible_url') || '';
+    if (bibleUrl) {
+        return `<iframe src="${bibleUrl}" class="bible-viewer" title="Menu Bible"></iframe>`;
+    }
+    return `<div class="bible-placeholder">
+        <div style="font-size:48px;margin-bottom:16px;">📖</div>
+        <p>Menu Bible</p>
+        <p style="font-size:11px;margin-bottom:16px;">Enter the URL of your PDF to view it here</p>
+        <div style="display:flex;gap:8px;">
+            <input type="url" id="bibleUrlInput" placeholder="https://example.com/menu.pdf"
+                style="flex:1;height:40px;border:1.5px solid var(--border);border-radius:10px;padding:0 12px;font-size:13px;background:var(--bg);color:var(--text);">
+            <button class="btn btn-primary squishy" onclick="loadBiblePdf()" style="height:40px;padding:0 16px;">Load</button>
+        </div>
+    </div>`;
+}
+
+function loadBiblePdf() {
+    const input = document.getElementById('bibleUrlInput');
+    if (!input) return;
+    const url = input.value.trim();
+    if (!url) { showToast('Enter a PDF URL'); return; }
+    localStorage.setItem('aqueous_bible_url', url);
+    panelDirty.library = true;
+    renderPanel('library');
+    showToast('Bible PDF loaded');
+}
+
+function renderRecipesContent() {
+    const cats = ['all'];
+    recipes.forEach(function(r) {
+        if (r.category && !cats.includes(r.category)) cats.push(r.category);
+    });
+
+    const filterHtml = cats.map(function(cat) {
+        const active = recipeFilterCat === cat ? ' active' : '';
+        const label = cat === 'all' ? 'All' : cat;
+        return '<button class="recipe-filter-chip' + active + '" onclick="filterRecipes(\'' + cat + '\')">' + label + '</button>';
+    }).join('');
+
+    const filtered = recipeFilterCat === 'all' ? recipes : recipes.filter(function(r) { return r.category === recipeFilterCat; });
+
+    let cardsHtml = '';
+    filtered.forEach(function(recipe) {
+        const esc = recipe.name.replace(/'/g, "\\'");
+
+        let ingRows = '';
+        if (recipe.ingredients.length > 0) {
+            recipe.ingredients.forEach(function(ing) {
+                const qtyStr = ing.qty != null ? ing.qty : '-';
+                const unitStr = ing.unit || '-';
+                ingRows += '<tr><td>' + ing.name + '</td><td>' + qtyStr + '</td><td>' + unitStr + '</td></tr>';
+            });
+        }
+
+        let stepsHtml = '';
+        if (recipe.steps.length > 0) {
+            stepsHtml = '<div class="recipe-section-title">Preparation</div>';
+            recipe.steps.forEach(function(step, i) {
+                stepsHtml += '<div class="recipe-step"><span class="recipe-step-num">' + (i + 1) + '.</span>' + step + '</div>';
+            });
+        } else {
+            stepsHtml = '<div class="recipe-section-title">Preparation</div><div class="recipe-pending">Pending (to be added by chef)</div>';
+        }
+
+        let subHtml = '';
+        if (recipe.subRecipes && recipe.subRecipes.length > 0) {
+            recipe.subRecipes.forEach(function(sub) {
+                let subIngRows = '';
+                if (sub.ingredients) {
+                    sub.ingredients.forEach(function(ing) {
+                        const qtyStr = ing.qty != null ? ing.qty : '-';
+                        subIngRows += '<tr><td>' + ing.name + '</td><td>' + qtyStr + '</td><td>' + (ing.unit || '-') + '</td></tr>';
+                    });
+                }
+                subHtml += '<div class="recipe-sub-section"><div class="recipe-sub-title">' + sub.name + '</div><table class="recipe-ing-table">' + subIngRows + '</table></div>';
+            });
+        }
+
+        cardsHtml += '<div class="recipe-card" id="recipe-' + recipe.id + '">' +
+            '<div class="recipe-card-header" onclick="toggleRecipeCard(' + recipe.id + ')">' +
+                '<span class="recipe-card-title">' + recipe.name + '</span>' +
+                '<span class="recipe-card-category">' + recipe.category + '</span>' +
+                '<svg class="recipe-card-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>' +
+            '</div>' +
+            '<div class="recipe-card-body"><div class="recipe-card-content">' +
+                (recipe.ingredients.length > 0 ? '<div class="recipe-section-title">Ingredients</div><table class="recipe-ing-table">' + ingRows + '</table>' : '<div class="recipe-section-title">Ingredients</div><div class="recipe-pending">Pending (to be added by chef)</div>') +
+                subHtml +
+                stepsHtml +
+            '</div></div>' +
+        '</div>';
+    });
+
+    return '<div class="recipe-filter-row">' + filterHtml + '</div>' +
+        '<button class="recipe-add-btn" onclick="showAddRecipeModal()">+ Add Recipe</button>' +
+        cardsHtml;
+}
+
+function toggleRecipeCard(id) {
+    handleClick();
+    const card = document.getElementById('recipe-' + id);
+    if (card) card.classList.toggle('open');
+}
+
+function filterRecipes(cat) {
+    handleClick();
+    recipeFilterCat = cat;
+    panelDirty.library = true;
+    renderPanel('library');
+}
+
+function showAddRecipeModal() {
+    handleClick();
+    const existing = document.getElementById('modalAddRecipe');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'modalAddRecipe';
+    modal.className = 'modal show';
+    modal.innerHTML = `
+        <div class="modal-content" style="text-align:left;max-width:380px;">
+            <div class="modal-header">New Recipe</div>
+            <div class="te-section-label">NAME</div>
+            <input type="text" id="newRecipeName" placeholder="Dish name" style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:10px;padding:0 12px;font-size:14px;font-weight:700;background:var(--bg);color:var(--text);margin-bottom:12px;box-sizing:border-box;">
+            <div class="te-section-label">CATEGORY</div>
+            <select id="newRecipeCat" style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:10px;padding:0 12px;font-size:14px;font-weight:700;background:var(--bg);color:var(--text);margin-bottom:14px;box-sizing:border-box;">
+                <option value="Dinner">Dinner</option>
+                <option value="Lunch">Lunch</option>
+                <option value="Breakfast">Breakfast</option>
+            </select>
+            <div class="btn-group">
+                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalAddRecipe').remove()">Cancel</button>
+                <button class="btn btn-primary squishy" onclick="addNewRecipe()">Add</button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+    setTimeout(function() { document.getElementById('newRecipeName').focus(); }, 100);
+}
+
+function addNewRecipe() {
+    const nameEl = document.getElementById('newRecipeName');
+    const catEl = document.getElementById('newRecipeCat');
+    if (!nameEl) return;
+    const name = nameEl.value.trim();
+    if (!name) { showToast('Enter a recipe name'); return; }
+    const cat = catEl ? catEl.value : 'Dinner';
+    const maxId = recipes.reduce(function(max, r) { return Math.max(max, r.id || 0); }, 0);
+    recipes.push({
+        id: maxId + 1,
+        name: name,
+        category: cat,
+        ingredients: [],
+        steps: [],
+        subRecipes: []
+    });
+    saveRecipes();
+    const modal = document.getElementById('modalAddRecipe');
+    if (modal) modal.remove();
+    panelDirty.library = true;
+    renderPanel('library');
+    showToast('Recipe added: ' + name);
+}
+
 function renderLibrary(container) {
     let content = '';
     if (librarySubTab === 'bible') {
-        content = `<div class="empty-state">
-            <div class="empty-state-icon">📖</div>
-            <p>Bible</p>
-            <p class="empty-sub">PDF guides, dish photos, allergens & procedures</p>
-            <button class="btn btn-primary squishy" disabled>Upload PDF (Coming Soon)</button>
-        </div>`;
+        content = renderBibleContent();
     } else if (librarySubTab === 'recipes') {
-        content = `<div class="empty-state">
-            <div class="empty-state-icon">🍳</div>
-            <p>Recipes</p>
-            <p class="empty-sub">Organized by shift: Breakfast, Lunch, Dinner</p>
-            <button class="btn btn-primary squishy" disabled>Coming Soon</button>
-        </div>`;
+        content = renderRecipesContent();
     } else if (librarySubTab === 'tempLogs') {
         content = `<div class="empty-state">
             <div class="empty-state-icon">🌡️</div>
