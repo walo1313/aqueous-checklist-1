@@ -3204,7 +3204,47 @@
             display: flex;
             gap: 6px;
             flex-wrap: wrap;
+            margin-bottom: 8px;
+        }
+        .recipe-search-row {
             margin-bottom: 12px;
+        }
+        .recipe-search-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .recipe-search-icon {
+            position: absolute;
+            left: 12px;
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+        .recipe-search-input {
+            width: 100%;
+            padding: 10px 36px 10px 36px;
+            border-radius: 12px;
+            border: 1.5px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: border-color .2s;
+        }
+        .recipe-search-input:focus {
+            border-color: var(--accent);
+        }
+        .recipe-search-input::placeholder {
+            color: var(--text-secondary);
+        }
+        .recipe-search-clear {
+            position: absolute;
+            right: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px 6px;
+            line-height: 1;
         }
         .recipe-filter-chip {
             padding: 6px 14px;

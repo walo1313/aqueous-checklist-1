@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 171;
+const APP_BUILD = 172;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -42,6 +42,7 @@ let mlStopwatches = {}; // { "stationId-ingId": { startedAt, elapsed, interval }
 let mlLongPressTimer = null;
 let recipes = [];
 let recipeFilterCat = 'all';
+let recipeSearchTerm = '';
 const PRESET_NOTES = ['Defrost', 'Pick up', "86'd"];
 // Activity log database
 let activityLog = JSON.parse(localStorage.getItem('aqueous_activityLog') || '[]');
@@ -3890,7 +3891,11 @@ function renderRecipesContent() {
         return '<button class="recipe-filter-chip' + active + '" onclick="filterRecipes(\'' + cat + '\')">' + label + '</button>';
     }).join('');
 
-    var filtered = recipeFilterCat === 'all' ? recipes : recipes.filter(function(r) { return r.category === recipeFilterCat; });
+    var filtered = recipeFilterCat === 'all' ? recipes.slice() : recipes.filter(function(r) { return r.category === recipeFilterCat; });
+    if (recipeSearchTerm) {
+        var term = recipeSearchTerm.toLowerCase();
+        filtered = filtered.filter(function(r) { return r.name.toLowerCase().includes(term); });
+    }
 
     var cardsHtml = '';
     filtered.forEach(function(recipe) {
@@ -3943,7 +3948,16 @@ function renderRecipesContent() {
         '</div>';
     });
 
+    var clearBtn = recipeSearchTerm ? '<span class="recipe-search-clear" onclick="clearRecipeSearch()">✕</span>' : '';
+
     return '<div class="recipe-filter-row">' + filterHtml + '</div>' +
+        '<div class="recipe-search-row">' +
+            '<div class="recipe-search-wrap">' +
+                '<svg class="recipe-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+                '<input class="recipe-search-input" type="text" placeholder="Search recipes..." value="' + (recipeSearchTerm || '') + '" oninput="recipeSearch(this.value)">' +
+                clearBtn +
+            '</div>' +
+        '</div>' +
         '<div class="recipe-add-row">' +
             '<button class="add-action-btn squishy" onclick="showAddRecipeModal()">+ Create</button>' +
             '<button class="add-action-btn squishy" onclick="triggerRecipeFileUpload()">+ Upload File</button>' +
@@ -3961,6 +3975,23 @@ function toggleRecipeCard(id) {
 function filterRecipes(cat) {
     handleClick();
     recipeFilterCat = cat;
+    panelDirty.library = true;
+    renderPanel('library');
+    setTimeout(function() { var inp = document.querySelector('.recipe-search-input'); if (inp) inp.focus(); }, 50);
+}
+
+function recipeSearch(val) {
+    recipeSearchTerm = val;
+    panelDirty.library = true;
+    renderPanel('library');
+    setTimeout(function() {
+        var inp = document.querySelector('.recipe-search-input');
+        if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }, 50);
+}
+
+function clearRecipeSearch() {
+    recipeSearchTerm = '';
     panelDirty.library = true;
     renderPanel('library');
 }
