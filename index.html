@@ -3031,12 +3031,16 @@
         .recipe-card-category {
             font-size: 10px;
             font-weight: 700;
-            padding: 3px 8px;
+            padding: 3px 6px;
             border-radius: 10px;
             background: var(--accent-tint);
             color: var(--accent);
             margin-left: 8px;
             flex-shrink: 0;
+            border: none;
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
         }
         .recipe-card-chevron {
             margin-left: 8px;
@@ -3124,6 +3128,114 @@
             -webkit-tap-highlight-color: transparent;
         }
         .recipe-add-btn:active { opacity: 0.6; }
+        .recipe-action-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+        .recipe-action-btn {
+            width: 34px;
+            height: 34px;
+            border: none;
+            border-radius: 10px;
+            background: var(--bg);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--neu-shadow-sm);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .recipe-action-btn:active { transform: scale(0.9); }
+        .recipe-action-btn.delete { color: var(--high); }
+        .recipe-cat-pill {
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            transition: opacity 0.15s;
+        }
+        .recipe-cat-pill:active { opacity: 0.6; }
+        .recipe-add-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .recipe-add-row .recipe-add-btn { flex: 1; margin-bottom: 0; }
+        .recipe-edit-input {
+            width: 100%;
+            height: 40px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 0 12px;
+            font-size: 13px;
+            font-weight: 600;
+            background: var(--bg);
+            color: var(--text);
+            box-sizing: border-box;
+            margin-bottom: 8px;
+        }
+        .recipe-edit-input:focus { border-color: var(--accent); outline: none; }
+        .recipe-edit-textarea {
+            width: 100%;
+            min-height: 80px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            background: var(--bg);
+            color: var(--text);
+            box-sizing: border-box;
+            margin-bottom: 8px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .recipe-edit-textarea:focus { border-color: var(--accent); outline: none; }
+        .recipe-ing-edit-row {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .recipe-ing-edit-row input { margin-bottom: 0; }
+        .recipe-ing-edit-row .ing-name { flex: 2; }
+        .recipe-ing-edit-row .ing-qty { flex: 0.7; text-align: center; }
+        .recipe-ing-edit-row .ing-unit { flex: 0.8; }
+        .recipe-ing-remove {
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 50%;
+            background: var(--high);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .bible-canvas-container {
+            width: 100%;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .bible-canvas-container canvas {
+            display: block;
+            width: 100%;
+            margin-bottom: 2px;
+        }
+        .bible-upload-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
 
         /* ===== EMPTY STATE ===== */
         .empty-state {
@@ -3557,6 +3669,8 @@
         html { scroll-behavior: smooth; }
 
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 <body>
     <!-- Splash Screen -->

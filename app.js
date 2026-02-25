@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 156;
+const APP_BUILD = 157;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2203,178 +2203,225 @@ function saveRecipes() {
 
 function getDefaultRecipes() {
     return [
-        {
-            id: 1, name: 'Ora King Salmon', category: 'Dinner',
-            ingredients: [
-                { name: 'Truffles', qty: 4, unit: 'slice' },
-                { name: 'Pickled Fresno', qty: 3, unit: 'gram' },
-                { name: 'Cauliflower', qty: 15, unit: 'gram' },
-                { name: 'Bonito dashi', qty: 120, unit: 'ml' },
-                { name: 'Ora king salmon', qty: 170, unit: 'gram' },
-                { name: 'Shitake', qty: 20, unit: 'gram' },
-                { name: 'Shimeji (beech mushroom)', qty: 20, unit: 'gram' },
-                { name: 'Snow pea', qty: 30, unit: 'gram' },
-                { name: 'Rice flour', qty: 10, unit: 'gram' }
-            ],
-            steps: [],
-            subRecipes: []
-        },
-        {
-            id: 2, name: 'Pirikara Ahi Tartare Crispy Rice', category: 'Dinner',
-            ingredients: [
-                { name: 'Yuzu tobiko', qty: 10, unit: 'gram' },
-                { name: 'Kimchi aioli', qty: 10, unit: 'gram' },
-                { name: 'Micro herb', qty: null, unit: '-' },
-                { name: 'Crispy Rice 3oz', qty: 180, unit: 'gram' },
-                { name: 'Ahi tuna tartare', qty: 85, unit: 'gram' },
-                { name: 'Pirikara sauce', qty: 10, unit: 'gram' }
-            ],
-            steps: [],
-            subRecipes: []
-        },
-        {
-            id: 3, name: 'Ora King Salmon Flame Maki', category: 'Dinner',
-            ingredients: [],
-            steps: [],
-            subRecipes: []
-        },
-        {
-            id: 4, name: "Robin's Holistic Garden Red Curry", category: 'Dinner',
-            ingredients: [
-                { name: 'Koshi Hikari rice', qty: 200, unit: 'gram' },
-                { name: 'Carnival cauliflower', qty: 50, unit: 'gram' },
-                { name: 'Red curry broth', qty: 240, unit: 'ml' },
-                { name: 'Broccoli', qty: 25, unit: 'gram' },
-                { name: 'Micro herb', qty: 20, unit: 'gram' },
-                { name: 'Thai basil', qty: 5, unit: 'gram' },
-                { name: 'Shallot crisps', qty: 10, unit: 'gram' },
-                { name: 'Pickled fresno', qty: 3, unit: 'gram' },
-                { name: 'Corn', qty: 10, unit: 'gram' },
-                { name: 'Butternut squash confit', qty: 10, unit: 'gram' },
-                { name: 'Tepary beans', qty: 10, unit: 'gram' }
-            ],
-            steps: [
-                'Mixed vegetables: equal parts, cut into florets: cauliflower, broccolini, butternut squash, black, white, and brown tepary beans, yellow corn',
-                'Saute Cruciferous: saute romanesco, cauliflower until lightly browned. Add broccolini and finish cooking until tender',
-                'To make Panang curry: In a pot over medium heat, saute curry paste stirring often until brick red and aromatic. Add coconut milk and let simmer. Add tamari, sugar, and kaffir lime. Simmer on medium low heat for 20 minutes',
-                'Once done cooking, transfer to a 600 hotel pan and place in the chiller to cool'
-            ],
-            subRecipes: [{
-                name: 'Red Curry Broth',
-                ingredients: [
-                    { name: 'Maesri Red Curry Paste', qty: 800, unit: 'gram' },
-                    { name: 'Cooking oil', qty: 60, unit: 'ml' },
-                    { name: 'Coconut milk', qty: 5678, unit: 'ml' },
-                    { name: 'Tamari soy sauce', qty: 355, unit: 'ml' },
-                    { name: 'Cane sugar', qty: 300, unit: 'gram' },
-                    { name: 'Kaffir lime leaf', qty: 2, unit: 'cup' }
-                ]
-            }]
-        }
+        { id: 1, name: 'Ora King Salmon', category: 'Dinner', ingredients: [
+            { name: 'Truffles', qty: 4, unit: 'slice' }, { name: 'Pickled Fresno', qty: 3, unit: 'gram' },
+            { name: 'Cauliflower', qty: 15, unit: 'gram' }, { name: 'Bonito dashi', qty: 120, unit: 'ml' },
+            { name: 'Ora king salmon', qty: 170, unit: 'gram' }, { name: 'Shitake', qty: 20, unit: 'gram' },
+            { name: 'Shimeji (beech mushroom)', qty: 20, unit: 'gram' }, { name: 'Snow pea', qty: 30, unit: 'gram' },
+            { name: 'Rice flour', qty: 10, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 2, name: 'Pirikara Ahi Tartare Crispy Rice', category: 'Dinner', ingredients: [
+            { name: 'Yuzu tobiko', qty: 10, unit: 'gram' }, { name: 'Kimchi aioli', qty: 10, unit: 'gram' },
+            { name: 'Micro herb', qty: null, unit: '-' }, { name: 'Crispy Rice 3oz', qty: 180, unit: 'gram' },
+            { name: 'Ahi tuna tartare', qty: 85, unit: 'gram' }, { name: 'Pirikara sauce', qty: 10, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 3, name: 'Ora King Salmon Flame Maki', category: 'Dinner', ingredients: [], steps: [], subRecipes: [] },
+        { id: 4, name: "Robin's Holistic Garden Red Curry", category: 'Dinner', ingredients: [
+            { name: 'Koshi Hikari rice', qty: 200, unit: 'gram' }, { name: 'Carnival cauliflower', qty: 50, unit: 'gram' },
+            { name: 'Red curry broth', qty: 240, unit: 'ml' }, { name: 'Broccoli', qty: 25, unit: 'gram' },
+            { name: 'Micro herb', qty: 20, unit: 'gram' }, { name: 'Thai basil', qty: 5, unit: 'gram' },
+            { name: 'Shallot crisps', qty: 10, unit: 'gram' }, { name: 'Pickled fresno', qty: 3, unit: 'gram' },
+            { name: 'Corn', qty: 10, unit: 'gram' }, { name: 'Butternut squash confit', qty: 10, unit: 'gram' },
+            { name: 'Tepary beans', qty: 10, unit: 'gram' }
+        ], steps: [
+            'Mixed vegetables: equal parts, cut into florets: cauliflower, broccolini, butternut squash, black, white, and brown tepary beans, yellow corn',
+            'Saute Cruciferous: saute romanesco, cauliflower until lightly browned. Add broccolini and finish cooking until tender',
+            'To make Panang curry: In a pot over medium heat, saute curry paste stirring often until brick red and aromatic. Add coconut milk and let simmer. Add tamari, sugar, and kaffir lime. Simmer on medium low heat for 20 minutes',
+            'Once done cooking, transfer to a 600 hotel pan and place in the chiller to cool'
+        ], subRecipes: [{ name: 'Red Curry Broth', ingredients: [
+            { name: 'Maesri Red Curry Paste', qty: 800, unit: 'gram' }, { name: 'Cooking oil', qty: 60, unit: 'ml' },
+            { name: 'Coconut milk', qty: 5678, unit: 'ml' }, { name: 'Tamari soy sauce', qty: 355, unit: 'ml' },
+            { name: 'Cane sugar', qty: 300, unit: 'gram' }, { name: 'Kaffir lime leaf', qty: 2, unit: 'cup' }
+        ]}] }
     ];
 }
 
-function renderBibleContent() {
-    const bibleUrl = localStorage.getItem('aqueous_bible_url') || '';
-    if (bibleUrl) {
-        return `<iframe src="${bibleUrl}" class="bible-viewer" title="Menu Bible"></iframe>`;
-    }
-    return `<div class="bible-placeholder">
-        <div style="font-size:48px;margin-bottom:16px;">📖</div>
-        <p>Menu Bible</p>
-        <p style="font-size:11px;margin-bottom:16px;">Enter the URL of your PDF to view it here</p>
-        <div style="display:flex;gap:8px;">
-            <input type="url" id="bibleUrlInput" placeholder="https://example.com/menu.pdf"
-                style="flex:1;height:40px;border:1.5px solid var(--border);border-radius:10px;padding:0 12px;font-size:13px;background:var(--bg);color:var(--text);">
-            <button class="btn btn-primary squishy" onclick="loadBiblePdf()" style="height:40px;padding:0 16px;">Load</button>
-        </div>
-    </div>`;
+function nextRecipeId() {
+    return recipes.reduce(function(mx, r) { return Math.max(mx, r.id || 0); }, 0) + 1;
+}
+
+// ── Bible (IndexedDB + pdf.js) ──
+
+function openBibleDB() {
+    return new Promise(function(resolve, reject) {
+        var req = indexedDB.open('aqueous_bible', 1);
+        req.onupgradeneeded = function() { req.result.createObjectStore('files'); };
+        req.onsuccess = function() { resolve(req.result); };
+        req.onerror = function() { reject(req.error); };
+    });
+}
+
+function saveBiblePdf(arrayBuffer) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('files', 'readwrite');
+            tx.objectStore('files').put(arrayBuffer, 'bible_pdf');
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { reject(tx.error); };
+        });
+    });
 }
 
 function loadBiblePdf() {
-    const input = document.getElementById('bibleUrlInput');
-    if (!input) return;
-    const url = input.value.trim();
-    if (!url) { showToast('Enter a PDF URL'); return; }
-    localStorage.setItem('aqueous_bible_url', url);
-    panelDirty.library = true;
-    renderPanel('library');
-    showToast('Bible PDF loaded');
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('files', 'readonly');
+            var req = tx.objectStore('files').get('bible_pdf');
+            req.onsuccess = function() { resolve(req.result || null); };
+            req.onerror = function() { reject(req.error); };
+        });
+    });
 }
 
-function renderRecipesContent() {
-    const cats = ['all'];
-    recipes.forEach(function(r) {
-        if (r.category && !cats.includes(r.category)) cats.push(r.category);
-    });
+function renderBibleContent() {
+    return '<div class="bible-upload-row">' +
+        '<button class="btn btn-primary squishy" onclick="triggerBibleUpload()" style="flex:1;height:40px;font-size:13px;">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+        'Upload PDF</button>' +
+        '<input type="file" id="bibleFileInput" accept=".pdf" style="display:none" onchange="handleBibleUpload(this)">' +
+        '</div>' +
+        '<div id="bibleViewerContainer" class="bible-canvas-container"></div>';
+}
 
-    const filterHtml = cats.map(function(cat) {
-        const active = recipeFilterCat === cat ? ' active' : '';
-        const label = cat === 'all' ? 'All' : cat;
+function triggerBibleUpload() {
+    handleClick();
+    document.getElementById('bibleFileInput').click();
+}
+
+function handleBibleUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    if (file.type !== 'application/pdf') { showToast('Please select a PDF file'); return; }
+    var reader = new FileReader();
+    reader.onload = function() {
+        saveBiblePdf(reader.result).then(function() {
+            showToast('Bible PDF saved');
+            renderBiblePages(reader.result);
+        });
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function renderBiblePages(arrayBuffer) {
+    var container = document.getElementById('bibleViewerContainer');
+    if (!container) return;
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading PDF...</div>';
+
+    if (typeof pdfjsLib === 'undefined') {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">PDF viewer not loaded. Check your connection.</div>';
+        return;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
+        container.innerHTML = '';
+        var numPages = pdf.numPages;
+        var renderPage = function(pageNum) {
+            if (pageNum > numPages) return;
+            pdf.getPage(pageNum).then(function(page) {
+                var vw = container.clientWidth || 360;
+                var viewport = page.getViewport({ scale: 1 });
+                var scale = vw / viewport.width;
+                var scaled = page.getViewport({ scale: scale * 2 });
+                var canvas = document.createElement('canvas');
+                canvas.width = scaled.width;
+                canvas.height = scaled.height;
+                canvas.style.width = vw + 'px';
+                canvas.style.height = (vw * scaled.height / scaled.width) + 'px';
+                container.appendChild(canvas);
+                page.render({ canvasContext: canvas.getContext('2d'), viewport: scaled }).promise.then(function() {
+                    renderPage(pageNum + 1);
+                });
+            });
+        };
+        renderPage(1);
+    }).catch(function() {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">Failed to load PDF</div>';
+    });
+}
+
+function initBibleViewer() {
+    loadBiblePdf().then(function(data) {
+        if (data) renderBiblePages(data);
+    }).catch(function() {});
+}
+
+// ── Recipes ──
+
+function renderRecipesContent() {
+    var cats = ['all'];
+    recipes.forEach(function(r) { if (r.category && !cats.includes(r.category)) cats.push(r.category); });
+
+    var filterHtml = cats.map(function(cat) {
+        var active = recipeFilterCat === cat ? ' active' : '';
+        var label = cat === 'all' ? 'All' : cat;
         return '<button class="recipe-filter-chip' + active + '" onclick="filterRecipes(\'' + cat + '\')">' + label + '</button>';
     }).join('');
 
-    const filtered = recipeFilterCat === 'all' ? recipes : recipes.filter(function(r) { return r.category === recipeFilterCat; });
+    var filtered = recipeFilterCat === 'all' ? recipes : recipes.filter(function(r) { return r.category === recipeFilterCat; });
 
-    let cardsHtml = '';
+    var cardsHtml = '';
     filtered.forEach(function(recipe) {
-        const esc = recipe.name.replace(/'/g, "\\'");
-
-        let ingRows = '';
+        var ingRows = '';
         if (recipe.ingredients.length > 0) {
             recipe.ingredients.forEach(function(ing) {
-                const qtyStr = ing.qty != null ? ing.qty : '-';
-                const unitStr = ing.unit || '-';
-                ingRows += '<tr><td>' + ing.name + '</td><td>' + qtyStr + '</td><td>' + unitStr + '</td></tr>';
+                ingRows += '<tr><td>' + ing.name + '</td><td>' + (ing.qty != null ? ing.qty : '-') + '</td><td>' + (ing.unit || '-') + '</td></tr>';
             });
         }
 
-        let stepsHtml = '';
-        if (recipe.steps.length > 0) {
-            stepsHtml = '<div class="recipe-section-title">Preparation</div>';
+        var stepsHtml = '<div class="recipe-section-title">Preparation</div>';
+        if (recipe.steps && recipe.steps.length > 0) {
             recipe.steps.forEach(function(step, i) {
                 stepsHtml += '<div class="recipe-step"><span class="recipe-step-num">' + (i + 1) + '.</span>' + step + '</div>';
             });
         } else {
-            stepsHtml = '<div class="recipe-section-title">Preparation</div><div class="recipe-pending">Pending (to be added by chef)</div>';
+            stepsHtml += '<div class="recipe-pending">Pending (to be added by chef)</div>';
         }
 
-        let subHtml = '';
+        var subHtml = '';
         if (recipe.subRecipes && recipe.subRecipes.length > 0) {
             recipe.subRecipes.forEach(function(sub) {
-                let subIngRows = '';
-                if (sub.ingredients) {
-                    sub.ingredients.forEach(function(ing) {
-                        const qtyStr = ing.qty != null ? ing.qty : '-';
-                        subIngRows += '<tr><td>' + ing.name + '</td><td>' + qtyStr + '</td><td>' + (ing.unit || '-') + '</td></tr>';
-                    });
-                }
-                subHtml += '<div class="recipe-sub-section"><div class="recipe-sub-title">' + sub.name + '</div><table class="recipe-ing-table">' + subIngRows + '</table></div>';
+                var subRows = '';
+                if (sub.ingredients) sub.ingredients.forEach(function(ing) {
+                    subRows += '<tr><td>' + ing.name + '</td><td>' + (ing.qty != null ? ing.qty : '-') + '</td><td>' + (ing.unit || '-') + '</td></tr>';
+                });
+                subHtml += '<div class="recipe-sub-section"><div class="recipe-sub-title">' + sub.name + '</div><table class="recipe-ing-table">' + subRows + '</table></div>';
             });
         }
+
+        var catOptions = '<option' + (recipe.category === 'Breakfast' ? ' selected' : '') + '>Breakfast</option>' +
+            '<option' + (recipe.category === 'Lunch' ? ' selected' : '') + '>Lunch</option>' +
+            '<option' + (recipe.category === 'Dinner' ? ' selected' : '') + '>Dinner</option>';
 
         cardsHtml += '<div class="recipe-card" id="recipe-' + recipe.id + '">' +
             '<div class="recipe-card-header" onclick="toggleRecipeCard(' + recipe.id + ')">' +
                 '<span class="recipe-card-title">' + recipe.name + '</span>' +
-                '<span class="recipe-card-category">' + recipe.category + '</span>' +
+                '<select class="recipe-card-category recipe-cat-pill" onclick="event.stopPropagation()" onchange="changeRecipeCat(' + recipe.id + ', this.value)">' + catOptions + '</select>' +
                 '<svg class="recipe-card-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>' +
             '</div>' +
             '<div class="recipe-card-body"><div class="recipe-card-content">' +
-                (recipe.ingredients.length > 0 ? '<div class="recipe-section-title">Ingredients</div><table class="recipe-ing-table">' + ingRows + '</table>' : '<div class="recipe-section-title">Ingredients</div><div class="recipe-pending">Pending (to be added by chef)</div>') +
-                subHtml +
-                stepsHtml +
+                (recipe.ingredients.length > 0 ? '<div class="recipe-section-title">Ingredients</div><table class="recipe-ing-table">' + ingRows + '</table>' : '<div class="recipe-section-title">Ingredients</div><div class="recipe-pending">Pending</div>') +
+                subHtml + stepsHtml +
+                '<div class="recipe-action-row">' +
+                    '<button class="recipe-action-btn" onclick="showEditRecipeModal(' + recipe.id + ')" title="Edit"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>' +
+                    '<button class="recipe-action-btn delete" onclick="confirmDeleteRecipe(' + recipe.id + ')" title="Delete"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>' +
+                '</div>' +
             '</div></div>' +
         '</div>';
     });
 
     return '<div class="recipe-filter-row">' + filterHtml + '</div>' +
-        '<button class="recipe-add-btn" onclick="showAddRecipeModal()">+ Add Recipe</button>' +
+        '<div class="recipe-add-row">' +
+            '<button class="recipe-add-btn" onclick="showAddRecipeModal()">+ Create</button>' +
+            '<button class="recipe-add-btn" onclick="triggerRecipeFileUpload()">+ Upload File</button>' +
+        '</div>' +
+        '<input type="file" id="recipeFileInput" accept=".pdf,.docx" style="display:none" onchange="handleRecipeFileUpload(this)">' +
         cardsHtml;
 }
 
 function toggleRecipeCard(id) {
     handleClick();
-    const card = document.getElementById('recipe-' + id);
+    var card = document.getElementById('recipe-' + id);
     if (card) card.classList.toggle('open');
 }
 
@@ -2385,81 +2432,268 @@ function filterRecipes(cat) {
     renderPanel('library');
 }
 
-function showAddRecipeModal() {
-    handleClick();
-    const existing = document.getElementById('modalAddRecipe');
-    if (existing) existing.remove();
-
-    const modal = document.createElement('div');
-    modal.id = 'modalAddRecipe';
-    modal.className = 'modal show';
-    modal.innerHTML = `
-        <div class="modal-content" style="text-align:left;max-width:380px;">
-            <div class="modal-header">New Recipe</div>
-            <div class="te-section-label">NAME</div>
-            <input type="text" id="newRecipeName" placeholder="Dish name" style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:10px;padding:0 12px;font-size:14px;font-weight:700;background:var(--bg);color:var(--text);margin-bottom:12px;box-sizing:border-box;">
-            <div class="te-section-label">CATEGORY</div>
-            <select id="newRecipeCat" style="width:100%;height:42px;border:1.5px solid var(--border);border-radius:10px;padding:0 12px;font-size:14px;font-weight:700;background:var(--bg);color:var(--text);margin-bottom:14px;box-sizing:border-box;">
-                <option value="Dinner">Dinner</option>
-                <option value="Lunch">Lunch</option>
-                <option value="Breakfast">Breakfast</option>
-            </select>
-            <div class="btn-group">
-                <button class="btn btn-secondary squishy" onclick="document.getElementById('modalAddRecipe').remove()">Cancel</button>
-                <button class="btn btn-primary squishy" onclick="addNewRecipe()">Add</button>
-            </div>
-        </div>`;
-    document.body.appendChild(modal);
-    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
-    setTimeout(function() { document.getElementById('newRecipeName').focus(); }, 100);
+function changeRecipeCat(id, newCat) {
+    var r = recipes.find(function(x) { return x.id === id; });
+    if (r) { r.category = newCat; saveRecipes(); showToast(r.name + ': ' + newCat); }
 }
 
-function addNewRecipe() {
-    const nameEl = document.getElementById('newRecipeName');
-    const catEl = document.getElementById('newRecipeCat');
-    if (!nameEl) return;
-    const name = nameEl.value.trim();
-    if (!name) { showToast('Enter a recipe name'); return; }
-    const cat = catEl ? catEl.value : 'Dinner';
-    const maxId = recipes.reduce(function(max, r) { return Math.max(max, r.id || 0); }, 0);
-    recipes.push({
-        id: maxId + 1,
-        name: name,
-        category: cat,
-        ingredients: [],
-        steps: [],
-        subRecipes: []
-    });
+function confirmDeleteRecipe(id) {
+    handleClick();
+    var r = recipes.find(function(x) { return x.id === id; });
+    if (!r) return;
+    var modal = document.createElement('div');
+    modal.className = 'modal show';
+    modal.innerHTML = '<div class="modal-content" style="text-align:center;max-width:320px;">' +
+        '<div class="modal-header">Delete Recipe</div>' +
+        '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Delete "' + r.name + '"?</p>' +
+        '<div class="btn-group">' +
+            '<button class="btn btn-secondary squishy" onclick="this.closest(\'.modal\').remove()">Cancel</button>' +
+            '<button class="btn squishy" style="background:var(--high);color:#fff;" onclick="deleteRecipe(' + id + '); this.closest(\'.modal\').remove()">Delete</button>' +
+        '</div></div>';
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function deleteRecipe(id) {
+    recipes = recipes.filter(function(r) { return r.id !== id; });
     saveRecipes();
-    const modal = document.getElementById('modalAddRecipe');
-    if (modal) modal.remove();
     panelDirty.library = true;
     renderPanel('library');
-    showToast('Recipe added: ' + name);
+    showToast('Recipe deleted');
+}
+
+// ── Add / Edit Recipe Modal ──
+
+function showAddRecipeModal() {
+    handleClick();
+    showRecipeEditor(null);
+}
+
+function showEditRecipeModal(id) {
+    handleClick();
+    var r = recipes.find(function(x) { return x.id === id; });
+    if (r) showRecipeEditor(r);
+}
+
+function showRecipeEditor(recipe) {
+    var existing = document.getElementById('modalRecipeEdit');
+    if (existing) existing.remove();
+
+    var isNew = !recipe;
+    var name = recipe ? recipe.name : '';
+    var cat = recipe ? recipe.category : 'Dinner';
+    var ings = recipe && recipe.ingredients ? recipe.ingredients : [];
+    var stepsText = recipe && recipe.steps ? recipe.steps.join('\n') : '';
+    var id = recipe ? recipe.id : 0;
+
+    var ingRowsHtml = '';
+    ings.forEach(function(ing, i) {
+        ingRowsHtml += recipeIngEditRow(i, ing.name, ing.qty, ing.unit);
+    });
+    if (ings.length === 0) ingRowsHtml = recipeIngEditRow(0, '', '', '');
+
+    var catOpts = '<option' + (cat === 'Dinner' ? ' selected' : '') + '>Dinner</option>' +
+        '<option' + (cat === 'Lunch' ? ' selected' : '') + '>Lunch</option>' +
+        '<option' + (cat === 'Breakfast' ? ' selected' : '') + '>Breakfast</option>';
+
+    var modal = document.createElement('div');
+    modal.id = 'modalRecipeEdit';
+    modal.className = 'modal show';
+    modal.dataset.recipeId = id;
+    modal.innerHTML = '<div class="modal-content" style="text-align:left;max-width:400px;max-height:85vh;overflow-y:auto;">' +
+        '<div class="modal-header">' + (isNew ? 'New Recipe' : 'Edit Recipe') + '</div>' +
+        '<div class="te-section-label">NAME</div>' +
+        '<input type="text" id="reNameInput" class="recipe-edit-input" value="' + name.replace(/"/g, '&quot;') + '" placeholder="Dish name">' +
+        '<div class="te-section-label">CATEGORY</div>' +
+        '<select id="reCatInput" class="recipe-edit-input" style="height:40px;">' + catOpts + '</select>' +
+        '<div class="te-section-label">INGREDIENTS</div>' +
+        '<div id="reIngRows">' + ingRowsHtml + '</div>' +
+        '<button class="btn btn-secondary squishy" onclick="addRecipeIngRow()" style="width:100%;margin-bottom:12px;font-size:12px;">+ Add Ingredient</button>' +
+        '<div class="te-section-label">PREPARATION</div>' +
+        '<textarea id="reStepsInput" class="recipe-edit-textarea" placeholder="One step per line...">' + stepsText + '</textarea>' +
+        '<div class="btn-group">' +
+            '<button class="btn btn-secondary squishy" onclick="document.getElementById(\'modalRecipeEdit\').remove()">Cancel</button>' +
+            '<button class="btn btn-primary squishy" onclick="saveRecipeFromEditor()">Save</button>' +
+        '</div>' +
+    '</div>';
+    document.body.appendChild(modal);
+    modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+}
+
+function recipeIngEditRow(idx, name, qty, unit) {
+    return '<div class="recipe-ing-edit-row">' +
+        '<input type="text" class="recipe-edit-input ing-name" placeholder="Ingredient" value="' + (name || '').replace(/"/g, '&quot;') + '">' +
+        '<input type="number" class="recipe-edit-input ing-qty" placeholder="Qty" value="' + (qty != null ? qty : '') + '" inputmode="decimal">' +
+        '<input type="text" class="recipe-edit-input ing-unit" placeholder="Unit" value="' + (unit || '').replace(/"/g, '&quot;') + '">' +
+        '<button class="recipe-ing-remove" onclick="this.parentElement.remove()">-</button>' +
+    '</div>';
+}
+
+function addRecipeIngRow() {
+    handleClick();
+    var container = document.getElementById('reIngRows');
+    if (!container) return;
+    var count = container.children.length;
+    container.insertAdjacentHTML('beforeend', recipeIngEditRow(count, '', '', ''));
+}
+
+function saveRecipeFromEditor() {
+    var modal = document.getElementById('modalRecipeEdit');
+    if (!modal) return;
+    var name = document.getElementById('reNameInput').value.trim();
+    if (!name) { showToast('Enter a recipe name'); return; }
+    var cat = document.getElementById('reCatInput').value;
+    var stepsRaw = document.getElementById('reStepsInput').value.trim();
+    var steps = stepsRaw ? stepsRaw.split('\n').map(function(s) { return s.trim(); }).filter(function(s) { return s.length > 0; }) : [];
+
+    var ings = [];
+    var rows = document.querySelectorAll('#reIngRows .recipe-ing-edit-row');
+    rows.forEach(function(row) {
+        var inputs = row.querySelectorAll('input');
+        var ingName = inputs[0].value.trim();
+        if (!ingName) return;
+        var qty = inputs[1].value.trim() ? parseFloat(inputs[1].value) : null;
+        var unit = inputs[2].value.trim() || '-';
+        ings.push({ name: ingName, qty: qty, unit: unit });
+    });
+
+    var recipeId = parseInt(modal.dataset.recipeId) || 0;
+    if (recipeId > 0) {
+        var r = recipes.find(function(x) { return x.id === recipeId; });
+        if (r) { r.name = name; r.category = cat; r.ingredients = ings; r.steps = steps; }
+    } else {
+        recipes.push({ id: nextRecipeId(), name: name, category: cat, ingredients: ings, steps: steps, subRecipes: [] });
+    }
+    saveRecipes();
+    modal.remove();
+    panelDirty.library = true;
+    renderPanel('library');
+    showToast(recipeId > 0 ? 'Recipe updated' : 'Recipe added');
+}
+
+// ── Recipe File Upload (.docx / .pdf) ──
+
+function triggerRecipeFileUpload() {
+    handleClick();
+    document.getElementById('recipeFileInput').click();
+}
+
+function handleRecipeFileUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    var file = input.files[0];
+    var ext = file.name.split('.').pop().toLowerCase();
+
+    if (ext === 'docx') {
+        var reader = new FileReader();
+        reader.onload = function() { parseDocxRecipe(reader.result, file.name); };
+        reader.readAsArrayBuffer(file);
+    } else if (ext === 'pdf') {
+        var reader2 = new FileReader();
+        reader2.onload = function() { parsePdfRecipe(reader2.result, file.name); };
+        reader2.readAsArrayBuffer(file);
+    } else {
+        showToast('Supported: .docx or .pdf');
+    }
+    input.value = '';
+}
+
+function parseDocxRecipe(arrayBuffer, fileName) {
+    if (typeof mammoth === 'undefined') { showToast('Docx parser not loaded'); return; }
+    mammoth.extractRawText({ arrayBuffer: arrayBuffer }).then(function(result) {
+        createRecipeFromText(result.value, fileName);
+    }).catch(function() {
+        showToast('Could not read .docx file');
+    });
+}
+
+function parsePdfRecipe(arrayBuffer, fileName) {
+    if (typeof pdfjsLib === 'undefined') { showToast('PDF parser not loaded'); return; }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
+        var texts = [];
+        var getPage = function(n) {
+            if (n > pdf.numPages) {
+                createRecipeFromText(texts.join('\n'), fileName);
+                return;
+            }
+            pdf.getPage(n).then(function(page) {
+                page.getTextContent().then(function(content) {
+                    texts.push(content.items.map(function(item) { return item.str; }).join(' '));
+                    getPage(n + 1);
+                });
+            });
+        };
+        getPage(1);
+    }).catch(function() { showToast('Could not read PDF'); });
+}
+
+function createRecipeFromText(text, fileName) {
+    var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
+    var name = fileName.replace(/\.(docx|pdf)$/i, '').replace(/[_-]/g, ' ');
+    if (lines.length > 0 && lines[0].length < 80) name = lines[0];
+
+    var ingredients = [];
+    var steps = [];
+    var inIngredients = false;
+    var inSteps = false;
+
+    lines.forEach(function(line) {
+        var lower = line.toLowerCase();
+        if (lower.match(/ingredient/)) { inIngredients = true; inSteps = false; return; }
+        if (lower.match(/preparation|instruction|direction|method|procedure/)) { inSteps = true; inIngredients = false; return; }
+
+        if (inIngredients) {
+            var parts = line.split(/\t|(?:\s{2,})|\|/).map(function(p) { return p.trim(); }).filter(function(p) { return p; });
+            if (parts.length >= 2) {
+                var ingName = parts[0];
+                var qty = parseFloat(parts[1]) || null;
+                var unit = parts.length >= 3 ? parts[2] : '-';
+                ingredients.push({ name: ingName, qty: qty, unit: unit });
+            } else if (parts.length === 1 && parts[0].length > 0) {
+                var match = parts[0].match(/^([\d.]+)\s*(\w+)?\s+(.+)/);
+                if (match) {
+                    ingredients.push({ name: match[3], qty: parseFloat(match[1]) || null, unit: match[2] || '-' });
+                } else {
+                    ingredients.push({ name: parts[0], qty: null, unit: '-' });
+                }
+            }
+        } else if (inSteps) {
+            var cleaned = line.replace(/^\d+[\.\)\-]\s*/, '');
+            if (cleaned.length > 2) steps.push(cleaned);
+        }
+    });
+
+    if (ingredients.length === 0 && steps.length === 0 && lines.length > 1) {
+        steps = lines.slice(1);
+    }
+
+    recipes.push({ id: nextRecipeId(), name: name, category: 'Dinner', ingredients: ingredients, steps: steps, subRecipes: [] });
+    saveRecipes();
+    panelDirty.library = true;
+    renderPanel('library');
+    showToast('Recipe imported: ' + name);
 }
 
 function renderLibrary(container) {
-    let content = '';
+    var content = '';
     if (librarySubTab === 'bible') {
         content = renderBibleContent();
     } else if (librarySubTab === 'recipes') {
         content = renderRecipesContent();
     } else if (librarySubTab === 'tempLogs') {
-        content = `<div class="empty-state">
-            <div class="empty-state-icon">🌡️</div>
-            <p>Temp Logs</p>
-            <p class="empty-sub">Temperature sheets, random product selection, digital signature</p>
-            <button class="btn btn-primary squishy" disabled>Coming Soon</button>
-        </div>`;
+        content = '<div class="empty-state"><div class="empty-state-icon">🌡️</div><p>Temp Logs</p><p class="empty-sub">Coming Soon</p></div>';
     }
 
-    container.innerHTML = `
-        <div class="sub-pill-row">
-            <button class="day-chip ${librarySubTab === 'bible' ? 'active' : ''}" onclick="switchLibrarySubTab('bible')">Bible</button>
-            <button class="day-chip ${librarySubTab === 'recipes' ? 'active' : ''}" onclick="switchLibrarySubTab('recipes')">Recipes</button>
-            <button class="day-chip ${librarySubTab === 'tempLogs' ? 'active' : ''}" onclick="switchLibrarySubTab('tempLogs')">Temp Logs</button>
-        </div>
-        <div style="padding:0 20px 100px;">${content}</div>`;
+    container.innerHTML = '<div class="sub-pill-row">' +
+            '<button class="day-chip ' + (librarySubTab === 'bible' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'bible\')">Bible</button>' +
+            '<button class="day-chip ' + (librarySubTab === 'recipes' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'recipes\')">Recipes</button>' +
+            '<button class="day-chip ' + (librarySubTab === 'tempLogs' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'tempLogs\')">Temp Logs</button>' +
+        '</div>' +
+        '<div style="padding:0 20px 100px;">' + content + '</div>';
+
+    if (librarySubTab === 'bible') {
+        setTimeout(function() { initBibleViewer(); }, 50);
+    }
 }
 
 // ── Day Checklists (per-day independent checklists) ──
