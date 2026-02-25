@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 164;
+const APP_BUILD = 165;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2327,6 +2327,255 @@ function getDefaultRecipes() {
             { name: 'Coconut milk', qty: 5678, unit: 'ml' }, { name: 'Tamari soy sauce', qty: 355, unit: 'ml' },
             { name: 'Cane sugar', qty: 300, unit: 'gram' }, { name: 'Kaffir lime leaf', qty: 2, unit: 'cup' }
         ]}] },
+        // ── Dinner (Aqueous) — New Menu ──
+        { id: 300, name: 'Aka Yuzu Kosho Aioli', category: 'Dinner', ingredients: [
+            { name: 'Aka Yuzu kosho', qty: 80, unit: 'gram' }, { name: 'Vegan mayonnaise', qty: 500, unit: 'gram' }
+        ], steps: ['All ingredients incorporated'], subRecipes: [] },
+        { id: 301, name: 'Balsamic Pearls', category: 'Dinner', ingredients: [
+            { name: 'High-quality balsamic vinegar', qty: 200, unit: 'gram' }, { name: 'Sodium alginate', qty: 2, unit: 'gram' },
+            { name: 'Cold water (for calcium bath)', qty: 500, unit: 'gram' }, { name: 'Calcium chloride', qty: 5, unit: 'gram' }
+        ], steps: ['Blend balsamic + sodium alginate using immersion blender.', 'Blend fully until smooth (no powder specks).', 'Rest 20-30 minutes to remove air bubbles.', 'Strain through chinois for ultra-fine pearls.', 'Fill syringe or squeeze bottle with balsamic mixture.', 'Drop small droplets into calcium bath.', 'Let sit 45-60 seconds.', 'Remove pearls with slotted spoon.', 'Rinse in clean water bath to stop reaction.'], subRecipes: [
+            { name: 'Calcium Bath', ingredients: [
+                { name: 'Cold water', qty: 500, unit: 'gram' }, { name: 'Calcium chloride', qty: 5, unit: 'gram' }
+        ] }] },
+        { id: 302, name: 'Branzino', category: 'Dinner', ingredients: [
+            { name: 'Forbidden rice', qty: 180, unit: 'gram' }, { name: 'Bubu arare', qty: 10, unit: 'gram' },
+            { name: 'Szechuan pepper', qty: null, unit: '-' }, { name: 'Ginger', qty: 20, unit: 'gram' },
+            { name: 'Branzino', qty: 170, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 303, name: 'Burnt Cheesecake', category: 'Dinner', ingredients: [
+            { name: 'Caramel', qty: null, unit: '-' }, { name: 'Raspberry', qty: null, unit: '-' },
+            { name: 'Tonka cream', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 304, name: 'Caprese Burrata (Dinner)', category: 'Dinner', ingredients: [], steps: ['Mix yuzu with simple syrup, hollow out the inside of the tomato from the bottom, and marinate it in the liquid for 8 hours.', 'For the yuzu glaze, put all the ingredients into a pot. Once it comes to boiling, remove from heat, blend until smooth, cool it down, and transfer to a squeeze bottle.', 'Stuff the marinated tomato with burrata, then dress the top of the tomato with the yuzu glaze.', 'Place basil citrus dressing in the center of the plate.', 'Set the dressed tomato on top of arugula dressed with olive oil.', 'Arrange cherry tomatoes around the main tomato.', 'Garnish with edible flowers and balsamic pearls.'], subRecipes: [
+            { name: 'Yuzu Marination', ingredients: [
+                { name: 'Yuzu', qty: 500, unit: 'gram' }, { name: 'Simple syrup', qty: 830, unit: 'gram' }
+            ] },
+            { name: 'Yuzu Glaze', ingredients: [
+                { name: 'Sugar', qty: 1, unit: 'pint' }, { name: 'Rice vinegar', qty: 3, unit: 'cup' },
+                { name: 'Ginger', qty: 15, unit: 'gram' }, { name: 'Thai chili', qty: 2, unit: 'ea' },
+                { name: 'Yuzu', qty: 1, unit: 'cup' }, { name: 'Agar agar', qty: 10, unit: 'gram' }
+            ] },
+            { name: 'Caprese Burrata Plating', ingredients: [
+                { name: '5x6 yellow tomato', qty: 1, unit: 'ea' }, { name: 'Burrata 2oz', qty: 1, unit: 'ea' },
+                { name: 'Arugula', qty: 20, unit: 'gram' }, { name: 'Basil-citrus vinaigrette', qty: 42, unit: 'gram' },
+                { name: 'Balsamic pearls', qty: 5, unit: 'gram' }
+        ] }] },
+        { id: 305, name: 'Caramelized Pineapple', category: 'Dinner', ingredients: [
+            { name: 'Rum', qty: 750, unit: 'ml' }, { name: 'Cane sugar', qty: 1000, unit: 'gram' },
+            { name: 'Pineapple', qty: 3, unit: 'ea' }, { name: 'Whole cloves', qty: 4, unit: 'gram' },
+            { name: 'Star anise', qty: 5, unit: 'gram' }, { name: 'Cardamon green crushed', qty: 4, unit: 'gram' },
+            { name: 'Ground nutmeg', qty: 5, unit: 'gram' }, { name: 'Salt', qty: 15, unit: 'gram' },
+            { name: 'Orange juice', qty: 250, unit: 'ml' }, { name: 'Apple cider vinegar', qty: 125, unit: 'ml' }
+        ], steps: ['Flame the rum to reduce it by half. Add the sugar and stir until fully dissolved.', 'Add the pineapple along with all ingredients except the apple cider vinegar.', 'Cook until the mixture turns brown and caramelize, then add the apple cider vinegar.'], subRecipes: [] },
+        { id: 306, name: 'Caviar 30g, 50g', category: 'Dinner', ingredients: [
+            { name: 'Ossetra caviar 30g', qty: 30, unit: 'gram' }, { name: 'Ossetra caviar 50g', qty: 50, unit: 'gram' },
+            { name: 'Blini', qty: 8, unit: 'ea' }, { name: 'Shallot ciseler', qty: 20, unit: 'gram' },
+            { name: 'Egg white', qty: 1, unit: 'ea' }, { name: 'Egg yolk', qty: 1, unit: 'ea' },
+            { name: 'Chive', qty: 10, unit: 'gram' }, { name: 'Creme fraiche', qty: 20, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 307, name: 'Charred Octopus', category: 'Dinner', ingredients: [], steps: [], subRecipes: [] },
+        { id: 308, name: 'Chicken', category: 'Dinner', ingredients: [
+            { name: 'Pomme puree', qty: 113, unit: 'gram' }, { name: 'Caramelized pearl onion', qty: 15, unit: 'gram' },
+            { name: 'Wild mushroom marsala sauce', qty: 60, unit: 'ml' }, { name: 'Chicken breast', qty: 200, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 309, name: 'Chilean Sea Bass', category: 'Dinner', ingredients: [], steps: [], subRecipes: [] },
+        { id: 310, name: 'Chilean Seabass', category: 'Dinner', ingredients: [
+            { name: 'Mushroom rice', qty: 180, unit: 'gram' }, { name: 'Green bean & pea tendrils salad', qty: 10, unit: 'gram' },
+            { name: 'Yuzu miso seabass', qty: 198, unit: 'gram' }
+        ], steps: ['Thinly spread the mushroom rice onto the clay plate and heat until crispy and sizzling.', 'Cook the seabass at 400F for 8 minutes.', 'Place the cooked seabass on the heated plate and add the green bean & pea tendril salad.', 'Add the seared maitake on the side.', 'Serve the plate on a napkin.'], subRecipes: [
+            { name: 'Mushroom Rice (30 Portions)', ingredients: [
+                { name: 'Shitake', qty: null, unit: '-' }, { name: 'Shimeji (beech mushroom)', qty: 50, unit: 'gram' },
+                { name: 'Maitake (hen of the woods)', qty: 15, unit: 'gram' }, { name: 'Trumpet mushroom', qty: null, unit: '-' },
+                { name: 'Rice', qty: 180, unit: 'gram' }
+        ] }] },
+        { id: 311, name: 'Forbidden Rice', category: 'Dinner', ingredients: [], steps: [], subRecipes: [] },
+        { id: 312, name: 'Gambas Dressing', category: 'Dinner', ingredients: [
+            { name: 'Brown sugar', qty: 113, unit: 'gram' }, { name: 'Fish sauce', qty: 336, unit: 'gram' },
+            { name: 'Gochujang chili garlic', qty: 213, unit: 'gram' }, { name: 'Fresh pressed lime juice', qty: 360, unit: 'gram' }
+        ], steps: ['Combine all ingredients and whisk thoroughly until the sugar is completely dissolved and the mixture is smooth.'], subRecipes: [] },
+        { id: 313, name: 'Gambas al Gochujang', category: 'Dinner', ingredients: [
+            { name: 'Jumbo shrimp', qty: 6, unit: 'ea' }, { name: 'Gambas dressing', qty: 3, unit: 'fl.oz' },
+            { name: 'Arugula', qty: null, unit: '-' }, { name: 'Mint', qty: null, unit: '-' },
+            { name: 'Thai basil', qty: null, unit: '-' }, { name: 'Lemongrass chop', qty: null, unit: '-' }
+        ], steps: ['Pan-sear the shrimp until cooked through and lightly golden.', 'Toss the shrimp with the gambas dressing.', 'Prepare the herb salad and lightly dress it with lime juice.', 'Place the shrimp on the plate and top with the dressed herb salad.', 'Garnish with lemongrass and crisp shallots.'], subRecipes: [] },
+        { id: 314, name: 'Gochujang Chili Garlic', category: 'Dinner', ingredients: [
+            { name: 'Gochujang', qty: 500, unit: 'gram' }, { name: 'Gochugaru', qty: 261, unit: 'gram' },
+            { name: 'Tomato paste', qty: 300, unit: 'gram' }, { name: 'Spicy sesame oil', qty: 250, unit: 'ml' },
+            { name: 'Sesame oil', qty: 250, unit: 'ml' }, { name: 'Blended oil', qty: 350, unit: 'ml' },
+            { name: 'Crunchy garlic', qty: 1100, unit: 'gram' }, { name: 'Onion powder', qty: 50, unit: 'gram' },
+            { name: 'Garlic powder', qty: 50, unit: 'gram' }, { name: 'Tamari soy sauce', qty: 100, unit: 'ml' },
+            { name: 'Fish sauce', qty: 75, unit: 'ml' }
+        ], steps: ['Heat the blended oil, then add the tomato paste and gochujang. Stir and allow it to caramelize.', 'Add the garlic powder, onion powder, and gochugaru, stirring to incorporate.', 'Turn off the heat and adjust the seasoning by adding a smaller amount of the remaining ingredients as needed.'], subRecipes: [] },
+        { id: 315, name: 'Hotate Fume a la Truffle', category: 'Dinner', ingredients: [
+            { name: 'U8 Hokkaido scallop', qty: 54, unit: 'gram' }, { name: 'Truffle', qty: 5, unit: 'gram' },
+            { name: 'Seabass', qty: 54, unit: 'gram' }, { name: 'Green mustard', qty: 15, unit: 'gram' },
+            { name: 'Sake', qty: 35, unit: 'ml' }, { name: 'Herb oil', qty: 60, unit: 'ml' },
+            { name: 'Butter', qty: 30, unit: 'gram' }, { name: 'Black peppercorn', qty: 1, unit: 'gram' },
+            { name: 'Shallot', qty: 10, unit: 'gram' }, { name: 'Lemon', qty: 0.25, unit: 'ea' },
+            { name: 'Daikon radish', qty: 5, unit: 'gram' }, { name: 'Carrot', qty: 5, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 316, name: 'Kabocha Creme Brulee', category: 'Dinner', ingredients: [], steps: ['Gently flame the rum. Add sugar and stir until fully dissolved.', 'Add miso and whisk until completely incorporated. Place the kabocha in a vacuum sealer bag.', 'Add the miso-rum mixture to the bag. Seal, and sous vide at 86C for 1 hour.', 'After cooking, shock in ice water to cool down completely, then blend until smooth.', 'Strain through a fine mesh sieve to ensure no lumps remain.', 'Preheat oven to 325F (163C).', 'In a pot, combine heavy cream and raw sugar. Heat gently until the sugar dissolves. Do not bring to a boil.', 'Whisk together egg yolks and kabocha puree until smooth.', 'Slowly pour the warm cream mixture over the yolk-kabocha mixture, whisking continuously to temper.', 'Strain the custard through a fine strainer to remove any lumps.', 'Portion 200ml of custard mixture into each china bowl. Use a blowtorch to remove air bubbles.', 'Place bowls into a 400 hotel pan and add 500ml of water to create a water bath.', 'Cover the pan with double aluminum foil.', 'Bake at 325F for 18 minutes and 30 seconds with pan speed at 3.', 'Remove from oven, cool completely, then refrigerate until set.', 'Before serving, sprinkle sugar evenly and caramelize with a torch.'], subRecipes: [
+            { name: 'Kabocha Miso Puree', ingredients: [
+                { name: 'Kabocha', qty: 1000, unit: 'gram' }, { name: 'Sugar', qty: 500, unit: 'gram' },
+                { name: 'Rum', qty: 200, unit: 'gram' }, { name: 'Miso', qty: 250, unit: 'gram' }
+            ] },
+            { name: 'Kabocha Creme Brulee Custard', ingredients: [
+                { name: 'Kabocha puree', qty: 450, unit: 'gram' }, { name: 'Heavy cream', qty: 2, unit: 'qt' },
+                { name: 'Raw sugar', qty: 40, unit: 'gram' }, { name: 'Yolk', qty: 18, unit: 'ea' },
+                { name: 'Sugar', qty: 230, unit: 'gram' }
+        ] }] },
+        { id: 317, name: 'Kabocha Tempura', category: 'Dinner', ingredients: [], steps: [], subRecipes: [
+            { name: 'Yuzu Kosho Maple Dip', ingredients: [
+                { name: 'Yuzu kosho', qty: 72, unit: 'gram' }, { name: 'Maple syrup', qty: 720, unit: 'gram' }
+            ] },
+            { name: 'Kabocha Tempura', ingredients: [
+                { name: 'Kabocha sliced', qty: 120, unit: 'gram' }, { name: 'Rice flour and corn starch (1:1)', qty: null, unit: '-' },
+                { name: 'Salt', qty: null, unit: '-' }, { name: 'Ume creme fraiche', qty: 60, unit: 'gram' }
+        ] }] },
+        { id: 318, name: 'Kabocha Bingsu', category: 'Dinner', ingredients: [
+            { name: 'Kinako mochi', qty: null, unit: '-' }, { name: 'Kabocha cheesecake', qty: null, unit: '-' },
+            { name: 'Shaved milk ice', qty: null, unit: '-' }, { name: 'Pumpkin gelato', qty: null, unit: '-' },
+            { name: 'Red bean paste', qty: null, unit: '-' }, { name: 'Sable cookies', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 319, name: 'Kabocha Squash Bisque (Dinner)', category: 'Dinner', ingredients: [
+            { name: 'Kabocha bisque', qty: 296, unit: 'ml' }, { name: 'Kabocha crisps', qty: 10, unit: 'gram' },
+            { name: 'Sage', qty: 1, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 320, name: 'Little Gem Caesar (Dinner)', category: 'Dinner', ingredients: [
+            { name: 'Radicchio', qty: 50, unit: 'gram' }, { name: 'Focaccia croutons', qty: 10, unit: 'gram' },
+            { name: 'Parmigiano Reggiano', qty: 10, unit: 'gram' }, { name: 'Crispy prosciutto', qty: 10, unit: 'gram' },
+            { name: 'Little gem lettuce', qty: 180, unit: 'gram' }, { name: 'Caesar dressing', qty: 60, unit: 'ml' },
+            { name: 'Cherry tomato', qty: 15, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 321, name: 'Lobster Cappuccino', category: 'Dinner', ingredients: [
+            { name: 'Lobster bisque', qty: 237, unit: 'ml' }, { name: 'Croissant mini', qty: 1, unit: 'ea' },
+            { name: 'Creme fraiche espuma', qty: 30, unit: 'ml' }
+        ], steps: [], subRecipes: [] },
+        { id: 322, name: 'Lobster', category: 'Dinner', ingredients: [], steps: [], subRecipes: [] },
+        { id: 323, name: 'Maine Lobster', category: 'Dinner', ingredients: [
+            { name: 'Pomme puree', qty: 113, unit: 'gram' }, { name: 'Sake', qty: 30, unit: 'ml' },
+            { name: 'Rainbow chard', qty: 100, unit: 'gram' }, { name: 'Lobster', qty: 142, unit: 'gram' },
+            { name: 'Butter', qty: 30, unit: 'gram' }, { name: 'Shallot', qty: 10, unit: 'gram' },
+            { name: 'Black peppercorn', qty: 1, unit: 'gram' }, { name: 'Lemon', qty: 0.25, unit: 'ea' },
+            { name: 'Heavy cream', qty: 30, unit: 'ml' }
+        ], steps: [], subRecipes: [] },
+        { id: 324, name: 'Matcha Bingsu', category: 'Dinner', ingredients: [
+            { name: 'Matcha mochi', qty: null, unit: '-' }, { name: 'Shaved milk ice', qty: null, unit: '-' },
+            { name: 'Red bean paste', qty: null, unit: '-' }, { name: 'Green tea ice cream', qty: null, unit: '-' },
+            { name: 'Matcha cookies', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 325, name: 'Charred Mediterranean Octopus', category: 'Dinner', ingredients: [], steps: [], subRecipes: [
+            { name: 'Brown Buttered Nduja', ingredients: [
+                { name: 'Nduja', qty: 60, unit: 'gram' }, { name: 'Brown butter', qty: 10, unit: 'gram' },
+                { name: 'Gochujang chili garlic', qty: 100, unit: 'gram' }
+            ] },
+            { name: 'Sofrito', ingredients: [
+                { name: 'Shishito peppers', qty: 10, unit: 'gram' }, { name: 'Butter', qty: 30, unit: 'gram' },
+                { name: 'Yellow onion', qty: 30, unit: 'gram' }, { name: 'Red bell pepper', qty: 30, unit: 'gram' },
+                { name: 'Yellow or orange bell pepper', qty: 30, unit: 'gram' }, { name: 'Garlic slices', qty: 10, unit: 'gram' },
+                { name: 'Marble potatoes', qty: 100, unit: 'gram' }, { name: 'Octopus 6-8 size', qty: 170, unit: 'gram' }
+            ], steps: ['Brunoise the bell peppers and onions, thinly slice the garlic, and cut the shishito peppers into thick rounds. Sweat lightly in olive oil until just tender.'] }
+        ] },
+        { id: 326, name: 'Miyabi Maki', category: 'Dinner', ingredients: [], steps: [], subRecipes: [] },
+        { id: 327, name: 'Miyazaki Wagyu Tataki', category: 'Dinner', ingredients: [
+            { name: 'Caviar', qty: 10, unit: 'gram' }, { name: 'Pickled shiso relish', qty: 16, unit: 'gram' },
+            { name: 'Yuzu shoyu', qty: 60, unit: 'ml' }, { name: 'Chives', qty: 2, unit: 'gram' },
+            { name: 'Wagyu A5', qty: 60, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 328, name: 'Moules Frites', category: 'Dinner', ingredients: [
+            { name: 'PEI mussels', qty: 900, unit: 'gram' }, { name: 'Chorizo', qty: 100, unit: 'gram' },
+            { name: 'Red curry', qty: 150, unit: 'gram' }, { name: 'Shishito pepper', qty: 50, unit: 'gram' },
+            { name: 'Thai basil', qty: 10, unit: 'gram' }, { name: 'Potato waffle', qty: 150, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 329, name: 'Ora King Salmon Maki', category: 'Dinner', ingredients: [
+            { name: 'Pirikara tuna', qty: 70, unit: 'gram' }, { name: 'Avocado', qty: 0.125, unit: 'ea' },
+            { name: 'Smoked paprika aioli', qty: 60, unit: 'ml' }, { name: 'Furikake', qty: 5, unit: 'gram' },
+            { name: 'Ora king salmon', qty: 70, unit: 'gram' }, { name: 'Iodized salt', qty: 288, unit: 'gram' },
+            { name: 'Flambe alcohol', qty: 75, unit: 'ml' }, { name: 'Sasa no ha (bamboo leaf)', qty: 1, unit: 'ea' }
+        ], steps: [], subRecipes: [] },
+        { id: 330, name: 'Smoked Paprika Aioli', category: 'Dinner', ingredients: [
+            { name: 'Smoked paprika', qty: 80, unit: 'gram' }, { name: 'QP mayonnaise', qty: 1000, unit: 'gram' },
+            { name: 'Roasted garlic oil', qty: 300, unit: 'gram' }, { name: 'Sriracha', qty: 80, unit: 'gram' },
+            { name: 'Lemon juice', qty: 100, unit: 'gram' }
+        ], steps: ['All ingredients incorporated'], subRecipes: [] },
+        { id: 331, name: 'Surf & Turf', category: 'Dinner', ingredients: [
+            { name: 'Miyazaki wagyu', qty: 85, unit: 'gram' }, { name: 'Alaskan king crab', qty: 85, unit: 'gram' },
+            { name: 'Yuzu kosho miso kabocha', qty: 60, unit: 'gram' }, { name: 'Asparagus', qty: 15, unit: 'gram' },
+            { name: 'Yuzu kosho', qty: 2, unit: 'gram' }, { name: 'Miso', qty: 5, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 332, name: 'Wagyu Tartare', category: 'Dinner', ingredients: [
+            { name: 'Wagyu A5 ribeye cap', qty: 60, unit: 'gram' }, { name: 'Filet mignon', qty: 25, unit: 'gram' },
+            { name: 'Shallot brunoised', qty: 8, unit: 'gram' }, { name: 'Asian pear diced', qty: 8, unit: 'gram' },
+            { name: 'Chive', qty: 1, unit: 'gram' }, { name: 'Sanbaizu shallot cream', qty: 5, unit: 'gram' },
+            { name: 'Tartare sauce', qty: 10, unit: 'gram' }, { name: 'Parsley dust', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [
+            { name: 'Sanbaizu Shallot Cream', ingredients: [
+                { name: 'Shallot', qty: 600, unit: 'gram' }, { name: 'Salt', qty: 6, unit: 'gram' },
+                { name: 'Vegetable stock', qty: 200, unit: 'gram' }, { name: 'Sanbaizu', qty: 140, unit: 'gram' }
+            ], steps: ['Clean and chop the shallots.', 'Caramelize the chopped shallots with salt, stirring to prevent burning.', 'Add vegetable stock and Sanbaizu. Let liquid evaporate until almost all moisture is gone.', 'Transfer to a blender and blend until smooth.', 'Add a knife tip of Xanthan gum and blend for another minute to prevent liquid leaking when plated.'] },
+            { name: 'Egg Yolk Cream', ingredients: [
+                { name: 'Egg yolk', qty: 400, unit: 'gram' }, { name: 'Salt', qty: 4, unit: 'gram' }
+            ], steps: ['Mix the egg yolks with a whisk, add the salt while mixing.', 'Pass through a fine sieve for smooth texture.', 'Transfer to a vacuum cooking bag, seal, and immerse in 65C water for 1 hour 40 minutes.', 'Transfer bag to cold water and let it cool quickly.'] },
+            { name: 'Tartare Sauce', ingredients: [
+                { name: 'Worcestershire sauce', qty: 80, unit: 'gram' }, { name: 'Salt', qty: 60, unit: 'gram' },
+                { name: 'Black pepper', qty: 20, unit: 'gram' }, { name: 'Extra virgin olive oil', qty: 400, unit: 'gram' }
+            ] },
+            { name: 'Parsley Emulsion', ingredients: [
+                { name: 'Parsley green oil', qty: 270, unit: 'gram' }, { name: 'Egg white', qty: 60, unit: 'gram' },
+                { name: 'Apple cider vinegar', qty: 36, unit: 'gram' }, { name: 'Salt', qty: 6, unit: 'gram' },
+                { name: 'Ice cube', qty: 60, unit: 'gram' }
+            ], steps: ['Put green oil in a blender with egg white, apple vinegar, and salt.', 'Add ice cubes and blend until smooth and perfectly emulsified.', 'Transfer to a piping bag and rest at least 1 hour in the fridge.'] }
+        ] },
+        { id: 333, name: 'Wagyu Ramen', category: 'Dinner', ingredients: [
+            { name: 'Veal broth', qty: 355, unit: 'ml' }, { name: 'Wagyu A5', qty: 70, unit: 'gram' },
+            { name: 'Kikurage', qty: 20, unit: 'gram' }, { name: 'Shimeji mushroom', qty: 30, unit: 'gram' },
+            { name: 'Sesame', qty: 3, unit: 'gram' }, { name: 'Chili beef ragu (wagyu)', qty: 30, unit: 'gram' },
+            { name: 'Scallion oil', qty: 30, unit: 'ml' }, { name: 'Black garlic', qty: 30, unit: 'ml' },
+            { name: 'Chives', qty: 3, unit: 'gram' }, { name: 'Menma (bamboo shoot)', qty: 30, unit: 'gram' },
+            { name: 'Shitake', qty: 30, unit: 'gram' }, { name: 'Umami chili garlic', qty: 10, unit: 'gram' },
+            { name: 'Roasted garlic oil', qty: 30, unit: 'ml' }, { name: 'Ramen', qty: 200, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 334, name: 'Watermelon Carpaccio', category: 'Dinner', ingredients: [
+            { name: 'Compressed watermelon', qty: null, unit: '-' }, { name: 'Arugula', qty: null, unit: '-' },
+            { name: 'Orange segments', qty: null, unit: '-' }, { name: 'Feta pannacotta', qty: null, unit: '-' },
+            { name: 'Olive oil', qty: null, unit: '-' }, { name: 'Candied pistachios', qty: null, unit: '-' },
+            { name: 'Balsamic pearl', qty: null, unit: '-' }, { name: 'Mint', qty: null, unit: '-' }
+        ], steps: ['Combine orange juice and sugar, vacuum compress with watermelon, keep in bag for 2 hours.', 'Boil water and sugar with pistachios until fully cooked, strain, deep fry at 300F until crispy. Cool and pulse in robot coupe.', 'Place all pannacotta ingredients in Thermomix, 3 minutes at 60C.', 'Transfer to quenelle mold and freeze, 12 minutes to temp.'], subRecipes: [
+            { name: 'Compressed Watermelon Marination', ingredients: [
+                { name: 'Orange juice', qty: 200, unit: 'gram' }, { name: 'Sugar', qty: 100, unit: 'gram' }
+            ] },
+            { name: 'Candied Pistachios', ingredients: [
+                { name: 'Pistachio', qty: 200, unit: 'gram' }, { name: 'Water', qty: 100, unit: 'gram' },
+                { name: 'Sugar', qty: 100, unit: 'gram' }
+            ] },
+            { name: 'Feta Cheese Pannacotta', ingredients: [
+                { name: 'Feta cheese', qty: 400, unit: 'gram' }, { name: 'Heavy cream', qty: 200, unit: 'gram' }
+        ] }] },
+        { id: 335, name: 'Wok Fried Filet Mignon & Chicken', category: 'Dinner', ingredients: [
+            { name: 'Stir fried sauce', qty: 118, unit: 'ml' }, { name: 'Lemongrass rice', qty: 200, unit: 'gram' },
+            { name: 'Filet mignon', qty: 170, unit: 'gram' }, { name: 'Chicken', qty: 198, unit: 'gram' },
+            { name: 'Baby bokchoy', qty: 50, unit: 'gram' }, { name: 'Asparagus', qty: 20, unit: 'gram' },
+            { name: 'Snow peas', qty: 20, unit: 'gram' }, { name: 'Yellow onion', qty: 30, unit: 'gram' },
+            { name: 'Red bell pepper', qty: 30, unit: 'gram' }, { name: 'Yellow bell pepper', qty: 30, unit: 'gram' },
+            { name: 'Ginger', qty: 10, unit: 'gram' }, { name: 'Garlic', qty: 10, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 336, name: 'Yuzu Den Miso (Caramelized Miso)', category: 'Dinner', ingredients: [], steps: ['Combine the liquid and sugar, then add miso and mix until well incorporated.', 'Cook in a bain-marie for approximately 4 hours, until the color turns golden brown.', 'Once cooled, mix the miso with yuzu juice until fully incorporated.'], subRecipes: [
+            { name: 'Den Miso', ingredients: [
+                { name: 'White miso', qty: 1500, unit: 'gram' }, { name: 'Sugar', qty: 1100, unit: 'gram' },
+                { name: 'Sake', qty: 400, unit: 'ml' }, { name: 'Mirin', qty: 400, unit: 'ml' }
+            ] },
+            { name: 'Yuzu Miso', ingredients: [
+                { name: 'Den miso', qty: 1000, unit: 'gram' }, { name: 'Yuzu', qty: 100, unit: 'gram' }
+        ] }] },
+        { id: 337, name: 'Yuzu Kosho Miso', category: 'Dinner', ingredients: [
+            { name: 'Yuzu Kosho', qty: 80, unit: 'gram' }, { name: 'Den Miso', qty: 300, unit: 'gram' },
+            { name: 'Maple syrup', qty: 100, unit: 'gram' }
+        ], steps: ['Mix the den miso with yuzu kosho and maple syrup until fully incorporated'], subRecipes: [] },
+        { id: 338, name: 'Butcher\'s Cut of the Day', category: 'Dinner', ingredients: [
+            { name: 'Potato pave', qty: 113, unit: 'gram' }, { name: 'Broccoli', qty: 113, unit: 'gram' },
+            { name: 'Demi-glace', qty: 60, unit: 'ml' }, { name: 'Cut steak', qty: 10, unit: 'oz' }
+        ], steps: [], subRecipes: [] },
         // ── Lunch (Amber Bar) ──
         { id: 100, name: 'Ajitsuke Tamago (Ramen Egg)', category: 'Lunch', ingredients: [
             { name: 'Large eggs', qty: 30, unit: 'ea' }, { name: 'GF soy sauce', qty: 1, unit: 'qt' },
@@ -2502,7 +2751,101 @@ function getDefaultRecipes() {
         { id: 136, name: 'Yuzu Aioli', category: 'Lunch', ingredients: [
             { name: 'Yuzu', qty: 20, unit: 'gram' }, { name: 'Vegan mayonnaise', qty: 200, unit: 'gram' },
             { name: 'Lemon zest', qty: 3, unit: 'ea' }, { name: 'Salt', qty: 0.5, unit: 'tsp' }
-        ], steps: [], subRecipes: [] }
+        ], steps: [], subRecipes: [] },
+        // ── Sushi ──
+        { id: 200, name: 'California Maki', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice', qty: 113.4, unit: 'gram' }, { name: 'Nori', qty: 0.5, unit: 'sheet' },
+            { name: 'Sesame seeds', qty: 1, unit: 'gram' }, { name: 'King crab mix', qty: 70, unit: 'gram' },
+            { name: 'Avocado', qty: 68, unit: 'gram' }, { name: 'Orange tobiko', qty: 28, unit: 'gram' },
+            { name: 'Sushi ginger', qty: 3, unit: 'gram' }, { name: 'Wasabi', qty: 4, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 201, name: 'Hamachi Crudo', category: 'Sushi', ingredients: [
+            { name: 'Hamachi (Yellowtail) sashimi-grade', qty: 85, unit: 'gram' }, { name: 'Fresh serrano thin rounds', qty: 6, unit: 'slices' },
+            { name: 'Micro cilantro', qty: null, unit: '-' }, { name: 'Yuzu shoyu', qty: 2, unit: 'tbsp' },
+            { name: 'Sriracha', qty: 6, unit: 'drop' }
+        ], steps: ['Slice hamachi into thin sashimi-style pieces.', 'Arrange slices on a chilled plate.', 'Place one serrano slice on each piece.', 'Dot each slice with a drop of sriracha.', 'Pour yuzu shoyu evenly over the plate.', 'Finish with micro cilantro.'], subRecipes: [] },
+        { id: 202, name: 'House Shoyu', category: 'Sushi', ingredients: [
+            { name: 'Tamari soy sauce', qty: 9981, unit: 'gram' }, { name: 'Suiji Mirin', qty: 180, unit: 'gram' },
+            { name: 'Nikiri sake', qty: 3327, unit: 'gram' }, { name: 'Kombu', qty: 150, unit: 'gram' }
+        ], steps: ['Place nikiri sake and kombu in a pot, heat gently.', 'Heat no more than 60-70C and remove from heat.', 'Add tamari and mirin.', 'To make nikiri sake: set sake in a pot, heat and ignite briefly. After burning alcohol, turn off.'], subRecipes: [] },
+        { id: 203, name: 'Ise Ebi Mix', category: 'Sushi', ingredients: [
+            { name: 'Lobster meat shredded', qty: 200, unit: 'gram' }, { name: 'Creme fraiche', qty: 80, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 204, name: 'Ise Ebi Tempura Roll', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice', qty: 113.4, unit: 'gram' }, { name: 'Nori', qty: 0.5, unit: 'sheet' },
+            { name: 'Sesame seeds', qty: 1, unit: 'gram' }, { name: 'Lobster mix', qty: 113.4, unit: 'gram' },
+            { name: 'Sea bass tempura', qty: 40, unit: 'gram' }, { name: 'Sun dried tomato pesto', qty: 5, unit: 'gram' },
+            { name: 'Chive', qty: 0.5, unit: 'gram' }, { name: 'Sweet shoyu (ABC soy)', qty: 5, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 205, name: 'Kimchi Aioli (Sushi)', category: 'Sushi', ingredients: [
+            { name: 'Kimchi no moto', qty: 160, unit: 'gram' }, { name: 'Vegan heavy mayonnaise', qty: 800, unit: 'gram' }
+        ], steps: ['Mix all ingredients together thoroughly until fully incorporated.'], subRecipes: [] },
+        { id: 206, name: 'King Crab Mix', category: 'Sushi', ingredients: [
+            { name: 'King crab', qty: 200, unit: 'gram' }, { name: 'QP Mayonnaise', qty: 30, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 207, name: 'Nikiri Shoyu', category: 'Sushi', ingredients: [
+            { name: 'Tamari soy sauce', qty: 1093, unit: 'gram' }, { name: 'Mirin', qty: 1093, unit: 'gram' },
+            { name: 'Sake', qty: 160, unit: 'ml' }, { name: 'Mushroom kombu powder', qty: 10, unit: 'gram' },
+            { name: 'Shiro dashi', qty: 250, unit: 'gram' }
+        ], steps: ['Place all ingredients in pot, heat gently.', 'Bring to a slight simmer over medium heat.', 'Turn down to low, evaporate 15-20 minutes.', 'Nikiri should be thickened but fluid, coating back of a spoon.', 'Fine strain.'], subRecipes: [] },
+        { id: 208, name: 'Pirikara Maguro Maki', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice', qty: 113.4, unit: 'gram' }, { name: 'Nori', qty: 0.5, unit: 'sheet' },
+            { name: 'Sesame seeds', qty: 1, unit: 'gram' }, { name: 'Spicy tuna mix', qty: 70, unit: 'gram' },
+            { name: 'Serrano julienned', qty: 20, unit: 'gram' }, { name: 'Takuan', qty: 30, unit: 'gram' },
+            { name: 'Yuzu tobiko', qty: 28, unit: 'gram' }, { name: 'Sushi ginger', qty: 3, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 209, name: 'Pirikara Sauce', category: 'Sushi', ingredients: [
+            { name: 'Sriracha', qty: 1010, unit: 'gram' }, { name: 'Sesame oil', qty: 200, unit: 'gram' },
+            { name: 'Togarashi', qty: 35, unit: 'gram' }, { name: 'Kimchi no moto', qty: 150, unit: 'gram' },
+            { name: 'Vegan heavy-duty mayonnaise', qty: 500, unit: 'gram' }, { name: 'Corn syrup', qty: 350, unit: 'gram' },
+            { name: 'Yuzukosho', qty: 100, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix thoroughly until fully incorporated.'], subRecipes: [] },
+        { id: 210, name: 'Pirikara Tuna Mix', category: 'Sushi', ingredients: [
+            { name: 'Tuna scraped', qty: 200, unit: 'gram' }, { name: 'Pirikara sauce', qty: 30, unit: 'gram' },
+            { name: 'Green onion chop', qty: 15, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 211, name: 'Salmon Tartare Crispy Rice', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice (pressed and fried)', qty: 180, unit: 'gram' }, { name: 'Salmon finely diced', qty: 60, unit: 'gram' },
+            { name: 'Kimchi aioli', qty: 3, unit: 'gram' }, { name: 'Ikura', qty: 1, unit: 'gram' },
+            { name: 'Micro herb', qty: null, unit: '-' }
+        ], steps: ['Press rice into mold, batter with rice flour.', 'Fry at 325F until golden and crispy. Drain and cool.', 'Cut into 6 bite-sized pieces.', 'Dice fresh salmon, season with kimchi aioli and yuzu kosho.', 'Keep in pastry piping bag. Assemble.'], subRecipes: [] },
+        { id: 212, name: 'Salmon Tartare Mix', category: 'Sushi', ingredients: [
+            { name: 'Salmon fine dices', qty: 400, unit: 'gram' }, { name: 'Kimchi aioli', qty: 80, unit: 'gram' },
+            { name: 'Yuzu kosho', qty: 40, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 213, name: 'Shari Zu', category: 'Sushi', ingredients: [
+            { name: 'Rice vinegar', qty: 10, unit: 'liter' }, { name: 'Sugar', qty: 6736, unit: 'gram' },
+            { name: 'Salt', qty: 1996, unit: 'gram' }, { name: 'Mirin', qty: 625, unit: 'ml' },
+            { name: 'Kombu', qty: 200, unit: 'gram' }
+        ], steps: ['Place vinegar (except 5L) and kombu in large pot, heat gently.', 'Add salt first, then sugar.', 'Heat no more than 60-70C to dissolve, stir constantly.', 'Remove to ice bath and cool, add remaining vinegar.'], subRecipes: [] },
+        { id: 214, name: 'Sundried Tomato Pesto', category: 'Sushi', ingredients: [
+            { name: 'Sun dried tomatoes', qty: 800, unit: 'gram' }, { name: 'Garlic confit', qty: 50, unit: 'gram' },
+            { name: 'Basil', qty: 40, unit: 'gram' }, { name: 'Sun dried tomato oil', qty: 750, unit: 'gram' }
+        ], steps: [], subRecipes: [{ name: 'Garlic Confit', ingredients: [
+            { name: 'Garlic cloves', qty: 272, unit: 'gram' }, { name: 'Blended oil', qty: 384, unit: 'gram' },
+            { name: 'Fresh thyme sprigs', qty: 2, unit: 'ea' }
+        ]}] },
+        { id: 215, name: 'Sushi Rice (Shari)', category: 'Sushi', ingredients: [
+            { name: 'Nishiki rice', qty: 2700, unit: 'gram' }, { name: 'Water', qty: 2650, unit: 'gram' },
+            { name: 'Shari Zu', qty: 876, unit: 'gram' }
+        ], steps: ['Wash rice thoroughly and strain 5 times.', 'Strain completely.', 'Transfer to rice cooker, add water per recipe.', 'Cook, then rest 40 minutes before mixing with Shari Zu.'], subRecipes: [] },
+        { id: 216, name: 'Temaki Trio', category: 'Sushi', ingredients: [
+            { name: 'Ahi tuna', qty: 12.5, unit: 'gram' }, { name: 'Takuan', qty: 5, unit: 'gram' },
+            { name: 'Nikiri shoyu', qty: 1, unit: 'gram' }, { name: 'Sushi rice', qty: 12.5, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 217, name: 'Tempura Flour Mix', category: 'Sushi', ingredients: [
+            { name: 'Rice flour', qty: 3, unit: 'cup' }, { name: 'AP flour', qty: 1, unit: 'cup' }
+        ], steps: ['Combine all ingredients and mix thoroughly.'], subRecipes: [] },
+        { id: 218, name: 'Wasabi', category: 'Sushi', ingredients: [
+            { name: 'Wasabi powder', qty: 250, unit: 'gram' }, { name: 'Distilled water', qty: 320, unit: 'gram' }
+        ], steps: ['Mix in a small bowl until a smooth paste forms.', 'Rest 5 minutes uncovered to develop flavor.', 'Cover with plastic wrap or store in airtight container.'], subRecipes: [] },
+        { id: 219, name: 'Yuzu Kosho Aioli', category: 'Sushi', ingredients: [
+            { name: 'Yuzu kosho', qty: 150, unit: 'gram' }, { name: 'Vegan mayonnaise', qty: 920, unit: 'gram' }
+        ], steps: ['Finely blend yuzu kosho until smooth.', 'Combine with mayonnaise and mix thoroughly.'], subRecipes: [] },
+        { id: 220, name: 'Yuzu Shoyu', category: 'Sushi', ingredients: [
+            { name: 'Yuzu juice', qty: 420, unit: 'gram' }, { name: 'Tamari soy sauce', qty: 824, unit: 'gram' },
+            { name: 'Mirin', qty: 83, unit: 'gram' }
+        ], steps: ['Mix all ingredients together thoroughly.'], subRecipes: [] }
     ];
 }
 
