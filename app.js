@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 157;
+const APP_BUILD = 158;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2599,11 +2599,99 @@ function handleRecipeFileUpload(input) {
 
 function parseDocxRecipe(arrayBuffer, fileName) {
     if (typeof mammoth === 'undefined') { showToast('Docx parser not loaded'); return; }
-    mammoth.extractRawText({ arrayBuffer: arrayBuffer }).then(function(result) {
-        createRecipeFromText(result.value, fileName);
+    mammoth.convertToHtml({ arrayBuffer: arrayBuffer }).then(function(result) {
+        parseDocxHtml(result.value, fileName);
     }).catch(function() {
         showToast('Could not read .docx file');
     });
+}
+
+function parseDocxHtml(html, fileName) {
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    var tables = doc.querySelectorAll('table');
+    var recipeName = fileName.replace(/\.(docx|pdf)$/i, '').replace(/[_-]/g, ' ');
+    var ingredients = [];
+    var steps = [];
+    var skipHeaders = ['falling rock', 'recipe form', 'ingredients', 'quantity', 'unit', 'notes'];
+
+    // Pass 1: Extract recipe name and ingredients from tables
+    tables.forEach(function(table) {
+        var rows = table.querySelectorAll('tr');
+        var isIngTable = false;
+        var ingColIdx = -1, qtyColIdx = -1, unitColIdx = -1;
+
+        rows.forEach(function(row) {
+            var cells = row.querySelectorAll('td, th');
+            var cellTexts = [];
+            cells.forEach(function(c) { cellTexts.push(c.textContent.trim()); });
+
+            // Look for "RECIPE:" label to extract recipe name
+            for (var i = 0; i < cellTexts.length; i++) {
+                if (cellTexts[i].toLowerCase().replace(/[:\s]/g, '') === 'recipe' && i + 1 < cellTexts.length && cellTexts[i + 1].length > 0) {
+                    recipeName = cellTexts[i + 1];
+                    return;
+                }
+                if (cellTexts[i].toLowerCase().match(/^recipe\s*:/) && cellTexts[i].length > 8) {
+                    recipeName = cellTexts[i].replace(/^recipe\s*:\s*/i, '');
+                    return;
+                }
+            }
+
+            // Detect ingredient table header row
+            var joinedLower = cellTexts.join('|').toLowerCase();
+            if (joinedLower.match(/ingredient/) && joinedLower.match(/quantit|qty|amount/)) {
+                isIngTable = true;
+                cellTexts.forEach(function(ct, idx) {
+                    var lc = ct.toLowerCase();
+                    if (lc.match(/ingredient|item|name/)) ingColIdx = idx;
+                    else if (lc.match(/quantit|qty|amount/)) qtyColIdx = idx;
+                    else if (lc.match(/unit|uom|measure/)) unitColIdx = idx;
+                });
+                return;
+            }
+
+            // Read ingredient rows
+            if (isIngTable && cellTexts.length >= 2) {
+                var ingName = ingColIdx >= 0 && ingColIdx < cellTexts.length ? cellTexts[ingColIdx] : cellTexts[0];
+                if (!ingName || skipHeaders.indexOf(ingName.toLowerCase()) >= 0) return;
+                var qtyRaw = qtyColIdx >= 0 && qtyColIdx < cellTexts.length ? cellTexts[qtyColIdx] : (cellTexts[1] || '');
+                var unitRaw = unitColIdx >= 0 && unitColIdx < cellTexts.length ? cellTexts[unitColIdx] : (cellTexts[2] || '-');
+                var qty = parseFloat(qtyRaw) || null;
+                if (ingName.length > 0 && ingName.length < 100) {
+                    ingredients.push({ name: ingName, qty: qty, unit: unitRaw || '-' });
+                }
+            }
+        });
+    });
+
+    // Pass 2: Extract preparation steps from paragraphs outside tables
+    var allP = doc.querySelectorAll('p');
+    var inSteps = false;
+    allP.forEach(function(p) {
+        var text = p.textContent.trim();
+        if (!text) return;
+        var lower = text.toLowerCase();
+        if (lower.match(/preparation|instruction|direction|method|procedure|steps/)) { inSteps = true; return; }
+        if (inSteps && text.length > 2) {
+            var cleaned = text.replace(/^\d+[\.\)\-]\s*/, '');
+            if (cleaned.length > 2) steps.push(cleaned);
+        }
+    });
+
+    // Fallback: if no structured data found, dump all text as steps
+    if (ingredients.length === 0 && steps.length === 0) {
+        var allText = doc.body.textContent.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 2; });
+        if (allText.length > 0) {
+            recipeName = allText[0].length < 80 ? allText[0] : recipeName;
+            steps = allText.slice(1);
+        }
+    }
+
+    recipes.push({ id: nextRecipeId(), name: recipeName, category: 'Dinner', ingredients: ingredients, steps: steps, subRecipes: [] });
+    saveRecipes();
+    panelDirty.library = true;
+    renderPanel('library');
+    showToast('Recipe imported: ' + recipeName);
 }
 
 function parsePdfRecipe(arrayBuffer, fileName) {
@@ -2630,22 +2718,37 @@ function parsePdfRecipe(arrayBuffer, fileName) {
 function createRecipeFromText(text, fileName) {
     var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l.length > 0; });
     var name = fileName.replace(/\.(docx|pdf)$/i, '').replace(/[_-]/g, ' ');
-    if (lines.length > 0 && lines[0].length < 80) name = lines[0];
-
+    var skipHeaders = ['falling rock', 'recipe form'];
     var ingredients = [];
     var steps = [];
     var inIngredients = false;
     var inSteps = false;
 
+    // Try to find "RECIPE:" line for name
+    lines.forEach(function(line) {
+        var m = line.match(/^recipe\s*:\s*(.+)/i);
+        if (m && m[1].trim().length > 0) name = m[1].trim();
+    });
+    // Fallback to first non-header line
+    if (name === fileName.replace(/\.(docx|pdf)$/i, '').replace(/[_-]/g, ' ')) {
+        for (var i = 0; i < lines.length && i < 5; i++) {
+            if (lines[i].length < 80 && skipHeaders.indexOf(lines[i].toLowerCase()) < 0) {
+                name = lines[i]; break;
+            }
+        }
+    }
+
     lines.forEach(function(line) {
         var lower = line.toLowerCase();
-        if (lower.match(/ingredient/)) { inIngredients = true; inSteps = false; return; }
+        if (lower.match(/^ingredient/)) { inIngredients = true; inSteps = false; return; }
         if (lower.match(/preparation|instruction|direction|method|procedure/)) { inSteps = true; inIngredients = false; return; }
 
         if (inIngredients) {
             var parts = line.split(/\t|(?:\s{2,})|\|/).map(function(p) { return p.trim(); }).filter(function(p) { return p; });
             if (parts.length >= 2) {
                 var ingName = parts[0];
+                if (skipHeaders.indexOf(ingName.toLowerCase()) >= 0) return;
+                if (ingName.toLowerCase() === 'quantity' || ingName.toLowerCase() === 'unit') return;
                 var qty = parseFloat(parts[1]) || null;
                 var unit = parts.length >= 3 ? parts[2] : '-';
                 ingredients.push({ name: ingName, qty: qty, unit: unit });
@@ -2653,7 +2756,7 @@ function createRecipeFromText(text, fileName) {
                 var match = parts[0].match(/^([\d.]+)\s*(\w+)?\s+(.+)/);
                 if (match) {
                     ingredients.push({ name: match[3], qty: parseFloat(match[1]) || null, unit: match[2] || '-' });
-                } else {
+                } else if (skipHeaders.indexOf(parts[0].toLowerCase()) < 0) {
                     ingredients.push({ name: parts[0], qty: null, unit: '-' });
                 }
             }
