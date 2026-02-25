@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 167;
+const APP_BUILD = 168;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -1485,6 +1485,14 @@ function loadData() {
         localStorage.setItem('aqueous_timing_bulk_v1', '1');
     }
 
+    // One-time cleanup: wipe old recipe data before loading (Build 167)
+    if (!localStorage.getItem('aq_recipes_cleaned_167')) {
+        localStorage.removeItem('aqueous_recipes');
+        localStorage.removeItem('aq_recipes_v2');
+        try { indexedDB.deleteDatabase('aqueous_recipes_v2'); } catch(e) {}
+        localStorage.setItem('aq_recipes_cleaned_167', '1');
+    }
+
     // Load recipes
     const savedRecipes = localStorage.getItem('aqueous_recipes');
     if (savedRecipes) {
@@ -1500,15 +1508,6 @@ function loadData() {
     } else {
         recipes = getDefaultRecipes();
         saveRecipes();
-    }
-
-    // One-time cleanup: clear all old recipe data (Build 167)
-    if (!localStorage.getItem('aq_recipes_cleaned_167')) {
-        recipes = [];
-        saveRecipes();
-        localStorage.removeItem('aq_recipes_v2');
-        try { indexedDB.deleteDatabase('aqueous_recipes_v2'); } catch(e) {}
-        localStorage.setItem('aq_recipes_cleaned_167', '1');
     }
 }
 
@@ -2304,7 +2303,102 @@ function saveRecipes() {
 }
 
 function getDefaultRecipes() {
-    return [];
+    return [
+        // ── Sushi ──
+        { id: 200, name: 'California Maki', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice', qty: 113.4, unit: 'gram' }, { name: 'Nori', qty: 0.5, unit: 'sheet' },
+            { name: 'Sesame seeds', qty: 1, unit: 'gram' }, { name: 'King crab mix', qty: 70, unit: 'gram' },
+            { name: 'Avocado', qty: 68, unit: 'gram' }, { name: 'Orange tobiko', qty: 28, unit: 'gram' },
+            { name: 'Sushi ginger', qty: 3, unit: 'gram' }, { name: 'Wasabi', qty: 4, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 201, name: 'Hamachi Crudo', category: 'Sushi', ingredients: [
+            { name: 'Hamachi (Yellowtail) sashimi-grade', qty: 85, unit: 'gram' }, { name: 'Fresh serrano thin rounds', qty: 6, unit: 'slices' },
+            { name: 'Micro cilantro', qty: null, unit: '-' }, { name: 'Yuzu shoyu', qty: 2, unit: 'tbsp' },
+            { name: 'Sriracha', qty: 6, unit: 'drop' }
+        ], steps: ['Slice hamachi into thin sashimi-style pieces.', 'Arrange slices on a chilled plate.', 'Place one serrano slice on each piece.', 'Dot each slice with a drop of sriracha.', 'Pour yuzu shoyu evenly over the plate.', 'Finish with micro cilantro.'], subRecipes: [] },
+        { id: 202, name: 'House Shoyu', category: 'Sushi', ingredients: [
+            { name: 'Tamari soy sauce', qty: 9981, unit: 'gram' }, { name: 'Suiji Mirin', qty: 180, unit: 'gram' },
+            { name: 'Nikiri sake', qty: 3327, unit: 'gram' }, { name: 'Kombu', qty: 150, unit: 'gram' }
+        ], steps: ['Place nikiri sake and kombu in a pot, heat gently.', 'Heat no more than 60-70C and remove from heat.', 'Add tamari and mirin.', 'To make nikiri sake: set sake in a pot, heat and ignite briefly. After burning alcohol, turn off.'], subRecipes: [] },
+        { id: 203, name: 'Ise Ebi Mix', category: 'Sushi', ingredients: [
+            { name: 'Lobster meat shredded', qty: 200, unit: 'gram' }, { name: 'Creme fraiche', qty: 80, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 204, name: 'Ise Ebi Tempura Roll', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice', qty: 113.4, unit: 'gram' }, { name: 'Nori', qty: 0.5, unit: 'sheet' },
+            { name: 'Sesame seeds', qty: 1, unit: 'gram' }, { name: 'Lobster mix', qty: 113.4, unit: 'gram' },
+            { name: 'Sea bass tempura', qty: 40, unit: 'gram' }, { name: 'Sun dried tomato pesto', qty: 5, unit: 'gram' },
+            { name: 'Chive', qty: 0.5, unit: 'gram' }, { name: 'Sweet shoyu (ABC soy)', qty: 5, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 205, name: 'Kimchi Aioli (Sushi)', category: 'Sushi', ingredients: [
+            { name: 'Kimchi no moto', qty: 160, unit: 'gram' }, { name: 'Vegan heavy mayonnaise', qty: 800, unit: 'gram' }
+        ], steps: ['Mix all ingredients together thoroughly until fully incorporated.'], subRecipes: [] },
+        { id: 206, name: 'King Crab Mix', category: 'Sushi', ingredients: [
+            { name: 'King crab', qty: 200, unit: 'gram' }, { name: 'QP Mayonnaise', qty: 30, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 207, name: 'Nikiri Shoyu', category: 'Sushi', ingredients: [
+            { name: 'Tamari soy sauce', qty: 1093, unit: 'gram' }, { name: 'Mirin', qty: 1093, unit: 'gram' },
+            { name: 'Sake', qty: 160, unit: 'ml' }, { name: 'Mushroom kombu powder', qty: 10, unit: 'gram' },
+            { name: 'Shiro dashi', qty: 250, unit: 'gram' }
+        ], steps: ['Place all ingredients in pot, heat gently.', 'Bring to a slight simmer over medium heat.', 'Turn down to low, evaporate 15-20 minutes.', 'Nikiri should be thickened but fluid, coating back of a spoon.', 'Fine strain.'], subRecipes: [] },
+        { id: 208, name: 'Pirikara Maguro Maki', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice', qty: 113.4, unit: 'gram' }, { name: 'Nori', qty: 0.5, unit: 'sheet' },
+            { name: 'Sesame seeds', qty: 1, unit: 'gram' }, { name: 'Spicy tuna mix', qty: 70, unit: 'gram' },
+            { name: 'Serrano julienned', qty: 20, unit: 'gram' }, { name: 'Takuan', qty: 30, unit: 'gram' },
+            { name: 'Yuzu tobiko', qty: 28, unit: 'gram' }, { name: 'Sushi ginger', qty: 3, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 209, name: 'Pirikara Sauce', category: 'Sushi', ingredients: [
+            { name: 'Sriracha', qty: 1010, unit: 'gram' }, { name: 'Sesame oil', qty: 200, unit: 'gram' },
+            { name: 'Togarashi', qty: 35, unit: 'gram' }, { name: 'Kimchi no moto', qty: 150, unit: 'gram' },
+            { name: 'Vegan heavy-duty mayonnaise', qty: 500, unit: 'gram' }, { name: 'Corn syrup', qty: 350, unit: 'gram' },
+            { name: 'Yuzukosho', qty: 100, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix thoroughly until fully incorporated.'], subRecipes: [] },
+        { id: 210, name: 'Pirikara Tuna Mix', category: 'Sushi', ingredients: [
+            { name: 'Tuna scraped', qty: 200, unit: 'gram' }, { name: 'Pirikara sauce', qty: 30, unit: 'gram' },
+            { name: 'Green onion chop', qty: 15, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 211, name: 'Salmon Tartare Crispy Rice', category: 'Sushi', ingredients: [
+            { name: 'Sushi rice (pressed and fried)', qty: 180, unit: 'gram' }, { name: 'Salmon finely diced', qty: 60, unit: 'gram' },
+            { name: 'Kimchi aioli', qty: 3, unit: 'gram' }, { name: 'Ikura', qty: 1, unit: 'gram' },
+            { name: 'Micro herb', qty: null, unit: '-' }
+        ], steps: ['Press rice into mold, batter with rice flour.', 'Fry at 325F until golden and crispy. Drain and cool.', 'Cut into 6 bite-sized pieces.', 'Dice fresh salmon, season with kimchi aioli and yuzu kosho.', 'Keep in pastry piping bag. Assemble.'], subRecipes: [] },
+        { id: 212, name: 'Salmon Tartare Mix', category: 'Sushi', ingredients: [
+            { name: 'Salmon fine dices', qty: 400, unit: 'gram' }, { name: 'Kimchi aioli', qty: 80, unit: 'gram' },
+            { name: 'Yuzu kosho', qty: 40, unit: 'gram' }
+        ], steps: ['Combine all ingredients and mix.'], subRecipes: [] },
+        { id: 213, name: 'Shari Zu', category: 'Sushi', ingredients: [
+            { name: 'Rice vinegar', qty: 10, unit: 'liter' }, { name: 'Sugar', qty: 6736, unit: 'gram' },
+            { name: 'Salt', qty: 1996, unit: 'gram' }, { name: 'Mirin', qty: 625, unit: 'ml' },
+            { name: 'Kombu', qty: 200, unit: 'gram' }
+        ], steps: ['Place vinegar (except 5L) and kombu in large pot, heat gently.', 'Add salt first, then sugar.', 'Heat no more than 60-70C to dissolve, stir constantly.', 'Remove to ice bath and cool, add remaining vinegar.'], subRecipes: [] },
+        { id: 214, name: 'Sundried Tomato Pesto', category: 'Sushi', ingredients: [
+            { name: 'Sun dried tomatoes', qty: 800, unit: 'gram' }, { name: 'Garlic confit', qty: 50, unit: 'gram' },
+            { name: 'Basil', qty: 40, unit: 'gram' }, { name: 'Sun dried tomato oil', qty: 750, unit: 'gram' }
+        ], steps: [], subRecipes: [{ name: 'Garlic Confit', ingredients: [
+            { name: 'Garlic cloves', qty: 272, unit: 'gram' }, { name: 'Blended oil', qty: 384, unit: 'gram' },
+            { name: 'Fresh thyme sprigs', qty: 2, unit: 'ea' }
+        ]}] },
+        { id: 215, name: 'Sushi Rice (Shari)', category: 'Sushi', ingredients: [
+            { name: 'Nishiki rice', qty: 2700, unit: 'gram' }, { name: 'Water', qty: 2650, unit: 'gram' },
+            { name: 'Shari Zu', qty: 876, unit: 'gram' }
+        ], steps: ['Wash rice thoroughly and strain 5 times.', 'Strain completely.', 'Transfer to rice cooker, add water per recipe.', 'Cook, then rest 40 minutes before mixing with Shari Zu.'], subRecipes: [] },
+        { id: 216, name: 'Temaki Trio', category: 'Sushi', ingredients: [
+            { name: 'Ahi tuna', qty: 12.5, unit: 'gram' }, { name: 'Takuan', qty: 5, unit: 'gram' },
+            { name: 'Nikiri shoyu', qty: 1, unit: 'gram' }, { name: 'Sushi rice', qty: 12.5, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 217, name: 'Tempura Flour Mix', category: 'Sushi', ingredients: [
+            { name: 'Rice flour', qty: 3, unit: 'cup' }, { name: 'AP flour', qty: 1, unit: 'cup' }
+        ], steps: ['Combine all ingredients and mix thoroughly.'], subRecipes: [] },
+        { id: 218, name: 'Wasabi', category: 'Sushi', ingredients: [
+            { name: 'Wasabi powder', qty: 250, unit: 'gram' }, { name: 'Distilled water', qty: 320, unit: 'gram' }
+        ], steps: ['Mix in a small bowl until a smooth paste forms.', 'Rest 5 minutes uncovered to develop flavor.', 'Cover with plastic wrap or store in airtight container.'], subRecipes: [] },
+        { id: 219, name: 'Yuzu Kosho Aioli', category: 'Sushi', ingredients: [
+            { name: 'Yuzu kosho', qty: 150, unit: 'gram' }, { name: 'Vegan mayonnaise', qty: 920, unit: 'gram' }
+        ], steps: ['Finely blend yuzu kosho until smooth.', 'Combine with mayonnaise and mix thoroughly.'], subRecipes: [] },
+        { id: 220, name: 'Yuzu Shoyu', category: 'Sushi', ingredients: [
+            { name: 'Yuzu juice', qty: 420, unit: 'gram' }, { name: 'Tamari soy sauce', qty: 824, unit: 'gram' },
+            { name: 'Mirin', qty: 83, unit: 'gram' }
+        ], steps: ['Mix all ingredients together thoroughly.'], subRecipes: [] }
+    ];
 }
 
 /* OLD DEFAULT RECIPES REMOVED – recipes will be uploaded manually by the user */
