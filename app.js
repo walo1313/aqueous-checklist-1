@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 169;
+const APP_BUILD = 170;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2583,6 +2583,182 @@ function getDefaultRecipes() {
         { id: 338, name: "Butcher's Cut of the Day", category: 'Dinner', ingredients: [
             { name: 'Potato pave', qty: 113, unit: 'gram' }, { name: 'Broccoli', qty: 113, unit: 'gram' },
             { name: 'Demi-glace', qty: 60, unit: 'ml' }, { name: 'Cut steak', qty: 10, unit: 'oz' }
+        ], steps: [], subRecipes: [] },
+        // ── Lunch (Amber Bar) ──
+        { id: 100, name: 'Ajitsuke Tamago (Ramen Egg)', category: 'Lunch', ingredients: [
+            { name: 'Large eggs', qty: 30, unit: 'ea' }, { name: 'GF soy sauce', qty: 1, unit: 'qt' },
+            { name: 'Mirin', qty: 1, unit: 'qt' }, { name: 'Sake', qty: 2, unit: 'cup' },
+            { name: 'Water', qty: 4, unit: 'qt' }, { name: 'Kawami dashi', qty: 1, unit: 'pk' }
+        ], steps: [], subRecipes: [] },
+        { id: 101, name: 'Amber Burger', category: 'Lunch', ingredients: [], steps: [], subRecipes: [] },
+        { id: 102, name: 'Angus Cheek Spring Roll', category: 'Lunch', ingredients: [
+            { name: 'Braised angus cheek', qty: 4, unit: 'kg' }, { name: 'Mungbean noodles', qty: 500, unit: 'gram' },
+            { name: 'Tamari', qty: 250, unit: 'ml' }, { name: 'Black pepper ground', qty: 8, unit: 'gram' },
+            { name: 'Garlic clove chopped', qty: 300, unit: 'gram' }, { name: 'Shiitake mushroom', qty: 1, unit: 'kg' },
+            { name: 'Green cabbage', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 103, name: 'Artichoke Fritti', category: 'Lunch', ingredients: [
+            { name: 'Artichoke halves', qty: 4, unit: 'ea' }, { name: 'Cornstarch and rice flour mix (1:1)', qty: null, unit: '-' },
+            { name: 'Romesco salsa', qty: 2.5, unit: 'oz' }, { name: 'Salsa verde', qty: 2.5, unit: 'oz' },
+            { name: 'Pecorino cheese', qty: null, unit: '-' }, { name: 'Lemon wedge', qty: 1, unit: 'ea' }
+        ], steps: ['Cut artichokes in half. Pat dry to remove excess moisture.', 'Dredge artichoke halves in starch mix and fry.'], subRecipes: [] },
+        { id: 104, name: 'Basil-Citrus Vinaigrette', category: 'Lunch', ingredients: [
+            { name: 'Fresh basil leaves', qty: 115, unit: 'gram' }, { name: 'Dijon mustard', qty: 50, unit: 'gram' },
+            { name: 'EVOO', qty: 150, unit: 'gram' }, { name: 'Orange juice', qty: 185, unit: 'gram' },
+            { name: 'Lime juice', qty: 108, unit: 'gram' }, { name: 'Salt', qty: 1.5, unit: 'tbsp' }
+        ], steps: [], subRecipes: [] },
+        { id: 105, name: 'BBQ Brisket', category: 'Lunch', ingredients: [
+            { name: 'Cold Water', qty: 8, unit: 'kg' }, { name: 'Kosher Salt', qty: 240, unit: 'gram' },
+            { name: 'Brown Sugar', qty: 160, unit: 'gram' }, { name: 'Liquid Smoke', qty: 120, unit: 'gram' }
+        ], steps: [], subRecipes: [{ name: 'The Glaze', ingredients: [
+            { name: 'Molasses', qty: 240, unit: 'gram' }, { name: 'Liquid Smoke', qty: 120, unit: 'gram' },
+            { name: 'GF Soy Sauce', qty: null, unit: '-' }
+        ]}] },
+        { id: 106, name: 'Black Bean Burger', category: 'Lunch', ingredients: [
+            { name: 'Black bean patty', qty: 1510, unit: 'gram' }, { name: 'Hydrated shiitake mushroom', qty: 1450, unit: 'gram' }
+        ], steps: ['Shiitake mushroom fine chop in the robocoupe', 'Combine with black bean patty to make a dough'], subRecipes: [] },
+        { id: 107, name: 'Caprese Burrata', category: 'Lunch', ingredients: [
+            { name: 'Yuzu', qty: 500, unit: 'gram' }, { name: 'Simple syrup', qty: 830, unit: 'gram' },
+            { name: 'Sugar', qty: 1, unit: 'pint' }, { name: 'Rice vinegar', qty: 3, unit: 'cup' },
+            { name: 'Ginger', qty: 15, unit: 'gram' }, { name: 'Thai chili', qty: 2, unit: 'ea' }
+        ], steps: [], subRecipes: [] },
+        { id: 108, name: 'Charcuterie', category: 'Lunch', ingredients: [
+            { name: 'Italian salami', qty: null, unit: '-' }, { name: 'Hot sopressata', qty: 12.5, unit: 'gram' },
+            { name: 'Dry salami', qty: null, unit: '-' }, { name: 'Prosciutto', qty: null, unit: '-' },
+            { name: 'Pecorino romano', qty: null, unit: '-' }, { name: 'White cheddar', qty: null, unit: '-' },
+            { name: 'Brie cheese', qty: 40, unit: 'gram' }, { name: 'Apricot jam', qty: 30, unit: 'gram' },
+            { name: 'Olives', qty: 11, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 109, name: 'Chicken Broth', category: 'Lunch', ingredients: [
+            { name: 'Yellow onion', qty: 7266, unit: 'gram' }, { name: 'Leek white part', qty: 2031, unit: 'gram' },
+            { name: 'Ginger', qty: 1160, unit: 'gram' }, { name: 'Daikon radish', qty: 2832, unit: 'gram' },
+            { name: 'Bay leaf', qty: 5, unit: 'gram' }, { name: 'Pepper corn', qty: 100, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 110, name: 'Chicken Chashu Ramen', category: 'Lunch', ingredients: [
+            { name: 'Creamy chicken ramen base', qty: 2250, unit: 'ml' }, { name: 'Chicken broth', qty: 18, unit: 'liter' },
+            { name: 'Kawami Dashi', qty: 2, unit: 'bag' }, { name: 'Sous vide chicken breast', qty: 15, unit: 'portion' },
+            { name: '60 days corn', qty: null, unit: '-' }, { name: 'Beech mushroom', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 111, name: 'Classic Hummus', category: 'Lunch', ingredients: [], steps: [], subRecipes: [] },
+        { id: 112, name: 'Crudites', category: 'Lunch', ingredients: [
+            { name: 'Hummus', qty: null, unit: '-' }, { name: 'Tzatziki', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 113, name: 'Galbi Sauce', category: 'Lunch', ingredients: [
+            { name: 'Ginger', qty: 113, unit: 'gram' }, { name: 'Garlic', qty: 113, unit: 'gram' },
+            { name: 'Tamari', qty: 1150, unit: 'ml' }, { name: 'Corn syrup', qty: 2200, unit: 'ml' },
+            { name: 'Sugar', qty: 100, unit: 'gram' }, { name: 'Black pepper ground', qty: 6, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 114, name: 'Heirloom Carrot Bisque', category: 'Lunch', ingredients: [
+            { name: 'Jumbo Carrots', qty: 1800, unit: 'gram' }, { name: 'Vegetable stock', qty: 5, unit: 'qt' },
+            { name: 'Kabocha Squash', qty: 1400, unit: 'gram' }, { name: 'Coconut milk', qty: 3.5, unit: 'qt' },
+            { name: 'Kosher Salt', qty: 40, unit: 'gram' }, { name: 'Lemongrass', qty: 150, unit: 'gram' },
+            { name: 'Ginger', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 115, name: 'Hoisin Bao Sauce', category: 'Lunch', ingredients: [
+            { name: 'Hoisin sauce', qty: 1600, unit: 'gram' }, { name: 'Molasses', qty: 500, unit: 'gram' },
+            { name: 'Tamari Soy sauce', qty: 400, unit: 'gram' }, { name: 'Worcestershire', qty: 50, unit: 'gram' },
+            { name: 'Shio Koji', qty: 50, unit: 'gram' }, { name: 'Balsamic di Modena', qty: 50, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 116, name: 'Kabocha Squash Bisque', category: 'Lunch', ingredients: [
+            { name: 'Kabocha squash', qty: 3000, unit: 'gram' }, { name: 'Butternut squash', qty: 2000, unit: 'gram' },
+            { name: 'Yellow onions', qty: 1000, unit: 'gram' }, { name: 'Garlic minced', qty: 50, unit: 'gram' },
+            { name: 'Fresh ginger minced', qty: 25, unit: 'gram' }, { name: 'Carrots', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 117, name: 'Katsu Sando', category: 'Lunch', ingredients: [
+            { name: 'Pork loin', qty: 10, unit: 'lb' }, { name: 'Creamy shio koji', qty: null, unit: '10% of meat weight' },
+            { name: 'Bay leaf', qty: 1, unit: 'ea' }, { name: 'Black peppercorn', qty: 10, unit: 'piece' },
+            { name: 'EVOO', qty: 4, unit: 'fl.oz' }
+        ], steps: ['After trimming, marinate the meat in creamy shio koji for 6 hours.'], subRecipes: [] },
+        { id: 118, name: 'Kimchi Aioli', category: 'Lunch', ingredients: [
+            { name: 'Kimchi no moto', qty: 35, unit: 'gram' }, { name: 'Heavy mayonnaise', qty: 200, unit: 'gram' }
+        ], steps: ['Mix all listed ingredients together thoroughly until fully incorporated.'], subRecipes: [] },
+        { id: 119, name: 'Kimchi Panini', category: 'Lunch', ingredients: [
+            { name: 'Sourdough', qty: 2, unit: 'piece' }, { name: 'Kimchi', qty: null, unit: '-' },
+            { name: 'Gochujang butter', qty: null, unit: '-' }, { name: 'Kimchi aioli', qty: null, unit: '-' },
+            { name: 'Galbi short rib', qty: null, unit: '-' }, { name: 'Galbi sauce', qty: null, unit: '-' }
+        ], steps: ['Soak short ribs under running cold water for about 3 hours until water runs clear.', 'Marinate in galbi sauce.'], subRecipes: [] },
+        { id: 120, name: 'Kimchi', category: 'Lunch', ingredients: [
+            { name: 'Napa cabbage', qty: 14, unit: 'ea' }, { name: 'Kosher salt', qty: 4032, unit: 'gram' },
+            { name: 'Water', qty: 15200, unit: 'ml' }, { name: 'Rice flour', qty: 100, unit: 'gram' },
+            { name: 'Gochugaru (coarse)', qty: 680, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 121, name: 'Lemongrass Rice', category: 'Lunch', ingredients: [
+            { name: 'Lemongrass white part', qty: 2, unit: 'ea' }, { name: 'Cilantro', qty: 3, unit: 'cup' },
+            { name: 'Chive', qty: 3, unit: 'cup' }, { name: 'Italian parsley', qty: 3, unit: 'cup' },
+            { name: 'Water', qty: 1, unit: 'cup' }, { name: 'Jasmin steamed rice', qty: 6600, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 122, name: 'Little Gem Caesar', category: 'Lunch', ingredients: [], steps: [], subRecipes: [] },
+        { id: 123, name: 'Pickled Cabbage', category: 'Lunch', ingredients: [
+            { name: 'Water', qty: 3, unit: 'cup' }, { name: 'Rice Vinegar', qty: 3, unit: 'cup' },
+            { name: 'Sugar', qty: 2, unit: 'oz' }, { name: 'Black peppercorn', qty: 1, unit: 'tbsp' },
+            { name: 'Coriander seed', qty: 1.5, unit: 'tbsp' }, { name: 'Salt', qty: null, unit: '-' },
+            { name: 'Red Cabbage', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 124, name: 'Pickled Cherry Tomato', category: 'Lunch', ingredients: [
+            { name: 'Rice vinegar', qty: 212, unit: 'gram' }, { name: 'Water', qty: 250, unit: 'gram' },
+            { name: 'Sugar', qty: 65, unit: 'gram' }, { name: 'Black pepper corn', qty: 5, unit: 'gram' },
+            { name: 'Rosemary', qty: 10, unit: 'gram' }, { name: 'Salt', qty: 6, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 125, name: 'Pickled Fresno Pepper', category: 'Lunch', ingredients: [
+            { name: 'Water', qty: 400, unit: 'gram' }, { name: 'White Vinegar', qty: 400, unit: 'gram' },
+            { name: 'Sugar', qty: 80, unit: 'gram' }, { name: 'Kosher Salt', qty: 20, unit: 'gram' },
+            { name: 'Black Peppercorn', qty: 4, unit: 'gram' }, { name: 'Fresno pepper', qty: 300, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 126, name: 'Pickled Sweet Pepper', category: 'Lunch', ingredients: [
+            { name: 'Water', qty: 400, unit: 'gram' }, { name: 'White Vinegar', qty: 400, unit: 'gram' },
+            { name: 'Sugar', qty: 80, unit: 'gram' }, { name: 'Kosher Salt', qty: 20, unit: 'gram' },
+            { name: 'Black Peppercorn', qty: 4, unit: 'gram' }, { name: 'Mini sweet pepper', qty: 300, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 127, name: 'Pickled Red Chili Sauce', category: 'Lunch', ingredients: [
+            { name: 'Mae ploy', qty: 500, unit: 'ml' }, { name: 'Honey', qty: 250, unit: 'ml' },
+            { name: 'Fish sauce', qty: 50, unit: 'ml' }, { name: 'Tamari', qty: 50, unit: 'ml' },
+            { name: 'Sesame oil', qty: 25, unit: 'ml' }, { name: 'Sesame seeds (black and white)', qty: 1, unit: 'cup' }
+        ], steps: [], subRecipes: [] },
+        { id: 128, name: 'Romesco Salsa', category: 'Lunch', ingredients: [
+            { name: 'Fresno pepper', qty: 200, unit: 'gram' }, { name: 'Garlic', qty: 240, unit: 'gram' },
+            { name: 'Chipotle', qty: 66, unit: 'gram' }, { name: 'Fire roasted tomato', qty: 1, unit: 'can' },
+            { name: 'Grilled Red bell pepper', qty: 1000, unit: 'gram' }, { name: 'Yellow onion', qty: 400, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 129, name: 'Salsa Verde', category: 'Lunch', ingredients: [
+            { name: 'Cilantro', qty: 350, unit: 'gram' }, { name: 'Italian parsley', qty: 350, unit: 'gram' },
+            { name: 'Garlic', qty: 175, unit: 'gram' }, { name: 'Serrano pepper', qty: 100, unit: 'gram' },
+            { name: 'Anchovy', qty: 120, unit: 'gram' }, { name: 'Caper', qty: 150, unit: 'gram' }
+        ], steps: [], subRecipes: [] },
+        { id: 130, name: 'Shio Tare', category: 'Lunch', ingredients: [
+            { name: 'Mirin', qty: 1500, unit: 'gram' }, { name: 'Sake', qty: 1000, unit: 'gram' },
+            { name: 'White wine', qty: 500, unit: 'gram' }, { name: 'White shoyu', qty: 1500, unit: 'gram' },
+            { name: 'Kosher Salt', qty: 200, unit: 'gram' }, { name: 'Chicken base', qty: 50, unit: 'gram' },
+            { name: 'Kawami Dashi', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 131, name: 'Stir-Fry Sauce', category: 'Lunch', ingredients: [
+            { name: 'Mirin', qty: 70, unit: 'gram' }, { name: 'Sake', qty: 160, unit: 'gram' },
+            { name: 'Shio koji', qty: 85, unit: 'gram' }, { name: 'Hoisin', qty: 200, unit: 'gram' },
+            { name: 'Black vinegar', qty: 80, unit: 'gram' }, { name: 'Sesame oil', qty: 50, unit: 'gram' },
+            { name: 'Fish sauce', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 132, name: 'Poke Sauce', category: 'Lunch', ingredients: [
+            { name: 'GF Soy Sauce', qty: 1, unit: 'qt' }, { name: 'Mirin', qty: 2, unit: 'cup' },
+            { name: 'Sesame oil', qty: 1, unit: 'cup' }, { name: 'Wasabi powder', qty: 5, unit: 'tbsp' },
+            { name: 'Garlic clove', qty: 180, unit: 'gram' }, { name: 'Onion saute cut', qty: null, unit: '-' }
+        ], steps: [], subRecipes: [] },
+        { id: 133, name: 'Tzatziki', category: 'Lunch', ingredients: [
+            { name: 'Greek yogurt', qty: 500, unit: 'gram' }, { name: 'Cucumber brunoise', qty: 0.5, unit: 'ea' },
+            { name: 'Garlic mince', qty: 2, unit: 'clove' }, { name: 'Extra virgin olive oil', qty: 1.5, unit: 'fl.oz' },
+            { name: 'Fresh lemon juice', qty: 1, unit: 'fl.oz' }, { name: 'Fresh dill mince', qty: 1, unit: 'tbsp' }
+        ], steps: [], subRecipes: [] },
+        { id: 134, name: 'Veal Ramen Broth', category: 'Lunch', ingredients: [
+            { name: 'Veal bone', qty: 50, unit: 'lb' }, { name: 'Water', qty: 35, unit: 'gal' },
+            { name: 'Yellow Onion', qty: 7, unit: 'kg' }, { name: 'Daikon Radish', qty: 3, unit: 'kg' },
+            { name: 'Peeled garlic', qty: 2.4, unit: 'kg' }, { name: 'Ginger', qty: 1.5, unit: 'kg' }
+        ], steps: [], subRecipes: [] },
+        { id: 135, name: 'Wagyu Brisket Bao', category: 'Lunch', ingredients: [
+            { name: 'Bao steamed', qty: 2, unit: 'ea' }, { name: 'BBQ brisket', qty: 4, unit: 'oz' },
+            { name: 'Pickled Cabbage', qty: 1, unit: 'oz' }, { name: 'Hoisin bao sauce', qty: 1, unit: 'tbsp' },
+            { name: 'Salted Cucumber', qty: 4, unit: 'slice' }, { name: 'Pickled sweet pepper', qty: 4, unit: 'slice' }
+        ], steps: [], subRecipes: [] },
+        { id: 136, name: 'Yuzu Aioli', category: 'Lunch', ingredients: [
+            { name: 'Yuzu', qty: 20, unit: 'gram' }, { name: 'Vegan mayonnaise', qty: 200, unit: 'gram' },
+            { name: 'Lemon zest', qty: 3, unit: 'ea' }, { name: 'Salt', qty: 0.5, unit: 'tsp' }
         ], steps: [], subRecipes: [] },
         // ── Sushi ──
         { id: 200, name: 'California Maki', category: 'Sushi', ingredients: [
