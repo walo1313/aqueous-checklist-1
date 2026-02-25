@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 159;
+const APP_BUILD = 160;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2123,7 +2123,7 @@ function renderStationsView(opts) {
             <div class="empty-state">
                 <div class="empty-state-icon">📋</div>
                 <p>No stations created</p>
-                <p class="empty-sub">Go to Settings ⚙️ to add a station</p>
+                <p class="empty-sub">Tap "+ New Station" below to get started</p>
             </div>`;
     }
 
@@ -2164,19 +2164,36 @@ function renderStationsView(opts) {
 function switchToolsSubTab(tab) {
     handleClick();
     toolsSubTab = tab;
+    stationSearchQuery = '';
     panelDirty.tools = true;
     renderPanel('tools');
 }
 
+let stationSearchQuery = '';
+
 function renderTools(container) {
     let content = '';
     if (toolsSubTab === 'stations') {
-        content = renderStationsView({ showPriority: false, mode: 'database' });
+        if (stationSearchQuery.length > 0) {
+            content = renderStationSearchResults(stationSearchQuery);
+        } else {
+            content = renderStationsView({ showPriority: false, mode: 'database' });
+            content += `<button class="new-station-btn squishy" onclick="handleClick(); showNewStationModal()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-3px;margin-right:6px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New Station</button>`;
+        }
     } else if (toolsSubTab === 'logs') {
         content = renderLogsContent();
     } else if (toolsSubTab === 'history') {
         content = renderHistoryContent();
     }
+
+    var searchBar = toolsSubTab === 'stations' ? `
+        <div class="station-search-row">
+            <svg class="station-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" class="station-search-input" id="stationSearchInput" placeholder="Search ingredients..." value="${stationSearchQuery}" oninput="onStationSearch(this.value)">
+            ${stationSearchQuery ? '<button class="station-search-clear" onclick="clearStationSearch()">✕</button>' : ''}
+        </div>` : '';
 
     container.innerHTML = `
         <div class="sub-pill-row">
@@ -2184,8 +2201,77 @@ function renderTools(container) {
             <button class="day-chip ${toolsSubTab === 'logs' ? 'active' : ''}" onclick="switchToolsSubTab('logs')">Logs</button>
             <button class="day-chip ${toolsSubTab === 'history' ? 'active' : ''}" onclick="switchToolsSubTab('history')">History</button>
         </div>
+        ${searchBar}
         <div style="padding:0 20px 100px;">${content}</div>`;
 
+    if (toolsSubTab === 'stations' && stationSearchQuery) {
+        var inp = document.getElementById('stationSearchInput');
+        if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }
+}
+
+function onStationSearch(val) {
+    stationSearchQuery = val;
+    panelDirty.tools = true;
+    renderPanel('tools');
+}
+
+function clearStationSearch() {
+    handleClick();
+    stationSearchQuery = '';
+    panelDirty.tools = true;
+    renderPanel('tools');
+}
+
+function renderStationSearchResults(query) {
+    var q = query.toLowerCase().trim();
+    if (!q) return '';
+    var results = [];
+    stations.forEach(function(station) {
+        (station.dishes || []).forEach(function(dish) {
+            (dish.ingredients || []).forEach(function(ing) {
+                if (ing.name.toLowerCase().indexOf(q) >= 0) {
+                    results.push({ ing: ing, dish: dish, station: station });
+                }
+            });
+        });
+    });
+    if (results.length === 0) {
+        return '<div class="empty-state"><div class="empty-state-icon">🔍</div><p>No ingredients found</p><p class="empty-sub">Try a different search</p></div>';
+    }
+    var html = '';
+    results.forEach(function(r) {
+        var dishLabel = r.station.dishes.length > 1 ? r.dish.name + ' · ' : '';
+        html += '<div class="search-result-row squishy" onclick="handleClick(); navigateToIngredient(' + r.station.id + ', ' + r.ing.id + ')">' +
+            '<span class="search-result-name">' + r.ing.name + '</span>' +
+            '<span class="search-result-meta">' + dishLabel + r.station.name + '</span>' +
+            '</div>';
+    });
+    return html;
+}
+
+function navigateToIngredient(stationId, ingId) {
+    stationSearchQuery = '';
+    var station = stations.find(function(s) { return s.id === stationId; });
+    if (station) station.expanded = true;
+    if (station) {
+        station.dishes.forEach(function(d) {
+            var hasIng = (d.ingredients || []).some(function(i) { return i.id === ingId; });
+            if (hasIng) d.expanded = true;
+        });
+    }
+    if (currentView !== 'tools') switchView('tools');
+    if (toolsSubTab !== 'stations') toolsSubTab = 'stations';
+    panelDirty.tools = true;
+    renderPanel('tools');
+    setTimeout(function() {
+        var el = document.getElementById('ing-' + stationId + '-' + ingId);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('search-highlight');
+            setTimeout(function() { el.classList.remove('search-highlight'); }, 1500);
+        }
+    }, 100);
 }
 
 // ==================== LIBRARY VIEW ====================
@@ -7443,17 +7529,6 @@ function renderSettings(container) {
     });
 
     let html = `
-        <div class="settings-group">
-            <div class="settings-group-title">Stations</div>
-            <div class="setting-row">
-                <div class="setting-info">
-                    <span class="setting-label">${stations.length} station${stations.length !== 1 ? 's' : ''}</span>
-                    <span class="setting-desc">Manage your kitchen stations</span>
-                </div>
-                <button class="btn-delete" style="background:var(--accent);box-shadow:0 2px 6px var(--accent-glow);" onclick="handleClick(); showNewStationModal()">+ Add</button>
-            </div>
-        </div>
-
         <div class="settings-group">
             <div class="settings-group-title">Profile</div>
             <div class="setting-row">
