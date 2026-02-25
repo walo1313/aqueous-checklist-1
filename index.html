@@ -3090,7 +3090,7 @@
             display: flex;
             align-items: center;
             gap: 14px;
-            padding: 10px 12px;
+            padding: 14px 16px;
             background: var(--surface);
             border-radius: var(--radius);
             box-shadow: var(--neu-shadow-sm);
@@ -3098,21 +3098,9 @@
             -webkit-user-select: none;
             user-select: none;
         }
-        .bible-pdf-thumb {
-            width: 56px;
-            height: 72px;
-            border-radius: 6px;
-            overflow: hidden;
-            background: var(--bg);
+        .bible-pdf-icon {
+            font-size: 24px;
             flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .bible-pdf-thumb canvas {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover;
         }
         .bible-pdf-name {
             font-size: 14px;
@@ -3123,6 +3111,10 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+        .bible-pdf-arrow {
+            flex-shrink: 0;
+            color: var(--text-muted);
         }
         .bible-upload-btn {
             display: flex;
@@ -3140,57 +3132,86 @@
             cursor: pointer;
         }
         .bible-upload-btn:active { background: var(--surface); }
+        .bible-menu-btn {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 13px 14px;
+            background: var(--bg);
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            margin-bottom: 8px;
+        }
+        .bible-menu-btn:active { background: var(--surface); }
+        .bible-menu-btn-danger { color: var(--high); }
+        .bible-rename-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            background: var(--bg);
+            outline: none;
+            box-sizing: border-box;
+        }
+        .bible-rename-input:focus { border-color: var(--accent); }
         .bible-back-row {
             display: flex;
             align-items: center;
-            padding: 6px 0 10px;
+            gap: 6px;
+            padding: 6px 0 12px;
             cursor: pointer;
             color: var(--text-muted);
         }
-        .bible-page-grid {
+        .bible-page-list {
             width: 100%;
         }
-        .bible-page-wrap {
-            display: inline-block;
-            border-radius: 6px;
+        .bible-page-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 10px;
+            border-radius: 8px;
             overflow: hidden;
             cursor: pointer;
             position: relative;
-            vertical-align: top;
-            transition: width 0.25s ease, margin 0.25s ease;
             -webkit-user-select: none;
             user-select: none;
+            background: var(--surface);
+            box-shadow: var(--neu-shadow-sm);
         }
-        .bible-page-wrap canvas {
+        .bible-page-item canvas {
             display: block;
+            border-radius: 8px;
+        }
+        .bible-page-collapsed {
+            padding: 6px;
+        }
+        .bible-page-collapsed canvas {
             border-radius: 6px;
         }
-        .bible-page-thumb {
-            width: calc(50% - 12px);
-            margin: 6px;
+        .bible-page-open {
+            padding: 0;
         }
-        .bible-page-thumb canvas {
-            width: 100% !important;
-            height: auto !important;
-        }
-        .bible-page-expanded {
-            width: calc(100% - 16px);
-            margin: 8px;
-        }
-        .bible-page-expanded canvas {
-            width: 100% !important;
-            height: auto !important;
+        .bible-page-open canvas {
+            border-radius: 0;
             touch-action: pinch-zoom;
         }
         .bible-page-label {
             position: absolute;
-            bottom: 4px;
-            right: 6px;
+            bottom: 8px;
+            right: 10px;
             background: rgba(0,0,0,0.5);
             color: #fff;
             font-size: 10px;
             font-weight: 700;
-            padding: 1px 6px;
+            padding: 2px 7px;
             border-radius: 4px;
         }
 

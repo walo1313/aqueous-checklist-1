@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 161;
+const APP_BUILD = 162;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2414,7 +2414,7 @@ function migrateBibleOldPdf() {
 
 function renderBibleContent() {
     if (bibleView === 'pages' && bibleOpenPdfId) {
-        return '<div id="biblePageGrid" class="bible-page-grid"></div>';
+        return '<div id="biblePageList" class="bible-page-list"></div>';
     }
     return '<div id="bibleList" class="bible-list"></div>' +
         '<button class="bible-upload-btn squishy" onclick="triggerBibleUpload()">' +
@@ -2456,7 +2456,7 @@ function initBibleViewer() {
     migrateBibleOldPdf().then(function() {
         if (bibleView === 'pages' && bibleOpenPdfId) {
             loadBiblePdfById(bibleOpenPdfId).then(function(pdf) {
-                if (pdf) renderBiblePageGrid(pdf.data);
+                if (pdf) renderBiblePageList(pdf.data);
                 else { bibleView = 'list'; bibleOpenPdfId = null; initBibleViewer(); }
             });
         } else {
@@ -2480,51 +2480,98 @@ function renderBibleList() {
         pdfs.forEach(function(pdf) {
             var card = document.createElement('div');
             card.className = 'bible-pdf-card squishy';
-            card.innerHTML = '<div class="bible-pdf-thumb" id="bthumb_' + pdf.id + '"></div>' +
-                '<div class="bible-pdf-name">' + (pdf.name || 'Untitled') + '</div>';
+            card.innerHTML = '<div class="bible-pdf-icon">📄</div>' +
+                '<div class="bible-pdf-name">' + (pdf.name || 'Untitled') + '</div>' +
+                '<svg class="bible-pdf-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>';
             card.addEventListener('click', function() { handleClick(); bibleOpenPdf(pdf.id); });
-            // Long press to delete
             card.addEventListener('touchstart', function(e) {
                 bibleLongPressTimer = setTimeout(function() {
                     bibleLongPressTimer = null;
-                    confirmDeleteBiblePdf(pdf.id, pdf.name);
+                    showBiblePdfMenu(pdf.id, pdf.name);
                 }, 600);
             }, { passive: true });
             card.addEventListener('touchend', function() { if (bibleLongPressTimer) { clearTimeout(bibleLongPressTimer); bibleLongPressTimer = null; } });
             card.addEventListener('touchmove', function() { if (bibleLongPressTimer) { clearTimeout(bibleLongPressTimer); bibleLongPressTimer = null; } });
             container.appendChild(card);
-            renderBibleThumb(pdf.id, pdf.data);
         });
     });
 }
 
-function renderBibleThumb(pdfId, arrayBuffer) {
-    if (typeof pdfjsLib === 'undefined') return;
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
-        pdf.getPage(1).then(function(page) {
-            var thumbEl = document.getElementById('bthumb_' + pdfId);
-            if (!thumbEl) return;
-            var tw = 120;
-            var vp = page.getViewport({ scale: 1 });
-            var scale = tw / vp.width;
-            var svp = page.getViewport({ scale: scale * 2 });
-            var canvas = document.createElement('canvas');
-            canvas.width = svp.width;
-            canvas.height = svp.height;
-            canvas.style.width = tw + 'px';
-            canvas.style.height = (tw * svp.height / svp.width) + 'px';
-            thumbEl.innerHTML = '';
-            thumbEl.appendChild(canvas);
-            page.render({ canvasContext: canvas.getContext('2d'), viewport: svp });
+function showBiblePdfMenu(id, name) {
+    handleClick();
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div class="confirm-box">' +
+        '<p style="font-size:14px;font-weight:700;margin-bottom:14px;">' + (name || 'Untitled') + '</p>' +
+        '<button class="bible-menu-btn squishy" id="bibleMenuRename">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:10px;"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+        'Rename</button>' +
+        '<button class="bible-menu-btn bible-menu-btn-danger squishy" id="bibleMenuDelete">' +
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:10px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>' +
+        'Delete</button>' +
+        '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('bibleMenuRename').addEventListener('click', function() {
+        overlay.remove();
+        showRenameBiblePdf(id, name);
+    });
+    document.getElementById('bibleMenuDelete').addEventListener('click', function() {
+        overlay.remove();
+        confirmDeleteBiblePdf(id, name);
+    });
+}
+
+function showRenameBiblePdf(id, currentName) {
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div class="confirm-box">' +
+        '<p style="font-size:14px;font-weight:700;margin-bottom:12px;">Rename PDF</p>' +
+        '<input type="text" id="bibleRenameInput" class="bible-rename-input" value="' + (currentName || '').replace(/"/g, '&quot;') + '" placeholder="PDF name...">' +
+        '<div style="display:flex;gap:10px;margin-top:14px;">' +
+        '<button class="btn squishy" style="flex:1;height:40px;font-size:13px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn squishy" style="flex:1;height:40px;font-size:13px;background:var(--accent);color:#fff;border:none;" id="bibleRenameSave">Save</button>' +
+        '</div></div>';
+    document.body.appendChild(overlay);
+    var inp = document.getElementById('bibleRenameInput');
+    setTimeout(function() { inp.focus(); inp.select(); }, 100);
+    document.getElementById('bibleRenameSave').addEventListener('click', function() {
+        var newName = inp.value.trim();
+        if (!newName) { showToast('Enter a name'); return; }
+        renameBiblePdf(id, newName).then(function() {
+            showToast('Renamed');
+            overlay.remove();
+            panelDirty.library = true;
+            renderPanel('library');
         });
-    }).catch(function() {});
+    });
+}
+
+function renameBiblePdf(id, newName) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('pdfs', 'readwrite');
+            var store = tx.objectStore('pdfs');
+            var req = store.get(id);
+            req.onsuccess = function() {
+                var pdf = req.result;
+                if (pdf) {
+                    pdf.name = newName;
+                    store.put(pdf);
+                }
+                tx.oncomplete = function() { resolve(); };
+            };
+            req.onerror = function() { reject(req.error); };
+        });
+    });
 }
 
 function confirmDeleteBiblePdf(id, name) {
     handleClick();
     var overlay = document.createElement('div');
     overlay.className = 'confirm-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
     overlay.innerHTML = '<div class="confirm-box">' +
         '<p style="font-size:14px;font-weight:700;margin-bottom:12px;">Delete PDF?</p>' +
         '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">"' + (name || 'Untitled') + '" will be permanently removed.</p>' +
@@ -2557,8 +2604,8 @@ function bibleBackToList() {
     renderPanel('library');
 }
 
-function renderBiblePageGrid(arrayBuffer) {
-    var container = document.getElementById('biblePageGrid');
+function renderBiblePageList(arrayBuffer) {
+    var container = document.getElementById('biblePageList');
     if (!container) return;
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading pages...</div>';
 
@@ -2571,11 +2618,12 @@ function renderBiblePageGrid(arrayBuffer) {
     pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
         container.innerHTML = '';
         var numPages = pdf.numPages;
+        var containerW = container.clientWidth || 320;
 
-        // Back tap area at top
+        // Back row
         var backRow = document.createElement('div');
         backRow.className = 'bible-back-row';
-        backRow.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>';
+        backRow.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> <span style="font-size:13px;font-weight:600;">Back</span>';
         backRow.addEventListener('click', function() { handleClick(); bibleBackToList(); });
         container.appendChild(backRow);
 
@@ -2583,22 +2631,22 @@ function renderBiblePageGrid(arrayBuffer) {
             if (pageNum > numPages) return;
             pdf.getPage(pageNum).then(function(page) {
                 var vp = page.getViewport({ scale: 1 });
-                var thumbW = (container.clientWidth - 36) / 2;
+                var thumbW = containerW * 0.55;
                 var thumbScale = thumbW / vp.width;
                 var thumbVp = page.getViewport({ scale: thumbScale * 2 });
-                var fullW = container.clientWidth - 16;
+                var fullW = containerW;
                 var fullScale = fullW / vp.width;
                 var fullVp = page.getViewport({ scale: fullScale * 2 });
 
                 var wrap = document.createElement('div');
-                wrap.className = 'bible-page-wrap bible-page-thumb';
+                wrap.className = 'bible-page-item bible-page-collapsed';
                 wrap.dataset.page = pageNum;
 
                 var canvas = document.createElement('canvas');
                 canvas.width = thumbVp.width;
                 canvas.height = thumbVp.height;
                 canvas.style.width = thumbW + 'px';
-                canvas.style.height = (thumbW * thumbVp.height / thumbVp.width) + 'px';
+                canvas.style.height = (thumbW * vp.height / vp.width) + 'px';
                 wrap.appendChild(canvas);
 
                 var pageLabel = document.createElement('div');
@@ -2609,26 +2657,23 @@ function renderBiblePageGrid(arrayBuffer) {
                 wrap.addEventListener('click', function(e) {
                     handleClick();
                     e.stopPropagation();
-                    var isExpanded = wrap.classList.contains('bible-page-expanded');
+                    var isExpanded = wrap.classList.contains('bible-page-open');
                     if (isExpanded) {
-                        wrap.classList.remove('bible-page-expanded');
-                        wrap.classList.add('bible-page-thumb');
+                        wrap.classList.remove('bible-page-open');
+                        wrap.classList.add('bible-page-collapsed');
                         canvas.style.width = thumbW + 'px';
-                        canvas.style.height = (thumbW * thumbVp.height / thumbVp.width) + 'px';
-                        // Re-render as thumbnail
+                        canvas.style.height = (thumbW * vp.height / vp.width) + 'px';
                         canvas.width = thumbVp.width;
                         canvas.height = thumbVp.height;
                         page.render({ canvasContext: canvas.getContext('2d'), viewport: thumbVp });
                     } else {
-                        wrap.classList.remove('bible-page-thumb');
-                        wrap.classList.add('bible-page-expanded');
+                        wrap.classList.remove('bible-page-collapsed');
+                        wrap.classList.add('bible-page-open');
                         canvas.style.width = fullW + 'px';
-                        canvas.style.height = (fullW * fullVp.height / fullVp.width) + 'px';
-                        // Re-render at full resolution
+                        canvas.style.height = (fullW * vp.height / vp.width) + 'px';
                         canvas.width = fullVp.width;
                         canvas.height = fullVp.height;
                         page.render({ canvasContext: canvas.getContext('2d'), viewport: fullVp });
-                        // Scroll into view
                         setTimeout(function() { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
                     }
                 });
