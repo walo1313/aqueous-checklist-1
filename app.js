@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 170;
+const APP_BUILD = 171;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2584,6 +2584,110 @@ function getDefaultRecipes() {
             { name: 'Potato pave', qty: 113, unit: 'gram' }, { name: 'Broccoli', qty: 113, unit: 'gram' },
             { name: 'Demi-glace', qty: 60, unit: 'ml' }, { name: 'Cut steak', qty: 10, unit: 'oz' }
         ], steps: [], subRecipes: [] },
+        // ── Breakfast ──
+        { id: 400, name: 'Basil Pepita Pesto', category: 'Breakfast', ingredients: [
+            { name: 'Basil', qty: 300, unit: 'gram' }, { name: 'Parsley', qty: 100, unit: 'gram' },
+            { name: 'Champagne vinegar', qty: 90, unit: 'gram' }, { name: 'Roasted pepitas', qty: 340, unit: 'gram' },
+            { name: 'Garlic', qty: 15, unit: 'gram' }, { name: 'Lemon zest', qty: 1, unit: 'ea' },
+            { name: 'EVOO', qty: 900, unit: 'gram' }, { name: 'Kosher salt', qty: 5, unit: 'gram' },
+            { name: 'Ground black pepper', qty: 3, unit: 'gram' }
+        ], steps: ['All ingredients are incorporated and blend until smooth.'], subRecipes: [] },
+        { id: 401, name: 'Bircher Muesli', category: 'Breakfast', ingredients: [
+            { name: 'Gluten free oats', qty: 454, unit: 'gram' }, { name: 'Banana diced', qty: 1, unit: 'ea' },
+            { name: 'Apples grated with peel', qty: 1, unit: 'ea' }, { name: 'Pepitas', qty: 113, unit: 'gram' },
+            { name: 'Chia seeds', qty: 48, unit: 'gram' }, { name: 'Apple juice', qty: 946, unit: 'ml' },
+            { name: 'Coconut milk', qty: 473, unit: 'ml' }, { name: 'Agave', qty: 28, unit: 'gram' },
+            { name: 'Lemon juice', qty: 30, unit: 'ml' }, { name: 'Orange juice', qty: 15, unit: 'ml' }
+        ], steps: ['Hydrate the oats.', 'Combine oats and all ingredients.', 'Garnish with compressed berries and toasted coconut.'], subRecipes: [] },
+        { id: 402, name: 'Burrata & Tomato Toast', category: 'Breakfast', ingredients: [
+            { name: 'Sourdough', qty: 1, unit: 'slice' }, { name: 'Burrata 2oz', qty: 1, unit: 'ea' },
+            { name: 'Sundried tomato pesto', qty: 50, unit: 'gram' }, { name: 'Basil', qty: null, unit: '-' },
+            { name: 'Balsamic pearl', qty: 6, unit: 'gram' }, { name: 'EVOO', qty: 10, unit: 'gram' },
+            { name: 'Confit tomatoes', qty: 8, unit: 'ea' }
+        ], steps: [], subRecipes: [] },
+        { id: 403, name: 'Chicken Congee', category: 'Breakfast', ingredients: [
+            { name: 'Jasmine rice', qty: null, unit: '-' }, { name: 'Konbu Shitake Broth', qty: null, unit: '-' },
+            { name: 'Green Onion fine chop', qty: null, unit: '-' }, { name: 'Ginger fine Julienne', qty: null, unit: '-' },
+            { name: 'Garlic Chili Crisp', qty: null, unit: '-' }, { name: 'Shio kombu', qty: null, unit: '-' }
+        ], steps: ['Jasmine rice and kombu shitake dashi bring to a boil, then reduce the heat to a low simmer for soft.', 'Blended and garnished with shio kombu, ginger, green onion, garlic chili crisp, crispy garlic.', 'Served with aokappa zuke.'], subRecipes: [{ name: 'Kombu Shitake Dashi', ingredients: [
+            { name: 'Kombu', qty: 1, unit: 'sheet' }, { name: 'Dried shitake', qty: 65, unit: 'gram' },
+            { name: 'Water', qty: 3785, unit: 'ml' }
+        ]}] },
+        { id: 404, name: 'Ginger Shot', category: 'Breakfast', ingredients: [
+            { name: 'Ginger (peeled and chopped)', qty: 0.5, unit: 'cup' }, { name: 'Lemon juice', qty: 1, unit: 'lemon' },
+            { name: 'Water', qty: 4, unit: 'cup' }
+        ], steps: ['Blend for 2 minutes and strain.'], subRecipes: [] },
+        { id: 405, name: 'Green Detox Bowl', category: 'Breakfast', ingredients: [
+            { name: 'Frozen mango', qty: 140, unit: 'gram' }, { name: 'Banana', qty: 1, unit: 'ea' },
+            { name: 'Coconut milk', qty: 60, unit: 'ml' }, { name: 'Orange juice', qty: 60, unit: 'ml' },
+            { name: 'Kale (stem removed, chopped)', qty: 67, unit: 'gram' }, { name: 'Spinach', qty: 15, unit: 'gram' },
+            { name: 'Basil', qty: 30, unit: 'gram' }
+        ], steps: ['Combine frozen mangoes, banana, coconut milk, and orange juice in a blender and blend until smooth.', 'Add kale, spinach, and basil and blend again until smooth.', 'Serve chilled in a bowl or glass.'], subRecipes: [] },
+        { id: 406, name: "Maggie's Green Juice", category: 'Breakfast', ingredients: [
+            { name: 'Spinach (chopped)', qty: 1, unit: 'cup' }, { name: 'Kale (chopped)', qty: 1, unit: 'cup' },
+            { name: 'Lemon juice', qty: 1, unit: 'lemon' }, { name: 'Green apples (chopped skin on)', qty: 5, unit: 'ea' },
+            { name: 'English cucumber (chopped skin on)', qty: 1, unit: 'ea' }, { name: 'Asian pear (chopped skin on)', qty: 2, unit: 'ea' },
+            { name: 'Water', qty: 1, unit: 'cup' }
+        ], steps: ['All in blender, blend for 2 minutes.', 'Strain, put on ice to chill.', 'Skim foam off top.'], subRecipes: [] },
+        { id: 407, name: "Millionaire's Bacon", category: 'Breakfast', ingredients: [
+            { name: 'Nueske bacon sliced 0.32cm', qty: 50, unit: 'slice' }, { name: 'Molasses', qty: 210, unit: 'gram' },
+            { name: 'Gochujang', qty: 100, unit: 'gram' }, { name: 'Ground ginger', qty: 5, unit: 'gram' },
+            { name: 'Black pepper', qty: 5, unit: 'gram' }, { name: 'Lemon zest', qty: 10, unit: 'gram' }
+        ], steps: ['Gather all ingredients except bacon, combine in mixing bowl, whisk till smooth paste.', 'Heat oven to 350°F, lay bacon on sheet pan in a single layer without overlapping.', 'Cook bacon 10 min, remove and spread paste on both sides.', 'Bake another 5 min until caramelized and crispy. Cool on sheet pan until glaze is set.'], subRecipes: [] },
+        { id: 408, name: 'Crumpets', category: 'Breakfast', ingredients: [
+            { name: 'Bread flour', qty: 1200, unit: 'gram' }, { name: 'Salt', qty: 55, unit: 'gram' },
+            { name: 'Sugar', qty: 17, unit: 'gram' }, { name: 'Yeast', qty: 35, unit: 'gram' },
+            { name: 'Water (110°F)', qty: 50, unit: 'oz' }
+        ], steps: ['Mix yeast and warm water, combine with dry ingredients until incorporated.', 'Proof 1 hour, fill molds, bake 325°F for 17 min.'], subRecipes: [] },
+        { id: 409, name: 'Pancake Batter', category: 'Breakfast', ingredients: [
+            { name: 'AP Flour', qty: 1360, unit: 'gram' }, { name: 'Sugar', qty: 284, unit: 'gram' },
+            { name: 'Baking soda', qty: 34, unit: 'gram' }, { name: 'Baking powder', qty: 28, unit: 'gram' },
+            { name: 'Salt', qty: 1, unit: 'tsp' }, { name: 'Brown eggs', qty: 728, unit: 'gram' },
+            { name: 'Buttermilk', qty: 2688, unit: 'gram' }
+        ], steps: ['Combine dry ingredients, whisk in eggs, slowly add buttermilk to desired thickness.'], subRecipes: [] },
+        { id: 410, name: 'Fluff', category: 'Breakfast', ingredients: [
+            { name: 'Cherry juice', qty: 240, unit: 'gram' }, { name: 'Maraschino Cherries', qty: 150, unit: 'gram' },
+            { name: 'Cream cheese', qty: 680, unit: 'gram' }, { name: 'Powdered sugar', qty: 240, unit: 'gram' },
+            { name: 'Heavy cream', qty: 59.5, unit: 'gram' }
+        ], steps: ['Combine all ingredients in robot coup and mix until smooth.'], subRecipes: [] },
+        { id: 411, name: 'Sausage Gravy', category: 'Breakfast', ingredients: [
+            { name: 'Large onion (rough chop)', qty: 0.5, unit: 'ea' }, { name: 'Sausage links', qty: 9, unit: 'ea' },
+            { name: 'Sausage patties', qty: 5, unit: 'ea' }, { name: 'Butter', qty: 0.25, unit: 'lb' },
+            { name: 'Flour', qty: 0.5, unit: 'pint' }, { name: 'Tabasco', qty: 7, unit: 'shakes' },
+            { name: 'Worcestershire', qty: 0.5, unit: 'bottle' }, { name: 'Heavy cream', qty: 2, unit: 'qt' },
+            { name: 'Half & half', qty: 1, unit: 'qt' }
+        ], steps: ['Pulse onion & sausage small; cook with butter.', 'Add flour for roux, cook 1 min.', 'Add dairy and seasonings, simmer to desired thickness; season with salt.'], subRecipes: [] },
+        { id: 412, name: 'Chipotle Aioli', category: 'Breakfast', ingredients: [
+            { name: 'Chipotle in adobo', qty: 396, unit: 'gram' }, { name: 'Mayonnaise', qty: 3776, unit: 'gram' }
+        ], steps: ['Blend chipotles until smooth; whisk into mayo.'], subRecipes: [] },
+        { id: 413, name: 'Spicy Maple Syrup', category: 'Breakfast', ingredients: [
+            { name: 'Maple syrup', qty: 1, unit: 'qt' }, { name: 'Sriracha', qty: 3, unit: 'packets' }
+        ], steps: ['Whisk ingredients together until homogeneous.'], subRecipes: [] },
+        { id: 414, name: 'Granola', category: 'Breakfast', ingredients: [
+            { name: 'Butter', qty: 940, unit: 'gram' }, { name: 'Brown sugar', qty: 465, unit: 'gram' },
+            { name: 'Honey', qty: 672, unit: 'gram' }, { name: 'Old-fashioned oats', qty: 2380, unit: 'gram' },
+            { name: 'Raisins', qty: 435, unit: 'gram' }, { name: 'Dried Cranberries', qty: 300, unit: 'gram' }
+        ], steps: ['Melt butter, sugar & honey until combined.', 'Stir in oats. Spread on silpat-lined tray; bake 275°F until golden.', 'Add raisins and cranberries.'], subRecipes: [] },
+        { id: 415, name: 'Grits Base', category: 'Breakfast', ingredients: [
+            { name: 'Butter', qty: 1, unit: 'lb' }, { name: 'Cream', qty: 1, unit: 'qt' },
+            { name: 'Water', qty: 1, unit: 'qt' }
+        ], steps: ['Combine butter, cream & water in pot; heat until butter melts.', 'Proceed with grits cooking as needed.'], subRecipes: [] },
+        { id: 416, name: 'Peanut Butter Maple Syrup', category: 'Breakfast', ingredients: [
+            { name: 'Maple syrup', qty: 0.25, unit: 'qt' }, { name: 'Peanut butter', qty: 1, unit: 'tbsp' }
+        ], steps: ['Heat syrup and peanut butter together until melted; whisk smooth, cool and store.'], subRecipes: [] },
+        { id: 417, name: 'Rosemary Balsamic Reduction', category: 'Breakfast', ingredients: [
+            { name: 'Balsamic vinegar', qty: 1, unit: 'qt' }, { name: 'Sugar', qty: 1, unit: 'pint' },
+            { name: 'Rosemary sprigs', qty: 2, unit: 'ea' }
+        ], steps: ['Combine ingredients, reduce over medium heat until syrupy.', 'Strain through chinois.'], subRecipes: [] },
+        { id: 418, name: 'French Toast Batter', category: 'Breakfast', ingredients: [
+            { name: 'Eggs', qty: 1800, unit: 'gram' }, { name: 'Heavy Cream', qty: 238, unit: 'gram' },
+            { name: 'Vanilla Extract', qty: 85, unit: 'gram' }
+        ], steps: ['Mix together.'], subRecipes: [] },
+        { id: 419, name: 'House Triple Berry Jam', category: 'Breakfast', ingredients: [
+            { name: 'Raspberries', qty: 497, unit: 'gram' }, { name: 'Blackberries', qty: 576, unit: 'gram' },
+            { name: 'Blueberries', qty: 593, unit: 'gram' }, { name: 'Lemon Juice', qty: 60, unit: 'gram' },
+            { name: 'Sugar', qty: 792, unit: 'gram' }
+        ], steps: ['Everything in pot. Cook down for 30 minutes.', 'Cool and blend with stick blender.'], subRecipes: [] },
         // ── Lunch (Amber Bar) ──
         { id: 100, name: 'Ajitsuke Tamago (Ramen Egg)', category: 'Lunch', ingredients: [
             { name: 'Large eggs', qty: 30, unit: 'ea' }, { name: 'GF soy sauce', qty: 1, unit: 'qt' },
