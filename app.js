@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 160;
+const APP_BUILD = 161;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2202,7 +2202,7 @@ function renderTools(container) {
             <button class="day-chip ${toolsSubTab === 'history' ? 'active' : ''}" onclick="switchToolsSubTab('history')">History</button>
         </div>
         ${searchBar}
-        <div style="padding:0 20px 100px;">${content}</div>`;
+        <div class="tools-content-area">${content}</div>`;
 
     if (toolsSubTab === 'stations' && stationSearchQuery) {
         var inp = document.getElementById('stationSearchInput');
@@ -3091,7 +3091,7 @@ function renderLibrary(container) {
             '<button class="day-chip ' + (librarySubTab === 'recipes' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'recipes\')">Recipes</button>' +
             '<button class="day-chip ' + (librarySubTab === 'tempLogs' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'tempLogs\')">Temp Logs</button>' +
         '</div>' +
-        '<div style="padding:0 20px 100px;">' + content + '</div>';
+        '<div class="tools-content-area">' + content + '</div>';
 
     if (librarySubTab === 'bible') {
         setTimeout(function() { initBibleViewer(); }, 50);
