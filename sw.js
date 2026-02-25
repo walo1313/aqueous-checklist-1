@@ -1,4 +1,4 @@
-const CACHE_NAME = 'aqueous-v173';
+const CACHE_NAME = 'aqueous-v174';
 const urlsToCache = [
   './index.html',
   './app.js',
@@ -16,7 +16,9 @@ const urlsToCache = [
   './mascot-excited.mp4',
   './mascot-sexy.mp4',
   './mascot-wise.mp4',
-  './mascot-mexican.mp4'
+  './mascot-mexican.mp4',
+  'https://cdnjs.cloudflare.com/ajax/libs/glightbox/3.3.0/css/glightbox.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/glightbox/3.3.0/js/glightbox.min.js'
 ];
 
 // Install: cache all essential files

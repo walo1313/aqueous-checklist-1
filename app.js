@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 173;
+const APP_BUILD = 174;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -3873,6 +3873,8 @@ function renderBiblePageList(arrayBuffer) {
         backRow.addEventListener('click', function() { handleClick(); bibleBackToList(); });
         container.appendChild(backRow);
 
+        var biblePageImages = [];
+
         var renderPage = function(pageNum) {
             if (pageNum > numPages) return;
             pdf.getPage(pageNum).then(function(page) {
@@ -3880,9 +3882,6 @@ function renderBiblePageList(arrayBuffer) {
                 var thumbW = containerW * 0.55;
                 var thumbScale = thumbW / vp.width;
                 var thumbVp = page.getViewport({ scale: thumbScale * 2 });
-                var fullW = containerW;
-                var fullScale = fullW / vp.width;
-                var fullVp = page.getViewport({ scale: fullScale * 2 });
 
                 var wrap = document.createElement('div');
                 wrap.className = 'bible-page-item bible-page-collapsed';
@@ -3903,29 +3902,12 @@ function renderBiblePageList(arrayBuffer) {
                 wrap.addEventListener('click', function(e) {
                     handleClick();
                     e.stopPropagation();
-                    var isExpanded = wrap.classList.contains('bible-page-open');
-                    if (isExpanded) {
-                        wrap.classList.remove('bible-page-open');
-                        wrap.classList.add('bible-page-collapsed');
-                        canvas.style.width = thumbW + 'px';
-                        canvas.style.height = (thumbW * vp.height / vp.width) + 'px';
-                        canvas.width = thumbVp.width;
-                        canvas.height = thumbVp.height;
-                        page.render({ canvasContext: canvas.getContext('2d'), viewport: thumbVp });
-                    } else {
-                        wrap.classList.remove('bible-page-collapsed');
-                        wrap.classList.add('bible-page-open');
-                        canvas.style.width = fullW + 'px';
-                        canvas.style.height = (fullW * vp.height / vp.width) + 'px';
-                        canvas.width = fullVp.width;
-                        canvas.height = fullVp.height;
-                        page.render({ canvasContext: canvas.getContext('2d'), viewport: fullVp });
-                        setTimeout(function() { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
-                    }
+                    openBiblePageViewer(pdf, numPages, pageNum - 1, containerW);
                 });
 
                 container.appendChild(wrap);
                 page.render({ canvasContext: canvas.getContext('2d'), viewport: thumbVp }).promise.then(function() {
+                    biblePageImages[pageNum - 1] = canvas.toDataURL('image/jpeg', 0.85);
                     renderPage(pageNum + 1);
                 });
             });
@@ -3934,6 +3916,32 @@ function renderBiblePageList(arrayBuffer) {
     }).catch(function() {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">Failed to load PDF</div>';
     });
+}
+
+function openBiblePageViewer(pdf, numPages, startIndex, containerW) {
+    var fullW = containerW || 360;
+    var rendered = [];
+    var count = 0;
+
+    for (var i = 1; i <= numPages; i++) {
+        (function(pageNum) {
+            pdf.getPage(pageNum).then(function(page) {
+                var vp = page.getViewport({ scale: 1 });
+                var hiResScale = Math.max(fullW * 2.5 / vp.width, 2);
+                var hiVp = page.getViewport({ scale: hiResScale });
+                var c = document.createElement('canvas');
+                c.width = hiVp.width;
+                c.height = hiVp.height;
+                page.render({ canvasContext: c.getContext('2d'), viewport: hiVp }).promise.then(function() {
+                    rendered[pageNum - 1] = { href: c.toDataURL('image/jpeg', 0.92), title: 'Page ' + pageNum + ' / ' + numPages };
+                    count++;
+                    if (count === numPages) {
+                        openImageViewer(rendered, startIndex);
+                    }
+                });
+            });
+        })(i);
+    }
 }
 
 // ── Recipes ──
@@ -4053,6 +4061,34 @@ function clearRecipeSearch() {
     renderPanel('library');
 }
 
+// ── Global Image Viewer (GLightbox) ──
+function openImageViewer(images, startIndex) {
+    if (typeof GLightbox === 'undefined') {
+        // Fallback: open first image in new tab
+        if (images && images[startIndex || 0]) window.open(images[startIndex || 0].href, '_blank');
+        return;
+    }
+    var elements = images.map(function(img) {
+        var el = { href: img.href || img.src, type: 'image' };
+        if (img.title) el.title = img.title;
+        return el;
+    });
+    var lightbox = GLightbox({
+        elements: elements,
+        startAt: startIndex || 0,
+        touchNavigation: true,
+        loop: false,
+        zoomable: true,
+        draggable: true,
+        dragAutoSnap: true,
+        openEffect: 'zoom',
+        closeEffect: 'fade',
+        slideEffect: 'slide',
+        closeOnOutsideClick: true
+    });
+    lightbox.open();
+}
+
 // ── Schedule Section ──
 function renderScheduleContent() {
     return '<div class="recipe-add-row">' +
@@ -4075,11 +4111,12 @@ function renderScheduleGrid() {
             return;
         }
         photos.sort(function(a, b) { return (b.addedAt || 0) - (a.addedAt || 0); });
+        window._schedulePhotos = photos;
         var html = '';
-        photos.forEach(function(photo) {
+        photos.forEach(function(photo, idx) {
             var d = new Date(photo.addedAt);
             var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
-            html += '<div class="schedule-thumb squishy" onclick="viewSchedulePhoto(\'' + photo.id + '\')">' +
+            html += '<div class="schedule-thumb squishy" onclick="viewSchedulePhoto(' + idx + ')">' +
                 '<img src="' + photo.data + '" alt="' + (photo.name || 'Schedule') + '">' +
                 '<div class="schedule-thumb-date">' + dateStr + '</div>' +
                 '<div class="schedule-thumb-del" onclick="confirmDeleteSchedule(\'' + photo.id + '\', event)">✕</div>' +
@@ -4118,26 +4155,16 @@ function handleScheduleFile(input) {
     input.value = '';
 }
 
-function viewSchedulePhoto(id) {
+function viewSchedulePhoto(index) {
     handleClick();
-    loadSchedulePhotoById(id).then(function(photo) {
-        if (!photo) return;
-        var overlay = document.createElement('div');
-        overlay.className = 'schedule-viewer';
-        overlay.id = 'scheduleViewer';
-        overlay.innerHTML = '<button class="schedule-viewer-close" onclick="closeScheduleViewer()">✕</button>' +
-            '<img src="' + photo.data + '" alt="Schedule">';
-        overlay.addEventListener('click', function(e) {
-            if (e.target === overlay) closeScheduleViewer();
-        });
-        document.body.appendChild(overlay);
-        document.body.style.overflow = 'hidden';
+    var photos = window._schedulePhotos;
+    if (!photos || !photos.length) return;
+    var images = photos.map(function(p) {
+        var d = new Date(p.addedAt);
+        var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+        return { href: p.data, title: dateStr };
     });
-}
-
-function closeScheduleViewer() {
-    var v = document.getElementById('scheduleViewer');
-    if (v) { v.remove(); document.body.style.overflow = ''; }
+    openImageViewer(images, index);
 }
 
 function confirmDeleteSchedule(id, e) {
