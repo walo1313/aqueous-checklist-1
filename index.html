@@ -2633,22 +2633,22 @@
             box-shadow: var(--neu-shadow-sm);
             flex-shrink: 0;
         }
-        .new-station-btn {
+        .add-action-btn {
             display: flex;
             align-items: center;
             justify-content: center;
             width: 100%;
-            margin-top: 16px;
-            padding: 14px;
-            border: 2px dashed var(--accent);
-            border-radius: var(--radius);
+            margin-top: 14px;
+            padding: 14px 0;
+            border: none;
             background: transparent;
             color: var(--accent);
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             cursor: pointer;
+            opacity: 0.75;
         }
-        .new-station-btn:active { background: rgba(255, 149, 0, 0.06); }
+        .add-action-btn:active { opacity: 1; }
         .search-result-row {
             display: flex;
             flex-direction: column;
@@ -3116,22 +3116,6 @@
             flex-shrink: 0;
             color: var(--text-muted);
         }
-        .bible-upload-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            margin-top: 14px;
-            padding: 12px;
-            border: 2px dashed var(--border);
-            border-radius: var(--radius);
-            background: transparent;
-            color: var(--text-muted);
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .bible-upload-btn:active { background: var(--surface); }
         .bible-menu-btn {
             display: flex;
             align-items: center;
@@ -3344,24 +3328,7 @@
             color: var(--text);
             margin-bottom: 6px;
         }
-        .recipe-add-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            width: 100%;
-            padding: 14px;
-            border: 2px dashed var(--border);
-            border-radius: var(--radius);
-            background: transparent;
-            color: var(--text-muted);
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            margin-bottom: 12px;
-            -webkit-tap-highlight-color: transparent;
-        }
-        .recipe-add-btn:active { opacity: 0.6; }
+        .recipe-add-row .add-action-btn { flex: 1; margin-top: 0; margin-bottom: 0; }
         .recipe-action-row {
             display: flex;
             align-items: center;
@@ -3398,7 +3365,6 @@
             gap: 8px;
             margin-bottom: 12px;
         }
-        .recipe-add-row .recipe-add-btn { flex: 1; margin-bottom: 0; }
         .recipe-edit-input {
             width: 100%;
             height: 40px;

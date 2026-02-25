@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 162;
+const APP_BUILD = 163;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2178,9 +2178,7 @@ function renderTools(container) {
             content = renderStationSearchResults(stationSearchQuery);
         } else {
             content = renderStationsView({ showPriority: false, mode: 'database' });
-            content += `<button class="new-station-btn squishy" onclick="handleClick(); showNewStationModal()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-3px;margin-right:6px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                New Station</button>`;
+            content += `<button class="add-action-btn squishy" onclick="handleClick(); showNewStationModal()">+ New Station</button>`;
         }
     } else if (toolsSubTab === 'logs') {
         content = renderLogsContent();
@@ -2417,9 +2415,7 @@ function renderBibleContent() {
         return '<div id="biblePageList" class="bible-page-list"></div>';
     }
     return '<div id="bibleList" class="bible-list"></div>' +
-        '<button class="bible-upload-btn squishy" onclick="triggerBibleUpload()">' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-3px;margin-right:6px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
-        'Upload PDF</button>' +
+        '<button class="add-action-btn squishy" onclick="triggerBibleUpload()">+ Upload PDF</button>' +
         '<input type="file" id="bibleFileInput" accept=".pdf" multiple style="display:none" onchange="handleBibleUpload(this)">';
 }
 
@@ -2756,8 +2752,8 @@ function renderRecipesContent() {
 
     return '<div class="recipe-filter-row">' + filterHtml + '</div>' +
         '<div class="recipe-add-row">' +
-            '<button class="recipe-add-btn" onclick="showAddRecipeModal()">+ Create</button>' +
-            '<button class="recipe-add-btn" onclick="triggerRecipeFileUpload()">+ Upload File</button>' +
+            '<button class="add-action-btn squishy" onclick="showAddRecipeModal()">+ Create</button>' +
+            '<button class="add-action-btn squishy" onclick="triggerRecipeFileUpload()">+ Upload File</button>' +
         '</div>' +
         '<input type="file" id="recipeFileInput" accept=".pdf,.docx" style="display:none" onchange="handleRecipeFileUpload(this)">' +
         cardsHtml;
