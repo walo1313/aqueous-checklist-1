@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 172;
+const APP_BUILD = 173;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -33,7 +33,7 @@ const mascotAnimations = ['mascot-wiggle', 'mascot-bounce', 'mascot-nod'];
 let taskTimers = {};
 let blockTimers = {}; // { "high": { seconds, running, interval }, "_all": { ... } }
 let toolsSubTab = 'stations'; // 'stations' | 'logs' | 'history'
-let librarySubTab = 'bible';  // 'bible' | 'recipes' | 'tempLogs'
+let librarySubTab = 'bible';  // 'bible' | 'recipes' | 'tempLogs' | 'schedule'
 let summaryStationCollapsed = {}; // { stationId: true/false }
 let logsBlockCollapsed = { withData: false, missingData: true };
 let logsStationCollapsed = {}; // { "stationName": true/false }
@@ -3581,6 +3581,63 @@ function deleteBiblePdf(id) {
     });
 }
 
+// ── Schedule IndexedDB ──
+function openScheduleDB() {
+    return new Promise(function(resolve, reject) {
+        var req = indexedDB.open('aqueous_schedule', 1);
+        req.onupgradeneeded = function() {
+            var db = req.result;
+            if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' });
+        };
+        req.onsuccess = function() { resolve(req.result); };
+        req.onerror = function() { reject(req.error); };
+    });
+}
+
+function saveSchedulePhoto(id, name, dataUrl) {
+    return openScheduleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('photos', 'readwrite');
+            tx.objectStore('photos').put({ id: id, name: name, data: dataUrl, addedAt: Date.now() });
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { reject(tx.error); };
+        });
+    });
+}
+
+function loadAllSchedulePhotos() {
+    return openScheduleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('photos', 'readonly');
+            var req = tx.objectStore('photos').getAll();
+            req.onsuccess = function() { resolve(req.result || []); };
+            req.onerror = function() { reject(req.error); };
+        });
+    });
+}
+
+function loadSchedulePhotoById(id) {
+    return openScheduleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('photos', 'readonly');
+            var req = tx.objectStore('photos').get(id);
+            req.onsuccess = function() { resolve(req.result || null); };
+            req.onerror = function() { reject(req.error); };
+        });
+    });
+}
+
+function deleteSchedulePhoto(id) {
+    return openScheduleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('photos', 'readwrite');
+            tx.objectStore('photos').delete(id);
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { reject(tx.error); };
+        });
+    });
+}
+
 function migrateBibleOldPdf() {
     return openBibleDB().then(function(db) {
         return new Promise(function(resolve) {
@@ -3994,6 +4051,116 @@ function clearRecipeSearch() {
     recipeSearchTerm = '';
     panelDirty.library = true;
     renderPanel('library');
+}
+
+// ── Schedule Section ──
+function renderScheduleContent() {
+    return '<div class="recipe-add-row">' +
+            '<button class="add-action-btn squishy" onclick="triggerScheduleCamera()">📷 Take Photo</button>' +
+            '<button class="add-action-btn squishy" onclick="triggerScheduleUpload()">📁 Upload Image</button>' +
+        '</div>' +
+        '<input type="file" id="scheduleCameraInput" accept="image/*" capture="environment" style="display:none" onchange="handleScheduleFile(this)">' +
+        '<input type="file" id="scheduleFileInput" accept="image/*" style="display:none" onchange="handleScheduleFile(this)">' +
+        '<div id="scheduleGrid" class="schedule-grid"></div>';
+}
+
+function renderScheduleGrid() {
+    var container = document.getElementById('scheduleGrid');
+    if (!container) return;
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+
+    loadAllSchedulePhotos().then(function(photos) {
+        if (!photos.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><p>No schedules yet</p><p class="empty-sub">Take a photo or upload an image</p></div>';
+            return;
+        }
+        photos.sort(function(a, b) { return (b.addedAt || 0) - (a.addedAt || 0); });
+        var html = '';
+        photos.forEach(function(photo) {
+            var d = new Date(photo.addedAt);
+            var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+            html += '<div class="schedule-thumb squishy" onclick="viewSchedulePhoto(\'' + photo.id + '\')">' +
+                '<img src="' + photo.data + '" alt="' + (photo.name || 'Schedule') + '">' +
+                '<div class="schedule-thumb-date">' + dateStr + '</div>' +
+                '<div class="schedule-thumb-del" onclick="confirmDeleteSchedule(\'' + photo.id + '\', event)">✕</div>' +
+            '</div>';
+        });
+        container.innerHTML = html;
+    }).catch(function() {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><p>No schedules yet</p></div>';
+    });
+}
+
+function triggerScheduleCamera() {
+    handleClick();
+    document.getElementById('scheduleCameraInput').click();
+}
+
+function triggerScheduleUpload() {
+    handleClick();
+    document.getElementById('scheduleFileInput').click();
+}
+
+function handleScheduleFile(input) {
+    if (!input.files || !input.files.length) return;
+    var file = input.files[0];
+    if (!file.type.startsWith('image/')) { showToast('Only images allowed'); input.value = ''; return; }
+    var reader = new FileReader();
+    reader.onload = function() {
+        var id = 'sched_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+        var name = file.name.replace(/\.[^.]+$/, '');
+        saveSchedulePhoto(id, name, reader.result).then(function() {
+            showToast('Schedule saved');
+            renderScheduleGrid();
+        });
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+}
+
+function viewSchedulePhoto(id) {
+    handleClick();
+    loadSchedulePhotoById(id).then(function(photo) {
+        if (!photo) return;
+        var overlay = document.createElement('div');
+        overlay.className = 'schedule-viewer';
+        overlay.id = 'scheduleViewer';
+        overlay.innerHTML = '<button class="schedule-viewer-close" onclick="closeScheduleViewer()">✕</button>' +
+            '<img src="' + photo.data + '" alt="Schedule">';
+        overlay.addEventListener('click', function(e) {
+            if (e.target === overlay) closeScheduleViewer();
+        });
+        document.body.appendChild(overlay);
+        document.body.style.overflow = 'hidden';
+    });
+}
+
+function closeScheduleViewer() {
+    var v = document.getElementById('scheduleViewer');
+    if (v) { v.remove(); document.body.style.overflow = ''; }
+}
+
+function confirmDeleteSchedule(id, e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    handleClick();
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.onclick = function(ev) { if (ev.target === overlay) overlay.remove(); };
+    overlay.innerHTML = '<div class="confirm-box">' +
+        '<p style="font-size:14px;font-weight:700;margin-bottom:12px;">Delete schedule photo?</p>' +
+        '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">This photo will be permanently removed.</p>' +
+        '<div style="display:flex;gap:10px;">' +
+        '<button class="btn squishy" style="flex:1;height:40px;font-size:13px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn squishy" style="flex:1;height:40px;font-size:13px;background:var(--high);color:#fff;border:none;" id="confirmDelSchedBtn">Delete</button>' +
+        '</div></div>';
+    document.body.appendChild(overlay);
+    document.getElementById('confirmDelSchedBtn').addEventListener('click', function() {
+        deleteSchedulePhoto(id).then(function() {
+            showToast('Photo deleted');
+            overlay.remove();
+            renderScheduleGrid();
+        });
+    });
 }
 
 function changeRecipeCat(id, newCat) {
@@ -4443,17 +4610,23 @@ function renderLibrary(container) {
         content = renderRecipesContent();
     } else if (librarySubTab === 'tempLogs') {
         content = '<div class="empty-state"><div class="empty-state-icon">🌡️</div><p>Temp Logs</p><p class="empty-sub">Coming Soon</p></div>';
+    } else if (librarySubTab === 'schedule') {
+        content = renderScheduleContent();
     }
 
     container.innerHTML = '<div class="sub-pill-row">' +
             '<button class="day-chip ' + (librarySubTab === 'bible' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'bible\')">Bible</button>' +
             '<button class="day-chip ' + (librarySubTab === 'recipes' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'recipes\')">Recipes</button>' +
             '<button class="day-chip ' + (librarySubTab === 'tempLogs' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'tempLogs\')">Temp Logs</button>' +
+            '<button class="day-chip ' + (librarySubTab === 'schedule' ? 'active' : '') + '" onclick="switchLibrarySubTab(\'schedule\')">Schedule</button>' +
         '</div>' +
         '<div class="tools-content-area">' + content + '</div>';
 
     if (librarySubTab === 'bible') {
         setTimeout(function() { initBibleViewer(); }, 50);
+    }
+    if (librarySubTab === 'schedule') {
+        setTimeout(function() { renderScheduleGrid(); }, 50);
     }
 }
 // ── Day Checklists (per-day independent checklists) ──
