@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 174;
+const APP_BUILD = 175;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -3526,14 +3526,105 @@ let bibleLongPressTimer = null;
 
 function openBibleDB() {
     return new Promise(function(resolve, reject) {
-        var req = indexedDB.open('aqueous_bible', 2);
+        var req = indexedDB.open('aqueous_bible', 3);
         req.onupgradeneeded = function(e) {
             var db = req.result;
             if (!db.objectStoreNames.contains('files')) db.createObjectStore('files');
             if (!db.objectStoreNames.contains('pdfs')) db.createObjectStore('pdfs', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('pageImages')) db.createObjectStore('pageImages', { keyPath: 'key' });
         };
         req.onsuccess = function() { resolve(req.result); };
         req.onerror = function() { reject(req.error); };
+    });
+}
+
+function saveBiblePageImage(pdfId, pageNum, thumbBlob, fullBlob) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('pageImages', 'readwrite');
+            tx.objectStore('pageImages').put({ key: pdfId + '_p' + pageNum, pdfId: pdfId, page: pageNum, thumb: thumbBlob, full: fullBlob });
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { reject(tx.error); };
+        });
+    });
+}
+
+function loadBiblePageImages(pdfId) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('pageImages', 'readonly');
+            var store = tx.objectStore('pageImages');
+            var req = store.getAll();
+            req.onsuccess = function() {
+                var all = req.result || [];
+                var pages = all.filter(function(p) { return p.pdfId === pdfId; });
+                pages.sort(function(a, b) { return a.page - b.page; });
+                resolve(pages);
+            };
+            req.onerror = function() { reject(req.error); };
+        });
+    });
+}
+
+function deleteBiblePageImages(pdfId) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('pageImages', 'readwrite');
+            var store = tx.objectStore('pageImages');
+            var req = store.getAll();
+            req.onsuccess = function() {
+                var all = req.result || [];
+                all.forEach(function(p) { if (p.pdfId === pdfId) store.delete(p.key); });
+                resolve();
+            };
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { reject(tx.error); };
+        });
+    });
+}
+
+function preRenderBiblePages(pdfId, arrayBuffer, progressCb) {
+    if (typeof pdfjsLib === 'undefined') return Promise.reject('PDF.js not loaded');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
+        var numPages = pdf.numPages;
+        var done = 0;
+        var chain = Promise.resolve();
+        for (var i = 1; i <= numPages; i++) {
+            (function(pageNum) {
+                chain = chain.then(function() {
+                    return pdf.getPage(pageNum).then(function(page) {
+                        var vp = page.getViewport({ scale: 1 });
+                        // Thumbnail: ~400px wide
+                        var thumbScale = 400 / vp.width;
+                        var thumbVp = page.getViewport({ scale: thumbScale });
+                        var tc = document.createElement('canvas');
+                        tc.width = thumbVp.width; tc.height = thumbVp.height;
+                        // Full: ~1200px wide
+                        var fullScale = Math.max(1200 / vp.width, 1.5);
+                        var fullVp = page.getViewport({ scale: fullScale });
+                        var fc = document.createElement('canvas');
+                        fc.width = fullVp.width; fc.height = fullVp.height;
+                        return page.render({ canvasContext: tc.getContext('2d'), viewport: thumbVp }).promise.then(function() {
+                            return page.render({ canvasContext: fc.getContext('2d'), viewport: fullVp }).promise;
+                        }).then(function() {
+                            return new Promise(function(res) {
+                                tc.toBlob(function(thumbBlob) {
+                                    fc.toBlob(function(fullBlob) {
+                                        saveBiblePageImage(pdfId, pageNum, thumbBlob, fullBlob).then(function() {
+                                            done++;
+                                            if (progressCb) progressCb(done, numPages);
+                                            res();
+                                        });
+                                    }, 'image/jpeg', 0.88);
+                                }, 'image/jpeg', 0.7);
+                            });
+                        });
+                    });
+                });
+            })(i);
+        }
+        return chain.then(function() { return numPages; });
     });
 }
 
@@ -3571,12 +3662,14 @@ function loadBiblePdfById(id) {
 }
 
 function deleteBiblePdf(id) {
-    return openBibleDB().then(function(db) {
-        return new Promise(function(resolve, reject) {
-            var tx = db.transaction('pdfs', 'readwrite');
-            tx.objectStore('pdfs').delete(id);
-            tx.oncomplete = function() { resolve(); };
-            tx.onerror = function() { reject(tx.error); };
+    return deleteBiblePageImages(id).catch(function(){}).then(function() {
+        return openBibleDB().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                var tx = db.transaction('pdfs', 'readwrite');
+                tx.objectStore('pdfs').delete(id);
+                tx.oncomplete = function() { resolve(); };
+                tx.onerror = function() { reject(tx.error); };
+            });
         });
     });
 }
@@ -3584,7 +3677,7 @@ function deleteBiblePdf(id) {
 // ── Schedule IndexedDB ──
 function openScheduleDB() {
     return new Promise(function(resolve, reject) {
-        var req = indexedDB.open('aqueous_schedule', 1);
+        var req = indexedDB.open('aqueous_schedule', 2);
         req.onupgradeneeded = function() {
             var db = req.result;
             if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' });
@@ -3594,11 +3687,34 @@ function openScheduleDB() {
     });
 }
 
-function saveSchedulePhoto(id, name, dataUrl) {
+function compressImage(file, maxSize, quality) {
+    return new Promise(function(resolve) {
+        var img = new Image();
+        img.onload = function() {
+            var w = img.width, h = img.height;
+            if (w > maxSize || h > maxSize) {
+                var ratio = Math.min(maxSize / w, maxSize / h);
+                w = Math.round(w * ratio);
+                h = Math.round(h * ratio);
+            }
+            var canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            canvas.toBlob(function(blob) {
+                URL.revokeObjectURL(img.src);
+                resolve(blob);
+            }, 'image/jpeg', quality);
+        };
+        img.src = URL.createObjectURL(file);
+    });
+}
+
+function saveSchedulePhoto(id, name, fullBlob, thumbBlob) {
     return openScheduleDB().then(function(db) {
         return new Promise(function(resolve, reject) {
             var tx = db.transaction('photos', 'readwrite');
-            tx.objectStore('photos').put({ id: id, name: name, data: dataUrl, addedAt: Date.now() });
+            tx.objectStore('photos').put({ id: id, name: name, data: fullBlob, thumb: thumbBlob, addedAt: Date.now() });
             tx.oncomplete = function() { resolve(); };
             tx.onerror = function() { reject(tx.error); };
         });
@@ -3684,13 +3800,21 @@ function handleBibleUpload(input) {
         reader.onload = function() {
             var id = 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
             var name = file.name.replace(/\.pdf$/i, '');
+            var bufCopy = reader.result.slice(0);
             saveBiblePdfMulti(id, name, reader.result).then(function() {
                 count++;
-                if (count === files.length) {
-                    showToast(count === 1 ? 'PDF saved' : count + ' PDFs saved');
+                showToast('Processing pages...');
+                preRenderBiblePages(id, bufCopy, function(done, total) {
+                    showToast('Rendering page ' + done + '/' + total + '...');
+                }).then(function() {
+                    showToast(name + ' ready');
                     panelDirty.library = true;
                     renderPanel('library');
-                }
+                }).catch(function() {
+                    showToast('PDF saved (pages will render on open)');
+                    panelDirty.library = true;
+                    renderPanel('library');
+                });
             });
         };
         reader.readAsArrayBuffer(file);
@@ -3855,93 +3979,111 @@ function renderBiblePageList(arrayBuffer) {
     if (!container) return;
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading pages...</div>';
 
+    var pdfId = bibleOpenPdfId;
+
+    // Back row
+    var backRow = document.createElement('div');
+    backRow.className = 'bible-back-row';
+    backRow.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> <span style="font-size:13px;font-weight:600;">Back</span>';
+    backRow.addEventListener('click', function() { handleClick(); bibleBackToList(); });
+
+    // Try loading pre-rendered images first (instant)
+    loadBiblePageImages(pdfId).then(function(pages) {
+        if (pages.length > 0) {
+            container.innerHTML = '';
+            container.appendChild(backRow);
+            pages.forEach(function(pg, idx) {
+                var wrap = document.createElement('div');
+                wrap.className = 'bible-page-item bible-page-collapsed';
+                wrap.dataset.page = pg.page;
+                var img = document.createElement('img');
+                img.src = URL.createObjectURL(pg.thumb);
+                img.style.width = '55%';
+                img.style.borderRadius = '6px';
+                img.style.display = 'block';
+                wrap.appendChild(img);
+                var pageLabel = document.createElement('div');
+                pageLabel.className = 'bible-page-label';
+                pageLabel.textContent = pg.page;
+                wrap.appendChild(pageLabel);
+                wrap.addEventListener('click', function(e) {
+                    handleClick();
+                    e.stopPropagation();
+                    openBiblePageViewer(pdfId, idx);
+                });
+                container.appendChild(wrap);
+            });
+            return;
+        }
+        // No pre-rendered images — render on the fly then pre-render for next time
+        renderBiblePagesFallback(arrayBuffer, container, backRow, pdfId);
+    }).catch(function() {
+        renderBiblePagesFallback(arrayBuffer, container, backRow, pdfId);
+    });
+}
+
+function renderBiblePagesFallback(arrayBuffer, container, backRow, pdfId) {
     if (typeof pdfjsLib === 'undefined') {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">PDF viewer not loaded</div>';
         return;
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
-        container.innerHTML = '';
-        var numPages = pdf.numPages;
-        var containerW = container.clientWidth || 320;
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Rendering pages...</div>';
 
-        // Back row
-        var backRow = document.createElement('div');
-        backRow.className = 'bible-back-row';
-        backRow.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg> <span style="font-size:13px;font-weight:600;">Back</span>';
-        backRow.addEventListener('click', function() { handleClick(); bibleBackToList(); });
-        container.appendChild(backRow);
-
-        var biblePageImages = [];
-
-        var renderPage = function(pageNum) {
-            if (pageNum > numPages) return;
-            pdf.getPage(pageNum).then(function(page) {
-                var vp = page.getViewport({ scale: 1 });
-                var thumbW = containerW * 0.55;
-                var thumbScale = thumbW / vp.width;
-                var thumbVp = page.getViewport({ scale: thumbScale * 2 });
-
+    preRenderBiblePages(pdfId, arrayBuffer, function(done, total) {
+        var prog = container.querySelector('.bible-progress');
+        if (prog) prog.textContent = 'Rendering page ' + done + '/' + total + '...';
+    }).then(function() {
+        // Re-load from IDB now that they're rendered
+        loadBiblePageImages(pdfId).then(function(pages) {
+            container.innerHTML = '';
+            container.appendChild(backRow);
+            pages.forEach(function(pg, idx) {
                 var wrap = document.createElement('div');
                 wrap.className = 'bible-page-item bible-page-collapsed';
-                wrap.dataset.page = pageNum;
-
-                var canvas = document.createElement('canvas');
-                canvas.width = thumbVp.width;
-                canvas.height = thumbVp.height;
-                canvas.style.width = thumbW + 'px';
-                canvas.style.height = (thumbW * vp.height / vp.width) + 'px';
-                wrap.appendChild(canvas);
-
+                wrap.dataset.page = pg.page;
+                var img = document.createElement('img');
+                img.src = URL.createObjectURL(pg.thumb);
+                img.style.width = '55%';
+                img.style.borderRadius = '6px';
+                img.style.display = 'block';
+                wrap.appendChild(img);
                 var pageLabel = document.createElement('div');
                 pageLabel.className = 'bible-page-label';
-                pageLabel.textContent = pageNum;
+                pageLabel.textContent = pg.page;
                 wrap.appendChild(pageLabel);
-
                 wrap.addEventListener('click', function(e) {
                     handleClick();
                     e.stopPropagation();
-                    openBiblePageViewer(pdf, numPages, pageNum - 1, containerW);
+                    openBiblePageViewer(pdfId, idx);
                 });
-
                 container.appendChild(wrap);
-                page.render({ canvasContext: canvas.getContext('2d'), viewport: thumbVp }).promise.then(function() {
-                    biblePageImages[pageNum - 1] = canvas.toDataURL('image/jpeg', 0.85);
-                    renderPage(pageNum + 1);
-                });
             });
-        };
-        renderPage(1);
+        });
     }).catch(function() {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">Failed to load PDF</div>';
     });
 }
 
-function openBiblePageViewer(pdf, numPages, startIndex, containerW) {
-    var fullW = containerW || 360;
-    var rendered = [];
-    var count = 0;
-
-    for (var i = 1; i <= numPages; i++) {
-        (function(pageNum) {
-            pdf.getPage(pageNum).then(function(page) {
-                var vp = page.getViewport({ scale: 1 });
-                var hiResScale = Math.max(fullW * 2.5 / vp.width, 2);
-                var hiVp = page.getViewport({ scale: hiResScale });
-                var c = document.createElement('canvas');
-                c.width = hiVp.width;
-                c.height = hiVp.height;
-                page.render({ canvasContext: c.getContext('2d'), viewport: hiVp }).promise.then(function() {
-                    rendered[pageNum - 1] = { href: c.toDataURL('image/jpeg', 0.92), title: 'Page ' + pageNum + ' / ' + numPages };
-                    count++;
-                    if (count === numPages) {
-                        openImageViewer(rendered, startIndex);
-                    }
-                });
-            });
-        })(i);
-    }
+function openBiblePageViewer(pdfId, startIndex) {
+    loadBiblePageImages(pdfId).then(function(pages) {
+        if (!pages.length) return;
+        var objectUrls = [];
+        var images = pages.map(function(pg) {
+            var url = URL.createObjectURL(pg.full);
+            objectUrls.push(url);
+            return { href: url, title: 'Page ' + pg.page + ' / ' + pages.length };
+        });
+        openImageViewer(images, startIndex);
+        // Revoke object URLs when viewer closes
+        var checkClosed = setInterval(function() {
+            if (!document.querySelector('.glightbox-container')) {
+                objectUrls.forEach(function(u) { URL.revokeObjectURL(u); });
+                clearInterval(checkClosed);
+            }
+        }, 500);
+    });
 }
 
 // ── Recipes ──
@@ -4103,6 +4245,9 @@ function renderScheduleContent() {
 function renderScheduleGrid() {
     var container = document.getElementById('scheduleGrid');
     if (!container) return;
+    // Revoke old object URLs
+    if (window._scheduleThumbUrls) window._scheduleThumbUrls.forEach(function(u) { URL.revokeObjectURL(u); });
+    window._scheduleThumbUrls = [];
     container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading...</div>';
 
     loadAllSchedulePhotos().then(function(photos) {
@@ -4112,17 +4257,28 @@ function renderScheduleGrid() {
         }
         photos.sort(function(a, b) { return (b.addedAt || 0) - (a.addedAt || 0); });
         window._schedulePhotos = photos;
-        var html = '';
+        container.innerHTML = '';
         photos.forEach(function(photo, idx) {
             var d = new Date(photo.addedAt);
             var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
-            html += '<div class="schedule-thumb squishy" onclick="viewSchedulePhoto(' + idx + ')">' +
-                '<img src="' + photo.data + '" alt="' + (photo.name || 'Schedule') + '">' +
+            var thumbSrc;
+            if (photo.thumb instanceof Blob) {
+                thumbSrc = URL.createObjectURL(photo.thumb);
+                window._scheduleThumbUrls.push(thumbSrc);
+            } else if (typeof photo.data === 'string') {
+                thumbSrc = photo.data; // legacy dataURL
+            } else if (photo.data instanceof Blob) {
+                thumbSrc = URL.createObjectURL(photo.data);
+                window._scheduleThumbUrls.push(thumbSrc);
+            }
+            var div = document.createElement('div');
+            div.className = 'schedule-thumb squishy';
+            div.onclick = function() { viewSchedulePhoto(idx); };
+            div.innerHTML = '<img src="' + thumbSrc + '" alt="' + (photo.name || 'Schedule') + '">' +
                 '<div class="schedule-thumb-date">' + dateStr + '</div>' +
-                '<div class="schedule-thumb-del" onclick="confirmDeleteSchedule(\'' + photo.id + '\', event)">✕</div>' +
-            '</div>';
+                '<div class="schedule-thumb-del" onclick="confirmDeleteSchedule(\'' + photo.id + '\', event)">✕</div>';
+            container.appendChild(div);
         });
-        container.innerHTML = html;
     }).catch(function() {
         container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><p>No schedules yet</p></div>';
     });
@@ -4142,16 +4298,18 @@ function handleScheduleFile(input) {
     if (!input.files || !input.files.length) return;
     var file = input.files[0];
     if (!file.type.startsWith('image/')) { showToast('Only images allowed'); input.value = ''; return; }
-    var reader = new FileReader();
-    reader.onload = function() {
-        var id = 'sched_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-        var name = file.name.replace(/\.[^.]+$/, '');
-        saveSchedulePhoto(id, name, reader.result).then(function() {
-            showToast('Schedule saved');
-            renderScheduleGrid();
-        });
-    };
-    reader.readAsDataURL(file);
+    showToast('Processing...');
+    var id = 'sched_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    var name = file.name.replace(/\.[^.]+$/, '');
+    Promise.all([
+        compressImage(file, 1600, 0.82),
+        compressImage(file, 400, 0.6)
+    ]).then(function(blobs) {
+        return saveSchedulePhoto(id, name, blobs[0], blobs[1]);
+    }).then(function() {
+        showToast('Schedule saved');
+        renderScheduleGrid();
+    });
     input.value = '';
 }
 
@@ -4159,12 +4317,29 @@ function viewSchedulePhoto(index) {
     handleClick();
     var photos = window._schedulePhotos;
     if (!photos || !photos.length) return;
+    var objectUrls = [];
     var images = photos.map(function(p) {
         var d = new Date(p.addedAt);
         var dateStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
-        return { href: p.data, title: dateStr };
+        var src;
+        if (p.data instanceof Blob) {
+            src = URL.createObjectURL(p.data);
+            objectUrls.push(src);
+        } else {
+            src = p.data; // legacy dataURL
+        }
+        return { href: src, title: dateStr };
     });
     openImageViewer(images, index);
+    // Revoke object URLs when viewer closes
+    if (objectUrls.length) {
+        var checkClosed = setInterval(function() {
+            if (!document.querySelector('.glightbox-container')) {
+                objectUrls.forEach(function(u) { URL.revokeObjectURL(u); });
+                clearInterval(checkClosed);
+            }
+        }, 500);
+    }
 }
 
 function confirmDeleteSchedule(id, e) {
