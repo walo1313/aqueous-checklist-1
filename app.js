@@ -1,7 +1,7 @@
 // ==================== AQUEOUS - Kitchen Station Manager ====================
 
 const APP_VERSION = 'B2.0';
-const APP_BUILD = 158;
+const APP_BUILD = 159;
 let lastSync = localStorage.getItem('aqueous_lastSync') || null;
 
 function updateLastSync() {
@@ -2193,6 +2193,7 @@ function renderTools(container) {
 function switchLibrarySubTab(tab) {
     handleClick();
     librarySubTab = tab;
+    if (tab !== 'bible') { bibleView = 'list'; bibleOpenPdfId = null; }
     panelDirty.library = true;
     renderPanel('library');
 }
@@ -2240,47 +2241,100 @@ function nextRecipeId() {
     return recipes.reduce(function(mx, r) { return Math.max(mx, r.id || 0); }, 0) + 1;
 }
 
-// ── Bible (IndexedDB + pdf.js) ──
+// ── Bible (Multi-PDF Library with IndexedDB + pdf.js) ──
+
+let bibleView = 'list'; // 'list' | 'pages'
+let bibleOpenPdfId = null;
+let bibleLongPressTimer = null;
 
 function openBibleDB() {
     return new Promise(function(resolve, reject) {
-        var req = indexedDB.open('aqueous_bible', 1);
-        req.onupgradeneeded = function() { req.result.createObjectStore('files'); };
+        var req = indexedDB.open('aqueous_bible', 2);
+        req.onupgradeneeded = function(e) {
+            var db = req.result;
+            if (!db.objectStoreNames.contains('files')) db.createObjectStore('files');
+            if (!db.objectStoreNames.contains('pdfs')) db.createObjectStore('pdfs', { keyPath: 'id' });
+        };
         req.onsuccess = function() { resolve(req.result); };
         req.onerror = function() { reject(req.error); };
     });
 }
 
-function saveBiblePdf(arrayBuffer) {
+function saveBiblePdfMulti(id, name, arrayBuffer) {
     return openBibleDB().then(function(db) {
         return new Promise(function(resolve, reject) {
-            var tx = db.transaction('files', 'readwrite');
-            tx.objectStore('files').put(arrayBuffer, 'bible_pdf');
+            var tx = db.transaction('pdfs', 'readwrite');
+            tx.objectStore('pdfs').put({ id: id, name: name, data: arrayBuffer, addedAt: Date.now() });
             tx.oncomplete = function() { resolve(); };
             tx.onerror = function() { reject(tx.error); };
         });
     });
 }
 
-function loadBiblePdf() {
+function loadAllBiblePdfs() {
     return openBibleDB().then(function(db) {
         return new Promise(function(resolve, reject) {
-            var tx = db.transaction('files', 'readonly');
-            var req = tx.objectStore('files').get('bible_pdf');
+            var tx = db.transaction('pdfs', 'readonly');
+            var req = tx.objectStore('pdfs').getAll();
+            req.onsuccess = function() { resolve(req.result || []); };
+            req.onerror = function() { reject(req.error); };
+        });
+    });
+}
+
+function loadBiblePdfById(id) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('pdfs', 'readonly');
+            var req = tx.objectStore('pdfs').get(id);
             req.onsuccess = function() { resolve(req.result || null); };
             req.onerror = function() { reject(req.error); };
         });
     });
 }
 
+function deleteBiblePdf(id) {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            var tx = db.transaction('pdfs', 'readwrite');
+            tx.objectStore('pdfs').delete(id);
+            tx.oncomplete = function() { resolve(); };
+            tx.onerror = function() { reject(tx.error); };
+        });
+    });
+}
+
+function migrateBibleOldPdf() {
+    return openBibleDB().then(function(db) {
+        return new Promise(function(resolve) {
+            if (!db.objectStoreNames.contains('files')) { resolve(); return; }
+            var tx = db.transaction('files', 'readonly');
+            var req = tx.objectStore('files').get('bible_pdf');
+            req.onsuccess = function() {
+                if (!req.result) { resolve(); return; }
+                var data = req.result;
+                saveBiblePdfMulti('migrated_bible', 'Bible', data).then(function() {
+                    openBibleDB().then(function(db2) {
+                        var tx2 = db2.transaction('files', 'readwrite');
+                        tx2.objectStore('files').delete('bible_pdf');
+                        tx2.oncomplete = function() { resolve(); };
+                    });
+                });
+            };
+            req.onerror = function() { resolve(); };
+        });
+    }).catch(function() {});
+}
+
 function renderBibleContent() {
-    return '<div class="bible-upload-row">' +
-        '<button class="btn btn-primary squishy" onclick="triggerBibleUpload()" style="flex:1;height:40px;font-size:13px;">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-2px;margin-right:4px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>' +
+    if (bibleView === 'pages' && bibleOpenPdfId) {
+        return '<div id="biblePageGrid" class="bible-page-grid"></div>';
+    }
+    return '<div id="bibleList" class="bible-list"></div>' +
+        '<button class="bible-upload-btn squishy" onclick="triggerBibleUpload()">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:-3px;margin-right:6px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
         'Upload PDF</button>' +
-        '<input type="file" id="bibleFileInput" accept=".pdf" style="display:none" onchange="handleBibleUpload(this)">' +
-        '</div>' +
-        '<div id="bibleViewerContainer" class="bible-canvas-container"></div>';
+        '<input type="file" id="bibleFileInput" accept=".pdf" multiple style="display:none" onchange="handleBibleUpload(this)">';
 }
 
 function triggerBibleUpload() {
@@ -2289,26 +2343,141 @@ function triggerBibleUpload() {
 }
 
 function handleBibleUpload(input) {
-    if (!input.files || !input.files[0]) return;
-    var file = input.files[0];
-    if (file.type !== 'application/pdf') { showToast('Please select a PDF file'); return; }
-    var reader = new FileReader();
-    reader.onload = function() {
-        saveBiblePdf(reader.result).then(function() {
-            showToast('Bible PDF saved');
-            renderBiblePages(reader.result);
-        });
-    };
-    reader.readAsArrayBuffer(file);
+    if (!input.files || !input.files.length) return;
+    var files = Array.from(input.files);
+    var count = 0;
+    files.forEach(function(file) {
+        if (file.type !== 'application/pdf') return;
+        var reader = new FileReader();
+        reader.onload = function() {
+            var id = 'pdf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            var name = file.name.replace(/\.pdf$/i, '');
+            saveBiblePdfMulti(id, name, reader.result).then(function() {
+                count++;
+                if (count === files.length) {
+                    showToast(count === 1 ? 'PDF saved' : count + ' PDFs saved');
+                    panelDirty.library = true;
+                    renderPanel('library');
+                }
+            });
+        };
+        reader.readAsArrayBuffer(file);
+    });
+    input.value = '';
 }
 
-function renderBiblePages(arrayBuffer) {
-    var container = document.getElementById('bibleViewerContainer');
+function initBibleViewer() {
+    migrateBibleOldPdf().then(function() {
+        if (bibleView === 'pages' && bibleOpenPdfId) {
+            loadBiblePdfById(bibleOpenPdfId).then(function(pdf) {
+                if (pdf) renderBiblePageGrid(pdf.data);
+                else { bibleView = 'list'; bibleOpenPdfId = null; initBibleViewer(); }
+            });
+        } else {
+            renderBibleList();
+        }
+    });
+}
+
+function renderBibleList() {
+    var container = document.getElementById('bibleList');
     if (!container) return;
-    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading PDF...</div>';
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading...</div>';
+
+    loadAllBiblePdfs().then(function(pdfs) {
+        if (!pdfs.length) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📄</div><p>No PDFs yet</p><p class="empty-sub">Upload your first PDF below</p></div>';
+            return;
+        }
+        pdfs.sort(function(a, b) { return (a.addedAt || 0) - (b.addedAt || 0); });
+        container.innerHTML = '';
+        pdfs.forEach(function(pdf) {
+            var card = document.createElement('div');
+            card.className = 'bible-pdf-card squishy';
+            card.innerHTML = '<div class="bible-pdf-thumb" id="bthumb_' + pdf.id + '"></div>' +
+                '<div class="bible-pdf-name">' + (pdf.name || 'Untitled') + '</div>';
+            card.addEventListener('click', function() { handleClick(); bibleOpenPdf(pdf.id); });
+            // Long press to delete
+            card.addEventListener('touchstart', function(e) {
+                bibleLongPressTimer = setTimeout(function() {
+                    bibleLongPressTimer = null;
+                    confirmDeleteBiblePdf(pdf.id, pdf.name);
+                }, 600);
+            }, { passive: true });
+            card.addEventListener('touchend', function() { if (bibleLongPressTimer) { clearTimeout(bibleLongPressTimer); bibleLongPressTimer = null; } });
+            card.addEventListener('touchmove', function() { if (bibleLongPressTimer) { clearTimeout(bibleLongPressTimer); bibleLongPressTimer = null; } });
+            container.appendChild(card);
+            renderBibleThumb(pdf.id, pdf.data);
+        });
+    });
+}
+
+function renderBibleThumb(pdfId, arrayBuffer) {
+    if (typeof pdfjsLib === 'undefined') return;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
+        pdf.getPage(1).then(function(page) {
+            var thumbEl = document.getElementById('bthumb_' + pdfId);
+            if (!thumbEl) return;
+            var tw = 120;
+            var vp = page.getViewport({ scale: 1 });
+            var scale = tw / vp.width;
+            var svp = page.getViewport({ scale: scale * 2 });
+            var canvas = document.createElement('canvas');
+            canvas.width = svp.width;
+            canvas.height = svp.height;
+            canvas.style.width = tw + 'px';
+            canvas.style.height = (tw * svp.height / svp.width) + 'px';
+            thumbEl.innerHTML = '';
+            thumbEl.appendChild(canvas);
+            page.render({ canvasContext: canvas.getContext('2d'), viewport: svp });
+        });
+    }).catch(function() {});
+}
+
+function confirmDeleteBiblePdf(id, name) {
+    handleClick();
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML = '<div class="confirm-box">' +
+        '<p style="font-size:14px;font-weight:700;margin-bottom:12px;">Delete PDF?</p>' +
+        '<p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">"' + (name || 'Untitled') + '" will be permanently removed.</p>' +
+        '<div style="display:flex;gap:10px;">' +
+        '<button class="btn squishy" style="flex:1;height:40px;font-size:13px;background:var(--surface);color:var(--text-primary);border:1px solid var(--border);" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn squishy" style="flex:1;height:40px;font-size:13px;background:var(--high);color:#fff;border:none;" id="confirmDelBibleBtn">Delete</button>' +
+        '</div></div>';
+    document.body.appendChild(overlay);
+    document.getElementById('confirmDelBibleBtn').addEventListener('click', function() {
+        deleteBiblePdf(id).then(function() {
+            showToast('PDF deleted');
+            overlay.remove();
+            panelDirty.library = true;
+            renderPanel('library');
+        });
+    });
+}
+
+function bibleOpenPdf(id) {
+    bibleView = 'pages';
+    bibleOpenPdfId = id;
+    panelDirty.library = true;
+    renderPanel('library');
+}
+
+function bibleBackToList() {
+    bibleView = 'list';
+    bibleOpenPdfId = null;
+    panelDirty.library = true;
+    renderPanel('library');
+}
+
+function renderBiblePageGrid(arrayBuffer) {
+    var container = document.getElementById('biblePageGrid');
+    if (!container) return;
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Loading pages...</div>';
 
     if (typeof pdfjsLib === 'undefined') {
-        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">PDF viewer not loaded. Check your connection.</div>';
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">PDF viewer not loaded</div>';
         return;
     }
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -2316,20 +2485,70 @@ function renderBiblePages(arrayBuffer) {
     pdfjsLib.getDocument({ data: arrayBuffer }).promise.then(function(pdf) {
         container.innerHTML = '';
         var numPages = pdf.numPages;
+
+        // Back tap area at top
+        var backRow = document.createElement('div');
+        backRow.className = 'bible-back-row';
+        backRow.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>';
+        backRow.addEventListener('click', function() { handleClick(); bibleBackToList(); });
+        container.appendChild(backRow);
+
         var renderPage = function(pageNum) {
             if (pageNum > numPages) return;
             pdf.getPage(pageNum).then(function(page) {
-                var vw = container.clientWidth || 360;
-                var viewport = page.getViewport({ scale: 1 });
-                var scale = vw / viewport.width;
-                var scaled = page.getViewport({ scale: scale * 2 });
+                var vp = page.getViewport({ scale: 1 });
+                var thumbW = (container.clientWidth - 36) / 2;
+                var thumbScale = thumbW / vp.width;
+                var thumbVp = page.getViewport({ scale: thumbScale * 2 });
+                var fullW = container.clientWidth - 16;
+                var fullScale = fullW / vp.width;
+                var fullVp = page.getViewport({ scale: fullScale * 2 });
+
+                var wrap = document.createElement('div');
+                wrap.className = 'bible-page-wrap bible-page-thumb';
+                wrap.dataset.page = pageNum;
+
                 var canvas = document.createElement('canvas');
-                canvas.width = scaled.width;
-                canvas.height = scaled.height;
-                canvas.style.width = vw + 'px';
-                canvas.style.height = (vw * scaled.height / scaled.width) + 'px';
-                container.appendChild(canvas);
-                page.render({ canvasContext: canvas.getContext('2d'), viewport: scaled }).promise.then(function() {
+                canvas.width = thumbVp.width;
+                canvas.height = thumbVp.height;
+                canvas.style.width = thumbW + 'px';
+                canvas.style.height = (thumbW * thumbVp.height / thumbVp.width) + 'px';
+                wrap.appendChild(canvas);
+
+                var pageLabel = document.createElement('div');
+                pageLabel.className = 'bible-page-label';
+                pageLabel.textContent = pageNum;
+                wrap.appendChild(pageLabel);
+
+                wrap.addEventListener('click', function(e) {
+                    handleClick();
+                    e.stopPropagation();
+                    var isExpanded = wrap.classList.contains('bible-page-expanded');
+                    if (isExpanded) {
+                        wrap.classList.remove('bible-page-expanded');
+                        wrap.classList.add('bible-page-thumb');
+                        canvas.style.width = thumbW + 'px';
+                        canvas.style.height = (thumbW * thumbVp.height / thumbVp.width) + 'px';
+                        // Re-render as thumbnail
+                        canvas.width = thumbVp.width;
+                        canvas.height = thumbVp.height;
+                        page.render({ canvasContext: canvas.getContext('2d'), viewport: thumbVp });
+                    } else {
+                        wrap.classList.remove('bible-page-thumb');
+                        wrap.classList.add('bible-page-expanded');
+                        canvas.style.width = fullW + 'px';
+                        canvas.style.height = (fullW * fullVp.height / fullVp.width) + 'px';
+                        // Re-render at full resolution
+                        canvas.width = fullVp.width;
+                        canvas.height = fullVp.height;
+                        page.render({ canvasContext: canvas.getContext('2d'), viewport: fullVp });
+                        // Scroll into view
+                        setTimeout(function() { wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+                    }
+                });
+
+                container.appendChild(wrap);
+                page.render({ canvasContext: canvas.getContext('2d'), viewport: thumbVp }).promise.then(function() {
                     renderPage(pageNum + 1);
                 });
             });
@@ -2338,12 +2557,6 @@ function renderBiblePages(arrayBuffer) {
     }).catch(function() {
         container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--high);font-size:13px;">Failed to load PDF</div>';
     });
-}
-
-function initBibleViewer() {
-    loadBiblePdf().then(function(data) {
-        if (data) renderBiblePages(data);
-    }).catch(function() {});
 }
 
 // ── Recipes ──

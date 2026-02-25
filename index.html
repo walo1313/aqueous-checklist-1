@@ -2967,19 +2967,119 @@
             box-shadow: var(--neu-shadow-sm);
         }
 
-        /* ===== BIBLE PDF VIEWER ===== */
-        .bible-viewer {
-            width: 100%;
-            border: none;
-            border-radius: var(--radius);
+        /* ===== BIBLE PDF LIBRARY ===== */
+        .bible-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .bible-pdf-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 10px 12px;
             background: var(--surface);
-            min-height: 70vh;
+            border-radius: var(--radius);
+            box-shadow: var(--neu-shadow-sm);
+            cursor: pointer;
+            -webkit-user-select: none;
+            user-select: none;
         }
-        .bible-placeholder {
-            text-align: center;
-            padding: 40px 20px;
+        .bible-pdf-thumb {
+            width: 56px;
+            height: 72px;
+            border-radius: 6px;
+            overflow: hidden;
+            background: var(--bg);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .bible-placeholder p { font-size: 13px; color: var(--text-muted); font-weight: 600; margin-bottom: 12px; }
+        .bible-pdf-thumb canvas {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+        .bible-pdf-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .bible-upload-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-top: 14px;
+            padding: 12px;
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .bible-upload-btn:active { background: var(--surface); }
+        .bible-back-row {
+            display: flex;
+            align-items: center;
+            padding: 6px 0 10px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+        .bible-page-grid {
+            width: 100%;
+        }
+        .bible-page-wrap {
+            display: inline-block;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+            position: relative;
+            vertical-align: top;
+            transition: width 0.25s ease, margin 0.25s ease;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        .bible-page-wrap canvas {
+            display: block;
+            border-radius: 6px;
+        }
+        .bible-page-thumb {
+            width: calc(50% - 12px);
+            margin: 6px;
+        }
+        .bible-page-thumb canvas {
+            width: 100% !important;
+            height: auto !important;
+        }
+        .bible-page-expanded {
+            width: calc(100% - 16px);
+            margin: 8px;
+        }
+        .bible-page-expanded canvas {
+            width: 100% !important;
+            height: auto !important;
+            touch-action: pinch-zoom;
+        }
+        .bible-page-label {
+            position: absolute;
+            bottom: 4px;
+            right: 6px;
+            background: rgba(0,0,0,0.5);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
 
         /* ===== RECIPE CARDS ===== */
         .recipe-filter-row {
@@ -3220,21 +3320,23 @@
             align-items: center;
             justify-content: center;
         }
-        .bible-canvas-container {
-            width: 100%;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-        .bible-canvas-container canvas {
-            display: block;
-            width: 100%;
-            margin-bottom: 2px;
-        }
-        .bible-upload-row {
+        .confirm-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
             display: flex;
-            gap: 8px;
             align-items: center;
-            margin-bottom: 12px;
+            justify-content: center;
+            padding: 20px;
+        }
+        .confirm-box {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 20px;
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
         }
 
         /* ===== EMPTY STATE ===== */
